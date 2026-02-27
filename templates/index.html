@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" data-density="default">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% if query %}{{ query }} - FreeSearch{% else %}FreeSearch{% endif %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔍</text></svg>">
+</head>
+<body class="{% if query %}has-results{% endif %}">
+
+    <header>
+        <a href="/" class="logo">Free<span>Search</span></a>
+        <div class="header-controls">
+            {# Privacy badge #}
+            <button class="privacy-badge" id="privacy-badge" aria-label="Privacy stats" title="Privacy stats">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                <span>0 trackers</span>
+            </button>
+
+            {# Region selector #}
+            <div class="region-selector">
+                <select id="region-select" aria-label="Search region">
+                    <option value="">All Regions</option>
+                    <option value="us-en" {% if region == 'us-en' %}selected{% endif %}>US</option>
+                    <option value="uk-en" {% if region == 'uk-en' %}selected{% endif %}>UK</option>
+                    <option value="ca-en" {% if region == 'ca-en' %}selected{% endif %}>Canada</option>
+                    <option value="au-en" {% if region == 'au-en' %}selected{% endif %}>Australia</option>
+                    <option value="de-de" {% if region == 'de-de' %}selected{% endif %}>Germany</option>
+                    <option value="fr-fr" {% if region == 'fr-fr' %}selected{% endif %}>France</option>
+                    <option value="es-es" {% if region == 'es-es' %}selected{% endif %}>Spain</option>
+                    <option value="it-it" {% if region == 'it-it' %}selected{% endif %}>Italy</option>
+                    <option value="jp-jp" {% if region == 'jp-jp' %}selected{% endif %}>Japan</option>
+                    <option value="in-en" {% if region == 'in-en' %}selected{% endif %}>India</option>
+                    <option value="br-pt" {% if region == 'br-pt' %}selected{% endif %}>Brazil</option>
+                </select>
+            </div>
+
+            {# Density toggle #}
+            <button id="density-toggle" class="header-btn" aria-label="Toggle density" title="Layout density">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+            </button>
+
+            {# Theme settings #}
+            <button id="theme-settings-btn" class="header-btn" aria-label="Theme settings" title="Customize theme">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+            </button>
+
+            <button id="theme-toggle" aria-label="Toggle theme">
+                <svg class="icon-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+                <svg class="icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+            </button>
+        </div>
+    </header>
+
+    {# ===== THEME SETTINGS POPOVER ===== #}
+    <div class="theme-popover" id="theme-popover">
+        <div class="theme-popover-header">
+            <span>Accent Color</span>
+            <button class="theme-popover-close" id="theme-popover-close">&times;</button>
+        </div>
+        <div class="theme-color-presets" id="color-presets">
+            <button class="color-swatch" data-color="#6ee7b7" style="background:#6ee7b7" title="Emerald (default)"></button>
+            <button class="color-swatch" data-color="#60a5fa" style="background:#60a5fa" title="Blue"></button>
+            <button class="color-swatch" data-color="#f472b6" style="background:#f472b6" title="Pink"></button>
+            <button class="color-swatch" data-color="#fb923c" style="background:#fb923c" title="Orange"></button>
+            <button class="color-swatch" data-color="#a78bfa" style="background:#a78bfa" title="Purple"></button>
+            <button class="color-swatch" data-color="#facc15" style="background:#facc15" title="Yellow"></button>
+            <button class="color-swatch" data-color="#f87171" style="background:#f87171" title="Red"></button>
+            <button class="color-swatch" data-color="#2dd4bf" style="background:#2dd4bf" title="Teal"></button>
+        </div>
+        <div class="theme-custom-row">
+            <label for="custom-color">Custom:</label>
+            <input type="color" id="custom-color" value="#6ee7b7">
+        </div>
+    </div>
+
+    {# ===== PRIVACY POPOVER ===== #}
+    <div class="privacy-popover" id="privacy-popover">
+        <div class="privacy-popover-header">
+            <span>Your Privacy</span>
+            <button class="privacy-popover-close" id="privacy-popover-close">&times;</button>
+        </div>
+        <div class="privacy-stats">
+            <div class="privacy-stat">
+                <span class="privacy-stat-number">0</span>
+                <span class="privacy-stat-label">cookies set</span>
+            </div>
+            <div class="privacy-stat">
+                <span class="privacy-stat-number">0</span>
+                <span class="privacy-stat-label">searches logged</span>
+            </div>
+            <div class="privacy-stat">
+                <span class="privacy-stat-number">0</span>
+                <span class="privacy-stat-label">data shared</span>
+            </div>
+        </div>
+        <div class="privacy-comparison">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+            Google collects ~39 data points per search
+        </div>
+        <div class="privacy-tagline">Your privacy is our priority.</div>
+    </div>
+
+    <div class="app-layout {% if query %}has-chat{% endif %}">
+    <main>
+        <div class="search-container">
+            {% if not query %}
+            <h1 class="hero-title">FreeSearch</h1>
+            <p class="hero-sub">Private. Unfiltered. Yours.</p>
+            <p class="hero-bangs">Try <kbd>!w</kbd> <kbd>!yt</kbd> <kbd>!gh</kbd> for quick jumps</p>
+            {% endif %}
+
+            <form action="/search" method="GET" id="search-form">
+                <div class="search-box-wrapper">
+                    <div class="search-box">
+                        <svg class="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                        <input type="text" name="q" id="search-input" value="{{ query or '' }}" placeholder="Search anything — names, numbers, emails, usernames..." autocomplete="off" autofocus>
+                        <button type="submit" class="search-btn">Search</button>
+                    </div>
+                    <div class="ac-dropdown" id="ac-dropdown"></div>
+                </div>
+                <input type="hidden" name="type" id="search-type-input" value="{{ search_type or 'text' }}">
+                <input type="hidden" name="region" id="region-input" value="{{ region or '' }}">
+                <input type="hidden" name="lang" id="lang-input" value="{{ lang or '' }}">
+            </form>
+
+            {% if query %}
+            {# Active operator chips #}
+            {% if operators %}
+            <div class="operator-chips" id="operator-chips">
+                {% for op, values in operators.items() %}
+                    {% for val in values %}
+                    <span class="operator-chip" data-op="{{ op }}" data-val="{{ val }}">
+                        {{ op }}:{{ val }}
+                        <button class="chip-remove" type="button" aria-label="Remove operator">&times;</button>
+                    </span>
+                    {% endfor %}
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <nav class="search-tabs">
+                <a href="/search?q={{ query|urlencode }}&type=text{% if region %}&region={{ region }}{% endif %}" class="tab {% if search_type == 'text' %}active{% endif %}">All</a>
+                <a href="/search?q={{ query|urlencode }}&type=images{% if region %}&region={{ region }}{% endif %}" class="tab {% if search_type == 'images' %}active{% endif %}">Images</a>
+                <a href="/search?q={{ query|urlencode }}&type=news{% if region %}&region={{ region }}{% endif %}" class="tab {% if search_type == 'news' %}active{% endif %}">News</a>
+                <a href="/search?q={{ query|urlencode }}&type=videos{% if region %}&region={{ region }}{% endif %}" class="tab {% if search_type == 'videos' %}active{% endif %}">Videos</a>
+                <a href="/search?q={{ query|urlencode }}&type=code{% if region %}&region={{ region }}{% endif %}" class="tab {% if search_type == 'code' %}active{% endif %}">Code</a>
+            </nav>
+
+            {# ===== QUICK FILTERS BAR ===== #}
+            <div class="filter-bar" id="filter-bar">
+                <select class="filter-select" id="filter-time" aria-label="Time filter">
+                    <option value="">Any time</option>
+                    <option value="1h">Past hour</option>
+                    <option value="24h">Past 24h</option>
+                    <option value="7d">Past week</option>
+                    <option value="30d">Past month</option>
+                    <option value="365d">Past year</option>
+                </select>
+                <div class="filter-pills" id="filter-pills">
+                    <button class="filter-pill{% if operators and 'filetype' in operators and 'pdf' in operators.filetype %} active{% endif %}" data-ft="pdf">PDF</button>
+                    <button class="filter-pill{% if operators and 'filetype' in operators and 'doc' in operators.filetype %} active{% endif %}" data-ft="doc">DOC</button>
+                    <button class="filter-pill{% if operators and 'filetype' in operators and 'ppt' in operators.filetype %} active{% endif %}" data-ft="ppt">PPT</button>
+                    <button class="filter-pill{% if operators and 'filetype' in operators and 'xls' in operators.filetype %} active{% endif %}" data-ft="xls">XLS</button>
+                    <button class="filter-pill{% if operators and 'filetype' in operators and 'csv' in operators.filetype %} active{% endif %}" data-ft="csv">CSV</button>
+                </div>
+                <input type="text" class="filter-site-input" id="filter-site" placeholder="site:" value="{% if operators and 'site' in operators %}{{ operators.site[0] }}{% endif %}" aria-label="Filter by site">
+            </div>
+            {% endif %}
+        </div>
+
+        {% if query %}
+
+        {# ===== AI SUMMARY SKELETON (text tab, page 1 only) ===== #}
+        {% if search_type == 'text' %}
+        <div class="ai-summary-card" id="ai-summary-card">
+            <div class="ai-summary-header">
+                <svg class="ai-sparkle" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.09 6.26L20 10l-5.91 1.74L12 18l-2.09-6.26L4 10l5.91-1.74L12 2z"/></svg>
+                <span class="ai-summary-label">AI Summary</span>
+            </div>
+            <div class="ai-summary-body" id="ai-summary-body">
+                <div class="ai-skeleton">
+                    <div class="ai-skeleton-line" style="width:95%"></div>
+                    <div class="ai-skeleton-line" style="width:85%"></div>
+                    <div class="ai-skeleton-line" style="width:60%"></div>
+                </div>
+            </div>
+            <div class="ai-summary-sources" id="ai-summary-sources"></div>
+        </div>
+        {% endif %}
+
+        {# ===== CALCULATOR CARD ===== #}
+        {% if calculator %}
+        <div class="calculator-card">
+            <div class="calc-expression">{{ calculator.expression }}</div>
+            <div class="calc-equals">=</div>
+            <div class="calc-result">{{ calculator.result }}</div>
+        </div>
+        {% endif %}
+
+        {# ===== COLOR PICKER CARD ===== #}
+        {% if color %}
+        <div class="color-card">
+            <div class="color-card-top">
+                <div class="color-swatch-preview" style="background-color: {{ color.hex }}"></div>
+                <div class="color-formats">
+                    <div class="color-format">
+                        <span class="color-format-label">HEX</span>
+                        <code class="color-format-value">{{ color.hex }}</code>
+                        <button class="color-copy-btn" data-copy="{{ color.hex }}" title="Copy">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                        </button>
+                    </div>
+                    <div class="color-format">
+                        <span class="color-format-label">RGB</span>
+                        <code class="color-format-value">{{ color.rgb_str }}</code>
+                        <button class="color-copy-btn" data-copy="{{ color.rgb_str }}" title="Copy">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                        </button>
+                    </div>
+                    <div class="color-format">
+                        <span class="color-format-label">HSL</span>
+                        <code class="color-format-value">{{ color.hsl_str }}</code>
+                        <button class="color-copy-btn" data-copy="{{ color.hsl_str }}" title="Copy">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {# ===== UNIT CONVERSION CARD ===== #}
+        {% if unit_convert %}
+        <div class="convert-card">
+            <div class="convert-from">{{ unit_convert.value }} {{ unit_convert.from_unit }}</div>
+            <div class="convert-arrow">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            </div>
+            <div class="convert-result">{{ unit_convert.result_formatted }} {{ unit_convert.to_unit }}</div>
+        </div>
+        {% endif %}
+
+        {# ===== WEATHER CARD ===== #}
+        {% if weather %}
+        <div class="weather-card">
+            <div class="weather-main">
+                <div class="weather-location">{{ weather.location }}</div>
+                <div class="weather-current">
+                    <span class="weather-emoji">{{ weather.emoji }}</span>
+                    <span class="weather-temp">{{ weather.temp }}°C</span>
+                </div>
+                <div class="weather-condition">{{ weather.condition }}</div>
+                <div class="weather-stats">
+                    <span class="weather-stat">💧 {{ weather.humidity }}%</span>
+                    <span class="weather-stat">💨 {{ weather.wind }} km/h</span>
+                </div>
+            </div>
+            {% if weather.forecast %}
+            <div class="weather-forecast">
+                {% for day in weather.forecast %}
+                <div class="weather-forecast-day">
+                    <span class="forecast-day-name">{{ day.day }}</span>
+                    <span class="forecast-emoji">{{ day.emoji }}</span>
+                    <span class="forecast-temps">{{ day.high }}° / {{ day.low }}°</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        {# ===== KNOWLEDGE PANEL ===== #}
+        {% if knowledge %}
+        <div class="knowledge-panel">
+            {% if knowledge.image_url %}
+            <img class="knowledge-image" src="{{ knowledge.image_url }}" alt="{{ knowledge.title }}" loading="lazy">
+            {% endif %}
+            <div class="knowledge-text">
+                <h2 class="knowledge-title">{{ knowledge.title }}</h2>
+                <p class="knowledge-extract">{{ knowledge.extract }}</p>
+                <a href="{{ knowledge.page_url }}" target="_blank" rel="noopener" class="knowledge-link">Read more on Wikipedia &rarr;</a>
+            </div>
+        </div>
+        {% endif %}
+
+        {# ===== DICTIONARY CARD ===== #}
+        {% if dictionary %}
+        <div class="dictionary-card">
+            <div class="dictionary-header">
+                <span class="dictionary-icon">&#128214;</span>
+                <span class="dictionary-word">{{ dictionary.word }}</span>
+                {% if dictionary.phonetic %}<span class="dictionary-phonetic">{{ dictionary.phonetic }}</span>{% endif %}
+                {% if dictionary.audio_url %}
+                <button class="dictionary-audio-btn" data-audio="{{ dictionary.audio_url }}" aria-label="Play pronunciation" title="Listen">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/></svg>
+                </button>
+                {% endif %}
+            </div>
+            <div class="dictionary-definitions">
+                {% for d in dictionary.definitions %}
+                <div class="dictionary-def">
+                    <span class="dictionary-pos">{{ d.part_of_speech }}</span>
+                    <span class="dictionary-text">{{ d.definition }}</span>
+                    {% if d.example %}<span class="dictionary-example">"{{ d.example }}"</span>{% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        {# ===== ENTITY INTEL CARD ===== #}
+        {% if primary_entity %}
+        <div class="entity-card">
+            <div class="entity-header">
+                {% if primary_entity.type == 'phone' %}
+                    <span class="entity-icon">📞</span>
+                {% elif primary_entity.type == 'email' %}
+                    <span class="entity-icon">📧</span>
+                {% elif primary_entity.type == 'username' %}
+                    <span class="entity-icon">👤</span>
+                {% elif primary_entity.type == 'person' %}
+                    <span class="entity-icon">🧑</span>
+                {% elif primary_entity.type == 'domain' %}
+                    <span class="entity-icon">🌐</span>
+                {% elif primary_entity.type == 'ip' %}
+                    <span class="entity-icon">🖥️</span>
+                {% elif primary_entity.type == 'crypto' %}
+                    <span class="entity-icon">🪙</span>
+                {% elif primary_entity.type == 'mac' %}
+                    <span class="entity-icon">🔌</span>
+                {% elif primary_entity.type == 'coordinates' %}
+                    <span class="entity-icon">📍</span>
+                {% elif primary_entity.type == 'hashtag' %}
+                    <span class="entity-icon">#️⃣</span>
+                {% elif primary_entity.type == 'address' %}
+                    <span class="entity-icon">🏠</span>
+                {% endif %}
+                <div class="entity-info">
+                    <span class="entity-type-badge">{{ primary_entity.type|upper }}</span>
+                    <span class="entity-value">{{ primary_entity.normalized }}</span>
+                </div>
+            </div>
+
+            {% if primary_entity.type == 'phone' and primary_entity.meta %}
+            <div class="entity-details">
+                {% if primary_entity.meta.national %}
+                <div class="detail-row">
+                    <span class="detail-label">Format</span>
+                    <span class="detail-value">{{ primary_entity.meta.national }}</span>
+                </div>
+                {% endif %}
+                {% if primary_entity.meta.region %}
+                <div class="detail-row">
+                    <span class="detail-label">Region</span>
+                    <span class="detail-value">{{ primary_entity.meta.region }}</span>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            {% if primary_entity.type == 'email' and primary_entity.meta %}
+            <div class="entity-details">
+                <div class="detail-row">
+                    <span class="detail-label">Username</span>
+                    <span class="detail-value">{{ primary_entity.meta.username }}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Domain</span>
+                    <span class="detail-value">{{ primary_entity.meta.domain }}</span>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if primary_entity.type == 'person' and primary_entity.meta and primary_entity.meta.username_guesses %}
+            <div class="entity-details">
+                <div class="detail-row">
+                    <span class="detail-label">Possible usernames</span>
+                    <span class="detail-value">
+                        {% for u in primary_entity.meta.username_guesses[:4] %}
+                        <code class="username-guess">{{ u }}</code>
+                        {% endfor %}
+                    </span>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if primary_entity.type == 'username' and primary_entity.meta and primary_entity.meta.platforms %}
+            <div class="platform-links">
+                {% for p in primary_entity.meta.platforms %}
+                <a href="{{ p.url }}" target="_blank" rel="noopener" class="platform-link">{{ p.name }}</a>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            {% if primary_entity.type == 'crypto' and primary_entity.meta %}
+            <div class="entity-details">
+                <div class="detail-row">
+                    <span class="detail-label">Chain</span>
+                    <span class="detail-value">{{ primary_entity.meta.chain }}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Format</span>
+                    <span class="detail-value">{{ primary_entity.meta.format }}</span>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if primary_entity.type == 'mac' and primary_entity.meta %}
+            <div class="entity-details">
+                <div class="detail-row">
+                    <span class="detail-label">OUI Prefix</span>
+                    <span class="detail-value"><code class="username-guess">{{ primary_entity.meta.oui }}</code></span>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if primary_entity.type == 'coordinates' and primary_entity.meta %}
+            <div class="entity-details">
+                <div class="detail-row">
+                    <span class="detail-label">Latitude</span>
+                    <span class="detail-value">{{ primary_entity.meta.lat }}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Longitude</span>
+                    <span class="detail-value">{{ primary_entity.meta.lon }}</span>
+                </div>
+            </div>
+            {% set lat = primary_entity.meta.lat %}
+            {% set lon = primary_entity.meta.lon %}
+            <div class="entity-map">
+                <iframe src="https://www.openstreetmap.org/export/embed.html?bbox={{ lon - 0.01 }}%2C{{ lat - 0.01 }}%2C{{ lon + 0.01 }}%2C{{ lat + 0.01 }}&marker={{ lat }}%2C{{ lon }}" loading="lazy"></iframe>
+            </div>
+            {% endif %}
+
+            {% if primary_entity.type == 'hashtag' and primary_entity.meta %}
+            <div class="entity-details">
+                <div class="detail-row">
+                    <span class="detail-label">Tag</span>
+                    <span class="detail-value">{{ primary_entity.meta.tag }}</span>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if primary_entity.type == 'address' and primary_entity.meta and primary_entity.meta.lat %}
+            {% set lat = primary_entity.meta.lat %}
+            {% set lon = primary_entity.meta.lon %}
+            <div class="entity-map">
+                <iframe src="https://www.openstreetmap.org/export/embed.html?bbox={{ lon - 0.005 }}%2C{{ lat - 0.005 }}%2C{{ lon + 0.005 }}%2C{{ lat + 0.005 }}&marker={{ lat }}%2C{{ lon }}" loading="lazy"></iframe>
+            </div>
+            {% endif %}
+
+            {% if entities|length > 1 %}
+            <div class="entity-multi">
+                <span class="detail-label">Also detected:</span>
+                {% for e in entities %}
+                    {% if e.normalized != primary_entity.normalized %}
+                    <span class="entity-chip">{{ e.type }}: {{ e.normalized }}</span>
+                    {% endif %}
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        {# ===== ENTITY-ENRICHED RESULTS ===== #}
+        {% if entity_results %}
+        <div class="entity-results-section">
+            {% for section in entity_results %}
+            <div class="entity-result-group">
+                <h3 class="entity-result-label">{{ section.label }}</h3>
+                {% for r in section.results %}
+                <article class="result result-compact">
+                    <a href="{{ r.url }}" target="_blank" rel="noopener" class="result-title">{{ r.title }}</a>
+                    <img class="result-favicon" src="https://icons.duckduckgo.com/ip3/{{ r.url|domain }}/favicon.ico" onerror="this.style.display='none'" alt="" loading="lazy"><cite class="result-url">{{ r.url }}</cite>
+                    <p class="result-snippet">{{ r.body }}</p>
+                </article>
+                {% endfor %}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {# ===== MAIN RESULTS ===== #}
+        <div id="results" class="results-container" data-type="{{ search_type }}">
+            {% if results %}
+                {% for r in results %}
+                    {% if search_type == 'images' %}
+                    <div class="image-card" data-full="{{ r.image or r.thumbnail }}" data-title="{{ r.title }}" data-source="{{ r.source or '' }}" data-url="{{ r.url }}">
+                        <img src="{{ r.thumbnail or r.image }}" alt="{{ r.title }}" loading="lazy">
+                        <div class="image-card-info">
+                            <span class="image-title">{{ r.title }}</span>
+                            {% if r.source %}<span class="image-source">{{ r.source }}</span>{% endif %}
+                        </div>
+                    </div>
+                    {% elif search_type == 'videos' %}
+                    <article class="result video-result" data-url="{{ r.url }}">
+                        {% if r.thumbnail %}
+                        <a href="{{ r.url }}" target="_blank" rel="noopener" class="video-thumb">
+                            <img src="{{ r.thumbnail }}" alt="{{ r.title }}" loading="lazy">
+                            {% if r.duration %}<span class="duration">{{ r.duration }}</span>{% endif %}
+                        </a>
+                        {% endif %}
+                        <div class="result-text">
+                            <a href="{{ r.url }}" target="_blank" rel="noopener" class="result-title">{{ r.title }}</a>
+                            <img class="result-favicon" src="https://icons.duckduckgo.com/ip3/{{ r.url|domain }}/favicon.ico" onerror="this.style.display='none'" alt="" loading="lazy"><cite class="result-url">{{ r.publisher }}</cite>
+                            <p class="result-snippet">{{ r.description }}</p>
+                        </div>
+                    </article>
+                    {% elif search_type == 'code' %}
+                    <article class="result code-result" data-url="{{ r.url }}">
+                        <div class="code-result-header">
+                            <a href="{{ r.url }}" target="_blank" rel="noopener" class="result-title">{{ r.title }}</a>
+                            {% if r.language %}<span class="code-lang-badge">{{ r.language }}</span>{% endif %}
+                            <span class="code-source-badge">{{ r.source or '' }}</span>
+                        </div>
+                        <img class="result-favicon" src="https://icons.duckduckgo.com/ip3/{{ r.url|domain }}/favicon.ico" onerror="this.style.display='none'" alt="" loading="lazy"><cite class="result-url">{{ r.url }}</cite>
+                        <p class="result-snippet">{{ r.body }}</p>
+                        <div class="code-meta">
+                            {% if r.stars %}<span class="code-stat" title="Stars">&#9733; {{ r.stars }}</span>{% endif %}
+                            {% if r.forks %}<span class="code-stat" title="Forks">&#9906; {{ r.forks }}</span>{% endif %}
+                            {% if r.tags %}
+                                {% for tag in r.tags %}
+                                <span class="code-tag">{{ tag }}</span>
+                                {% endfor %}
+                            {% endif %}
+                        </div>
+                    </article>
+                    {% else %}
+                    <article class="result" data-url="{{ r.url }}">
+                        <a href="{{ r.url }}" target="_blank" rel="noopener" class="result-title">{{ r.title }}</a>
+                        <img class="result-favicon" src="https://icons.duckduckgo.com/ip3/{{ r.url|domain }}/favicon.ico" onerror="this.style.display='none'" alt="" loading="lazy"><cite class="result-url">{{ r.url }}</cite>
+                        <p class="result-snippet">{{ r.body }}</p>
+                        {% if r.date %}<time class="result-date">{{ r.date }}</time>{% endif %}
+                    </article>
+                    {% endif %}
+                {% endfor %}
+            {% else %}
+                <p class="no-results">No results found. Try different keywords.</p>
+            {% endif %}
+        </div>
+
+        {# ===== RELATED SEARCHES ===== #}
+        <div id="related-searches" class="related-searches"></div>
+
+        {% if has_more %}
+        <div id="scroll-sentinel" data-page="1" data-query="{{ query }}" data-type="{{ search_type }}" data-has-more="true">
+            <div class="scroll-loader">
+                <div class="spinner"></div>
+            </div>
+        </div>
+        {% endif %}
+        {% endif %}
+    </main>
+
+    {# ===== RESULT PREVIEW PANEL ===== #}
+    {% if query and search_type in ('text', 'news', 'code') %}
+    <aside class="preview-panel" id="preview-panel">
+        <div class="preview-header">
+            <span class="preview-header-title">Preview</span>
+            <button class="preview-close-btn" id="preview-close" aria-label="Close preview">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </button>
+        </div>
+        <div class="preview-body" id="preview-body">
+            <div class="preview-empty" id="preview-empty">
+                <p>Hover over a result or press <kbd>j</kbd>/<kbd>k</kbd> to navigate</p>
+            </div>
+            <div class="preview-content" id="preview-content" style="display:none">
+                <img class="preview-image" id="preview-image" src="" alt="" style="display:none">
+                <h3 class="preview-title" id="preview-title"></h3>
+                <p class="preview-site" id="preview-site"></p>
+                <p class="preview-desc" id="preview-desc"></p>
+                <p class="preview-excerpt" id="preview-excerpt"></p>
+                <a class="preview-link" id="preview-link" href="" target="_blank" rel="noopener">Open page &rarr;</a>
+            </div>
+            <div class="preview-loading" id="preview-loading" style="display:none">
+                <div class="spinner"></div>
+            </div>
+        </div>
+    </aside>
+    {% endif %}
+
+    {# ===== AI RESEARCH CHAT PANEL ===== #}
+    {% if query %}
+    <aside class="chat-panel" id="chat-panel">
+        <div class="chat-header">
+            <div class="chat-header-left">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                <span>Research Assistant</span>
+            </div>
+            <div class="chat-header-right">
+                <button class="chat-new-btn" id="chat-new" title="New research" aria-label="New research">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+                </button>
+                <button class="chat-toggle-btn" id="chat-toggle" aria-label="Toggle chat">
+                    <svg class="chevron-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+                </button>
+            </div>
+        </div>
+        <div class="chat-body" id="chat-body">
+            <div class="chat-welcome" id="chat-welcome">
+                <p>I've studied the results for <strong>"{{ query }}"</strong>. Ask me anything about this topic.</p>
+            </div>
+            <div class="chat-messages" id="chat-messages"></div>
+        </div>
+        <div class="chat-input-area">
+            <div class="chat-input-wrapper">
+                <input type="text" id="chat-input" placeholder="Ask about '{{ query }}'..." autocomplete="off">
+                <button id="chat-send" aria-label="Send message">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4z"/></svg>
+                </button>
+            </div>
+        </div>
+    </aside>
+    <button class="chat-fab" id="chat-fab" title="Open Research Assistant" aria-label="Open Research Assistant">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+    </button>
+    {% endif %}
+    </div>{# end .app-layout #}
+
+    {# ===== IMAGE LIGHTBOX ===== #}
+    <div class="lightbox-overlay" id="lightbox">
+        <button class="lightbox-close" id="lightbox-close" aria-label="Close">&times;</button>
+        <div class="lightbox-content">
+            <img id="lightbox-img" src="" alt="">
+            <div class="lightbox-info">
+                <p class="lightbox-title" id="lightbox-title"></p>
+                <a class="lightbox-source" id="lightbox-source" href="" target="_blank" rel="noopener">View source</a>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <p>FreeSearch &mdash; No tracking. No profiling. No judgment.</p>
+        <p class="footer-sub">We don't log your searches. Your data stays yours.</p>
+    </footer>
+
+    {% if query %}
+    <script>
+        window.__searchQuery = {{ query|tojson }};
+        window.__searchType = {{ search_type|tojson }};
+    </script>
+    {% endif %}
+    {% if query and search_type == 'code' %}
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            document.querySelectorAll(".code-result .result-snippet").forEach(el => {
+                hljs.highlightElement(el);
+            });
+        });
+    </script>
+    {% endif %}
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
