@@ -49,12 +49,6 @@ document.addEventListener("DOMContentLoaded", () => {
     themePopoverClose.addEventListener("click", () => {
       themePopover.classList.remove("open");
     });
-    document.addEventListener("click", (e) => {
-      if (!e.target.closest(".theme-popover") && !e.target.closest("#theme-settings-btn")) {
-        themePopover.classList.remove("open");
-      }
-    });
-
     // Preset swatches
     themePopover.querySelectorAll(".color-swatch").forEach(swatch => {
       swatch.addEventListener("click", () => {
@@ -119,25 +113,7 @@ document.addEventListener("DOMContentLoaded", () => {
         privacyPopover.classList.remove("open");
       });
     }
-    document.addEventListener("click", (e) => {
-      if (!e.target.closest(".privacy-popover") && !e.target.closest("#privacy-badge")) {
-        privacyPopover.classList.remove("open");
-      }
-    });
   }
-
-  // ===== Color copy buttons =====
-  document.addEventListener("click", (e) => {
-    const btn = e.target.closest(".color-copy-btn");
-    if (btn && btn.dataset.copy) {
-      navigator.clipboard.writeText(btn.dataset.copy).then(() => {
-        btn.classList.add("copied");
-        const orig = btn.innerHTML;
-        btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>';
-        setTimeout(() => { btn.classList.remove("copied"); btn.innerHTML = orig; }, 1500);
-      }).catch(() => {});
-    }
-  });
 
   // ===== AI Summary async fetch (text tab, page 1 only) =====
   const aiCard = document.getElementById("ai-summary-card");
@@ -339,7 +315,6 @@ document.addEventListener("DOMContentLoaded", () => {
       const item = e.target.closest(".ac-item");
       if (item) { e.preventDefault(); selectItem(item.querySelector(".ac-item-text").textContent); }
     });
-    document.addEventListener("click", (e) => { if (!e.target.closest(".search-box-wrapper")) hideDropdown(); });
   }
 
   // ===== Quick Filters Bar =====
@@ -436,15 +411,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // ===== Dictionary audio button =====
-  document.addEventListener("click", (e) => {
-    const btn = e.target.closest(".dictionary-audio-btn");
-    if (btn && btn.dataset.audio) {
-      e.preventDefault();
-      new Audio(btn.dataset.audio).play().catch(() => {});
-    }
-  });
-
   // ===== Infinite scroll (IntersectionObserver) =====
   const sentinel = document.getElementById("scroll-sentinel");
   if (sentinel) {
@@ -455,13 +421,18 @@ document.addEventListener("DOMContentLoaded", () => {
   const query = sentinel.dataset.query;
 
   function showSkeletons(count) {
-    if (type === "images") return;
     const frag = document.createDocumentFragment();
     for (let i = 0; i < count; i++) {
       const div = document.createElement("div");
-      div.className = "skeleton-result";
-      div.setAttribute("data-skeleton", "");
-      div.innerHTML = `<div class="skeleton-title"></div><div class="skeleton-url"></div><div class="skeleton-body"></div><div class="skeleton-body"></div>`;
+      if (type === "images") {
+        div.className = "skeleton-image-card";
+        div.setAttribute("data-skeleton", "");
+        div.innerHTML = `<div class="skeleton-image-thumb"></div><div class="skeleton-image-info"><div class="skeleton-title"></div></div>`;
+      } else {
+        div.className = "skeleton-result";
+        div.setAttribute("data-skeleton", "");
+        div.innerHTML = `<div class="skeleton-title"></div><div class="skeleton-url"></div><div class="skeleton-body"></div><div class="skeleton-body"></div>`;
+      }
       frag.appendChild(div);
     }
     container.appendChild(frag);
@@ -483,7 +454,7 @@ document.addEventListener("DOMContentLoaded", () => {
         removeSkeletons();
         const frag = document.createDocumentFragment();
         data.results.forEach((r, idx) => {
-          const delay = idx * 25;
+          const delay = Math.min(idx * 15, 200);
           const el = document.createElement(type === "images" ? "div" : "article");
           el.style.animationDelay = `${delay}ms`;
           el.dataset.url = r.url || "";
@@ -528,26 +499,80 @@ document.addEventListener("DOMContentLoaded", () => {
   const lightboxSource = document.getElementById("lightbox-source");
   const lightboxClose = document.getElementById("lightbox-close");
 
+  let openLightbox = null;
   if (lightbox) {
     lightbox.removeAttribute("hidden");
-    function openLightbox(card) {
+    openLightbox = function(card) {
       lightboxImg.src = card.dataset.full;
       lightboxImg.alt = card.dataset.title;
       lightboxTitle.textContent = card.dataset.title;
       lightboxSource.href = card.dataset.url;
       requestAnimationFrame(() => { lightbox.classList.add("active"); document.body.style.overflow = "hidden"; });
-    }
+    };
     function closeLightbox() {
       lightbox.classList.remove("active");
       document.body.style.overflow = "";
       setTimeout(() => { if (!lightbox.classList.contains("active")) lightboxImg.src = ""; }, 250);
     }
-    document.addEventListener("click", (e) => { const card = e.target.closest(".image-card"); if (card) { e.preventDefault(); openLightbox(card); } });
     lightboxClose.addEventListener("click", closeLightbox);
     lightbox.addEventListener("click", (e) => { if (e.target === lightbox) closeLightbox(); });
     document.addEventListener("keydown", (e) => { if (e.key === "Escape" && lightbox.classList.contains("active")) closeLightbox(); });
     document.addEventListener("mouseover", (e) => { const card = e.target.closest(".image-card"); if (card && !card._preloaded) { card._preloaded = true; new Image().src = card.dataset.full; } }, { passive: true });
   }
+
+  // ===== Consolidated click-outside handler (single delegated listener) =====
+  document.addEventListener("click", (e) => {
+    const target = e.target;
+
+    // Theme popover close
+    if (themePopover && themePopover.classList.contains("open")) {
+      if (!target.closest(".theme-popover") && !target.closest("#theme-settings-btn")) {
+        themePopover.classList.remove("open");
+      }
+    }
+
+    // Privacy popover close
+    if (privacyPopover && privacyPopover.classList.contains("open")) {
+      if (!target.closest(".privacy-popover") && !target.closest("#privacy-badge")) {
+        privacyPopover.classList.remove("open");
+      }
+    }
+
+    // Autocomplete close
+    if (dropdown && dropdown.classList.contains("open")) {
+      if (!target.closest(".search-box-wrapper")) {
+        dropdown.classList.remove("open");
+      }
+    }
+
+    // Color copy button (CSS-based state, no innerHTML mutation)
+    const copyBtn = target.closest(".color-copy-btn");
+    if (copyBtn && copyBtn.dataset.copy) {
+      navigator.clipboard.writeText(copyBtn.dataset.copy).then(() => {
+        copyBtn.classList.add("copied");
+        setTimeout(() => copyBtn.classList.remove("copied"), 1500);
+      }).catch(() => {});
+      return;
+    }
+
+    // Dictionary audio
+    const audioBtn = target.closest(".dictionary-audio-btn");
+    if (audioBtn && audioBtn.dataset.audio) {
+      e.preventDefault();
+      new Audio(audioBtn.dataset.audio).play().catch(() => {});
+      return;
+    }
+
+    // Image lightbox open
+    if (openLightbox) {
+      const imageCard = target.closest(".image-card");
+      if (imageCard) {
+        e.preventDefault();
+        openLightbox(imageCard);
+        return;
+      }
+    }
+  });
 
   // ===== Result Preview Panel =====
   const previewPanel = document.getElementById("preview-panel");
@@ -561,6 +586,14 @@ document.addEventListener("DOMContentLoaded", () => {
   let previewCache = {};
   let activeResultIdx = -1;
 
+  // Cache preview element references once
+  const _previewImg = document.getElementById("preview-image");
+  const _previewTitle = document.getElementById("preview-title");
+  const _previewSite = document.getElementById("preview-site");
+  const _previewDesc = document.getElementById("preview-desc");
+  const _previewExcerpt = document.getElementById("preview-excerpt");
+  const _previewLink = document.getElementById("preview-link");
+
   if (previewPanel) {
     previewClose.addEventListener("click", () => {
       previewPanel.classList.remove("open");
@@ -568,12 +601,24 @@ document.addEventListener("DOMContentLoaded", () => {
       clearResultHighlight();
     });
 
+    // Cached result elements — invalidated on DOM changes
+    let _cachedResults = null;
+    const resultsEl = document.getElementById("results");
+
     function getResultElements() {
-      return document.querySelectorAll("#results > .result");
+      if (!_cachedResults) {
+        _cachedResults = resultsEl.querySelectorAll(":scope > .result");
+      }
+      return _cachedResults;
     }
 
+    // Invalidate cache when infinite scroll adds results
+    const resultObserver = new MutationObserver(() => { _cachedResults = null; });
+    resultObserver.observe(resultsEl, { childList: true });
+
     function clearResultHighlight() {
-      document.querySelectorAll(".result.result-focused").forEach(el => el.classList.remove("result-focused"));
+      const prev = resultsEl.querySelector(".result.result-focused");
+      if (prev) prev.classList.remove("result-focused");
     }
 
     function highlightResult(idx) {
@@ -581,7 +626,7 @@ document.addEventListener("DOMContentLoaded", () => {
       clearResultHighlight();
       if (idx >= 0 && idx < results.length) {
         results[idx].classList.add("result-focused");
-        results[idx].scrollIntoView({ block: "nearest", behavior: "smooth" });
+        results[idx].scrollIntoView({ block: "nearest", behavior: "instant" });
         const url = results[idx].dataset.url;
         if (url) loadPreview(url);
       }
@@ -602,48 +647,58 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
       }
 
-      // Show loading
-      previewEmpty.style.display = "none";
-      previewContent.style.display = "none";
-      previewLoading.style.display = "flex";
+      // Show loading — batched in rAF
+      requestAnimationFrame(() => {
+        previewEmpty.style.display = "none";
+        previewContent.style.display = "none";
+        previewLoading.style.display = "flex";
+      });
 
       fetch(`/api/preview?url=${encodeURIComponent(url)}`)
         .then(r => r.json())
         .then(data => {
           if (data.error) {
-            previewLoading.style.display = "none";
-            previewContent.style.display = "block";
-            document.getElementById("preview-title").textContent = "Preview unavailable";
-            document.getElementById("preview-desc").textContent = "Could not load page preview.";
-            document.getElementById("preview-excerpt").textContent = "";
-            document.getElementById("preview-site").textContent = "";
-            document.getElementById("preview-image").style.display = "none";
-            document.getElementById("preview-link").href = url;
+            requestAnimationFrame(() => {
+              previewLoading.style.display = "none";
+              previewContent.style.display = "block";
+              _previewTitle.textContent = "Preview unavailable";
+              _previewDesc.textContent = "Could not load page preview.";
+              _previewExcerpt.textContent = "";
+              _previewSite.textContent = "";
+              _previewImg.style.display = "none";
+              _previewLink.href = url;
+            });
             return;
           }
           previewCache[url] = data;
           renderPreview(data);
         })
         .catch(() => {
-          previewLoading.style.display = "none";
-          previewEmpty.style.display = "block";
+          requestAnimationFrame(() => {
+            previewLoading.style.display = "none";
+            previewEmpty.style.display = "block";
+          });
         });
     }
 
     function renderPreview(data) {
-      previewLoading.style.display = "none";
-      previewEmpty.style.display = "none";
-      previewContent.style.display = "block";
+      const hasImage = !!data.image;
+      const siteName = data.site_name || (() => { try { return new URL(data.url).hostname; } catch { return ""; } })();
 
-      const img = document.getElementById("preview-image");
-      if (data.image) { img.src = data.image; img.style.display = "block"; }
-      else { img.style.display = "none"; img.src = ""; }
+      requestAnimationFrame(() => {
+        previewLoading.style.display = "none";
+        previewEmpty.style.display = "none";
+        previewContent.style.display = "block";
 
-      document.getElementById("preview-title").textContent = data.title || "";
-      document.getElementById("preview-site").textContent = data.site_name || new URL(data.url).hostname;
-      document.getElementById("preview-desc").textContent = data.description || "";
-      document.getElementById("preview-excerpt").textContent = data.excerpt || "";
-      document.getElementById("preview-link").href = data.url;
+        if (hasImage) { _previewImg.src = data.image; _previewImg.style.display = "block"; }
+        else { _previewImg.style.display = "none"; _previewImg.src = ""; }
+
+        _previewTitle.textContent = data.title || "";
+        _previewSite.textContent = siteName;
+        _previewDesc.textContent = data.description || "";
+        _previewExcerpt.textContent = data.excerpt || "";
+        _previewLink.href = data.url;
+      });
     }
 
     // Hover to preview
@@ -657,42 +712,53 @@ document.addEventListener("DOMContentLoaded", () => {
     document.addEventListener("mouseout", (e) => {
       if (e.target.closest("#results > .result")) clearTimeout(hoverTimer);
     }, { passive: true });
+
+    // Keyboard navigation: j/k for results, o to open (inside previewPanel scope)
+    document.addEventListener("keydown", (e) => {
+      const tag = document.activeElement.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+
+      if (e.key === "/" ) {
+        e.preventDefault();
+        document.getElementById("search-input").focus();
+        return;
+      }
+
+      const results = getResultElements();
+      if (!results.length) return;
+
+      if (e.key === "j") {
+        e.preventDefault();
+        activeResultIdx = Math.min(activeResultIdx + 1, results.length - 1);
+        highlightResult(activeResultIdx);
+      } else if (e.key === "k") {
+        e.preventDefault();
+        activeResultIdx = Math.max(activeResultIdx - 1, 0);
+        highlightResult(activeResultIdx);
+      } else if (e.key === "o" && activeResultIdx >= 0) {
+        e.preventDefault();
+        const url = results[activeResultIdx].dataset.url;
+        if (url) window.open(url, "_blank");
+      } else if (e.key === "Escape" && previewOpen) {
+        previewPanel.classList.remove("open");
+        previewOpen = false;
+        clearResultHighlight();
+        activeResultIdx = -1;
+      }
+    });
   }
 
-  // ===== Keyboard navigation: j/k for results, o to open =====
-  document.addEventListener("keydown", (e) => {
-    const tag = document.activeElement.tagName;
-    if (tag === "INPUT" || tag === "TEXTAREA") return;
-
-    if (e.key === "/" ) {
-      e.preventDefault();
-      document.getElementById("search-input").focus();
-      return;
-    }
-
-    if (!previewPanel) return;
-    const results = getResultElements();
-    if (!results.length) return;
-
-    if (e.key === "j") {
-      e.preventDefault();
-      activeResultIdx = Math.min(activeResultIdx + 1, results.length - 1);
-      highlightResult(activeResultIdx);
-    } else if (e.key === "k") {
-      e.preventDefault();
-      activeResultIdx = Math.max(activeResultIdx - 1, 0);
-      highlightResult(activeResultIdx);
-    } else if (e.key === "o" && activeResultIdx >= 0) {
-      e.preventDefault();
-      const url = results[activeResultIdx].dataset.url;
-      if (url) window.open(url, "_blank");
-    } else if (e.key === "Escape" && previewOpen) {
-      previewPanel.classList.remove("open");
-      previewOpen = false;
-      clearResultHighlight();
-      activeResultIdx = -1;
-    }
-  });
+  // ===== "/" shortcut to focus search (works on all pages) =====
+  if (!previewPanel) {
+    document.addEventListener("keydown", (e) => {
+      const tag = document.activeElement.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      if (e.key === "/") {
+        e.preventDefault();
+        document.getElementById("search-input").focus();
+      }
+    });
+  }
 
   // ===== AI Research Chat =====
   const chatPanel = document.getElementById("chat-panel");

@@ -9,7 +9,7 @@ import re
 import threading
 import time
 from dataclasses import asdict
-from urllib.parse import quote_plus, urlparse
+from urllib.parse import parse_qs, quote_plus, unquote, urlparse
 
 import feedparser
 import httpx
@@ -37,7 +37,7 @@ def domain_filter(url):
 RESULTS_PER_PAGE = 20
 MAX_PAGE = 50
 MAX_QUERY_LENGTH = 2000
-ALLOWED_TYPES = {"text", "images", "news", "videos", "code"}
+ALLOWED_TYPES = {"text", "images", "news", "videos", "code", "onion"}
 CACHE_FETCH_SIZE = 100  # Fetch enough results to serve multiple pages
 
 logging.basicConfig(level=logging.INFO)
@@ -832,6 +832,54 @@ def api_related():
 # Result Preview API
 # ---------------------------------------------------------------------------
 
+@app.route("/api/onion-proxy")
+@limiter.limit("10/minute")
+def api_onion_proxy():
+    """Proxy .onion URLs through local Tor SOCKS5 (if running on port 9050)."""
+    url = request.args.get("url", "").strip()
+    if not url:
+        return jsonify({"error": "No URL specified"}), 400
+
+    parsed = urlparse(url)
+    if not parsed.hostname or not parsed.hostname.endswith(".onion"):
+        return jsonify({"error": "Only .onion URLs are allowed"}), 400
+
+    try:
+        import httpx
+        # Route through Tor SOCKS5 proxy
+        transport = httpx.HTTPTransport(proxy="socks5://127.0.0.1:9050")
+        with httpx.Client(transport=transport, timeout=30.0, follow_redirects=True) as client:
+            resp = client.get(
+                url,
+                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; rv:128.0) Gecko/20100101 Firefox/128.0"},
+            )
+
+        from flask import Response
+        # Pass through content, rewriting internal .onion links to also go through proxy
+        content = resp.text
+        content = re.sub(
+            r'(href|src|action)="(https?://[^"]*\.onion[^"]*)"',
+            r'\1="/api/onion-proxy?url=\2"',
+            content,
+        )
+        return Response(content, content_type=resp.headers.get("content-type", "text/html"))
+    except Exception as e:
+        error_type = type(e).__name__
+        return f"""<!DOCTYPE html>
+<html><head><title>Onion Proxy Error</title></head>
+<body style="background:#0a0a0a;color:#e4e4e7;font-family:system-ui;padding:2rem;max-width:600px;margin:0 auto">
+<h2 style="color:#f87171">Cannot reach .onion site</h2>
+<p><strong>URL:</strong> <code>{url}</code></p>
+<p><strong>Error:</strong> {error_type}</p>
+<p style="color:#a1a1aa">Make sure Tor is running on port 9050. You can:</p>
+<ul style="color:#a1a1aa">
+<li>Open Tor Browser (it starts a SOCKS proxy automatically)</li>
+<li>Or run <code>tor</code> as a standalone service</li>
+</ul>
+<p><a href="{url}" style="color:#a78bfa">Try opening directly in Tor Browser &rarr;</a></p>
+</body></html>""", 502
+
+
 @app.route("/api/preview")
 @limiter.limit("30/minute")
 def api_preview():
@@ -839,6 +887,8 @@ def api_preview():
     url = request.args.get("url", "").strip()
     if not url or not url.startswith("http"):
         return jsonify({"error": "Invalid URL"}), 400
+    if ".onion" in urlparse(url).netloc:
+        return jsonify({"error": "Cannot preview .onion addresses without Tor Browser"}), 400
 
     try:
         resp = httpx.get(
@@ -1769,6 +1819,114 @@ def _deduplicate(results):
     return unique
 
 
+# ---- Onion / Deep Web backends ----
+
+def _try_ahmia(query, max_results=30):
+    """Scrape Ahmia.fi (clearnet Tor search engine) for .onion results.
+
+    Ahmia requires a hidden anti-bot token from its homepage.
+    We fetch the homepage first, extract the token, then search.
+    """
+    results = []
+    try:
+        client = _get_http()
+        # Step 1: Fetch homepage to get anti-bot hidden field
+        home_resp = client.get(
+            "https://ahmia.fi/",
+            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; rv:128.0) Gecko/20100101 Firefox/128.0"},
+        )
+        home_resp.raise_for_status()
+        token_match = re.search(
+            r'<input\s+type="hidden"\s+name="([^"]+)"\s+value="([^"]+)"',
+            home_resp.text,
+        )
+        params = {"q": query}
+        if token_match:
+            params[token_match.group(1)] = token_match.group(2)
+
+        # Step 2: Search with token (Ahmia returns large pages slowly, needs long timeout)
+        resp = httpx.get(
+            "https://ahmia.fi/search/",
+            params=params,
+            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; rv:128.0) Gecko/20100101 Firefox/128.0"},
+            timeout=20.0,
+            follow_redirects=True,
+        )
+        resp.raise_for_status()
+        html = resp.text
+
+        # Ahmia result structure:
+        #   <li class="result">
+        #     <h4><a href="/search/redirect?...redirect_url=http://xxx.onion/...">Title</a></h4>
+        #     <p>Snippet</p>
+        #     <cite>xxx.onion</cite>
+        #   </li>
+        blocks = re.findall(
+            r'<li\s+class="result">(.*?)</li>',
+            html,
+            re.DOTALL,
+        )
+        for block in blocks[:max_results]:
+            link_match = re.search(
+                r'<h4>\s*<a[^>]+href="([^"]*)"[^>]*>(.*?)</a>',
+                block,
+                re.DOTALL,
+            )
+            if not link_match:
+                continue
+            url = link_match.group(1).strip()
+            title = re.sub(r"<[^>]+>", "", link_match.group(2)).strip()
+
+            # Extract actual .onion URL from Ahmia's redirect wrapper
+            if "redirect_url=" in url:
+                qs = parse_qs(urlparse(url).query)
+                if qs.get("redirect_url"):
+                    url = qs["redirect_url"][0]
+
+            # Snippet from <p>
+            snippet_match = re.search(r'<p>(.*?)</p>', block, re.DOTALL)
+            body = ""
+            if snippet_match:
+                body = re.sub(r"<[^>]+>", "", snippet_match.group(1)).strip()
+
+            if title and url:
+                results.append({
+                    "title": title,
+                    "url": url,
+                    "body": body,
+                    "onion": True,
+                })
+
+        if results:
+            logger.info("Ahmia: %d onion results", len(results))
+    except Exception:
+        logger.warning("Ahmia search failed", exc_info=True)
+    return results
+
+
+def _try_onion_ddg(query, max_results=30):
+    """Search DDG for .onion-related results as a fallback.
+
+    Regular search engines don't index .onion directly, so this returns
+    clearnet pages that reference .onion sites for the given query.
+    """
+    results = []
+    try:
+        with DDGS() as ddgs:
+            for r in ddgs.text(f"{query} .onion", max_results=max_results):
+                results.append({
+                    "title": r.get("title", ""),
+                    "url": r.get("href", ""),
+                    "body": r.get("body", ""),
+                    "onion": False,
+                })
+        if results:
+            logger.info("DDG onion fallback: %d results", len(results))
+    except Exception:
+        logger.warning("DDG onion fallback failed", exc_info=True)
+    return results
+
+
 # ---- Orchestrator ----
 
 def _fetch_results(query, page, search_type, region=None, lang=None, operators=None):
@@ -1793,54 +1951,61 @@ def _fetch_results(query, page, search_type, region=None, lang=None, operators=N
     effective_query = _build_engine_query(query, operators) if operators else query
     max_results = CACHE_FETCH_SIZE
 
-    # Layer 1: DDG multi-backend
+    # Onion / Deep Web — dedicated path, skip normal engines
     results = []
-    try:
-        results = _try_ddg(effective_query, max_results, search_type, region)
-    except Exception:
-        logger.exception("DDG failed for query=%s type=%s", query, search_type)
-
-    # Layer 2: SearXNG
-    if not results:
-        logger.info("DDG empty, trying SearXNG")
+    if search_type == "onion":
+        results = _try_ahmia(effective_query)
+        if not results:
+            logger.info("Ahmia empty, trying DDG onion fallback")
+            results = _try_onion_ddg(effective_query)
+    else:
+        # Layer 1: DDG multi-backend
         try:
-            results = _try_searxng(effective_query, search_type, pages=3, lang=lang)
+            results = _try_ddg(effective_query, max_results, search_type, region)
         except Exception:
-            logger.exception("SearXNG failed for query=%s", query)
+            logger.exception("DDG failed for query=%s type=%s", query, search_type)
 
-    # Image-specific fallbacks (layers 2b, 2c)
-    if not results and search_type == "images":
-        logger.info("Image search empty, trying Openverse")
-        results = _try_openverse(query)
-
-    if not results and search_type == "images":
-        logger.info("Openverse empty, trying Wikimedia Commons")
-        results = _try_wikimedia_commons(query)
-
-    # News-specific fallback (layer 2b)
-    if not results and search_type == "news":
-        logger.info("News search empty, trying Google News RSS")
-        results = _try_google_news_rss(query)
-
-    # Code-specific fallbacks
-    if search_type == "code":
+        # Layer 2: SearXNG
         if not results:
-            logger.info("Code search: trying GitHub")
-            results = _try_github_search(effective_query, max_results)
-        if not results:
-            logger.info("Code search: trying StackOverflow")
-            results = _try_stackoverflow(effective_query, max_results)
-        if not results:
-            logger.info("Code search: trying DDG code-focused")
-            results = _try_code_ddg(effective_query, max_results)
-        # For code, also merge SO results into GitHub results for variety
-        if results and len(results) < max_results // 2:
+            logger.info("DDG empty, trying SearXNG")
             try:
-                so = _try_stackoverflow(effective_query, 10)
-                gh = _try_github_search(effective_query, 10)
-                results = results + so + gh
+                results = _try_searxng(effective_query, search_type, pages=3, lang=lang)
             except Exception:
-                pass
+                logger.exception("SearXNG failed for query=%s", query)
+
+        # Image-specific fallbacks (layers 2b, 2c)
+        if not results and search_type == "images":
+            logger.info("Image search empty, trying Openverse")
+            results = _try_openverse(query)
+
+        if not results and search_type == "images":
+            logger.info("Openverse empty, trying Wikimedia Commons")
+            results = _try_wikimedia_commons(query)
+
+        # News-specific fallback (layer 2b)
+        if not results and search_type == "news":
+            logger.info("News search empty, trying Google News RSS")
+            results = _try_google_news_rss(query)
+
+        # Code-specific fallbacks
+        if search_type == "code":
+            if not results:
+                logger.info("Code search: trying GitHub")
+                results = _try_github_search(effective_query, max_results)
+            if not results:
+                logger.info("Code search: trying StackOverflow")
+                results = _try_stackoverflow(effective_query, max_results)
+            if not results:
+                logger.info("Code search: trying DDG code-focused")
+                results = _try_code_ddg(effective_query, max_results)
+            # For code, also merge SO results into GitHub results for variety
+            if results and len(results) < max_results // 2:
+                try:
+                    so = _try_stackoverflow(effective_query, 10)
+                    gh = _try_github_search(effective_query, 10)
+                    results = results + so + gh
+                except Exception:
+                    pass
 
     # Text-only deep fallbacks (layers 3-6)
     if not results and search_type == "text":

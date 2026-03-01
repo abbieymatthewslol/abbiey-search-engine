@@ -11,7 +11,7 @@ Privacy-respecting search engine with no tracking, filtering, or logs.
 - DDG AI Chat (AI summaries, free, no key)
 
 ## Features
-- Search tabs: All, Images, News, Videos, Code
+- Search tabs: All, Images, News, Videos, Code, Deep Web
 - Entity detection (phone, email, username, person, domain, IP, crypto, MAC, coordinates, hashtag, address, weather)
 - Infinite scroll pagination
 - Result preview panel (hover or j/k navigation)
@@ -29,6 +29,7 @@ Privacy-respecting search engine with no tracking, filtering, or logs.
 - **Weather cards** — `weather London` shows live temp, conditions, 3-day forecast
 - **AI summary** — Perplexity-style 2-3 sentence answer with citations above results
 - **Privacy badge** — header shield showing 0 trackers, popover with privacy stats
+- **Deep Web tab** — .onion search via Ahmia.fi (clearnet, no Tor needed) with DDG fallback, warning banner, .onion badges
 
 ## Run
 ```bash

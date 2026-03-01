@@ -106,9 +106,6 @@
     <main>
         <div class="search-container">
             {% if not query %}
-            <h1 class="hero-title">FreeSearch</h1>
-            <p class="hero-sub">Private. Unfiltered. Yours.</p>
-            <p class="hero-bangs">Try <kbd>!w</kbd> <kbd>!yt</kbd> <kbd>!gh</kbd> for quick jumps</p>
             {% endif %}
 
             <form action="/search" method="GET" id="search-form">
@@ -146,6 +143,7 @@
                 <a href="/search?q={{ query|urlencode }}&type=news{% if region %}&region={{ region }}{% endif %}" class="tab {% if search_type == 'news' %}active{% endif %}">News</a>
                 <a href="/search?q={{ query|urlencode }}&type=videos{% if region %}&region={{ region }}{% endif %}" class="tab {% if search_type == 'videos' %}active{% endif %}">Videos</a>
                 <a href="/search?q={{ query|urlencode }}&type=code{% if region %}&region={{ region }}{% endif %}" class="tab {% if search_type == 'code' %}active{% endif %}">Code</a>
+                <a href="/search?q={{ query|urlencode }}&type=onion{% if region %}&region={{ region }}{% endif %}" class="tab {% if search_type == 'onion' %}active{% endif %}">Deep Web</a>
             </nav>
 
             {# ===== QUICK FILTERS BAR ===== #}
@@ -482,6 +480,14 @@
         </div>
         {% endif %}
 
+        {# ===== ONION WARNING BANNER ===== #}
+        {% if search_type == 'onion' %}
+        <div class="onion-warning">
+            <span class="onion-warning-icon">&#9888;&#65039;</span>
+            <span>Deep web results contain <strong>.onion links</strong> that require the <a href="https://www.torproject.org/download/" target="_blank" rel="noopener">Tor Browser</a> to access. Browse safely.</span>
+        </div>
+        {% endif %}
+
         {# ===== MAIN RESULTS ===== #}
         <div id="results" class="results-container" data-type="{{ search_type }}">
             {% if results %}
@@ -527,6 +533,15 @@
                             {% endif %}
                         </div>
                     </article>
+                    {% elif search_type == 'onion' %}
+                    <article class="result onion-result" data-url="{{ r.url }}">
+                        <div class="onion-result-header">
+                            <a href="{{ r.url }}" target="_blank" rel="noopener" class="result-title">{{ r.title }}</a>
+                            {% if r.onion or '.onion' in r.url %}<span class="onion-badge">.onion</span>{% endif %}
+                        </div>
+                        <cite class="result-url">{{ r.url }}</cite>
+                        <p class="result-snippet">{{ r.body }}</p>
+                    </article>
                     {% else %}
                     <article class="result" data-url="{{ r.url }}">
                         <a href="{{ r.url }}" target="_blank" rel="noopener" class="result-title">{{ r.title }}</a>
@@ -551,11 +566,17 @@
             </div>
         </div>
         {% endif %}
+
+        {% if query and search_type == 'onion' and not has_more and results %}
+        <div class="onion-end-notice">
+            <p>Showing all available deep web results. Ahmia indexes a limited subset of .onion sites.</p>
+        </div>
+        {% endif %}
         {% endif %}
     </main>
 
     {# ===== RESULT PREVIEW PANEL ===== #}
-    {% if query and search_type in ('text', 'news', 'code') %}
+    {% if query and search_type in ('text', 'news', 'code', 'onion') %}
     <aside class="preview-panel" id="preview-panel">
         <div class="preview-header">
             <span class="preview-header-title">Preview</span>
@@ -655,5 +676,8 @@
     </script>
     {% endif %}
     <script src="{{ url_for('static', filename='script.js') }}"></script>
+    {% if query and search_type == 'onion' %}
+    <script src="{{ url_for('static', filename='onion-rewriter.js') }}"></script>
+    {% endif %}
 </body>
 </html>
