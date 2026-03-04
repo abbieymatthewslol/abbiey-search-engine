@@ -1,4 +1,4 @@
-"""Pytest fixtures for FreeSearch test suite."""
+"""Pytest fixtures for abbiey.search test suite."""
 
 import pytest
 from unittest.mock import patch, MagicMock

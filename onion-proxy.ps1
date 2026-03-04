@@ -4,7 +4,7 @@
 # Usage:
 #   powershell -ExecutionPolicy Bypass -File onion-proxy.ps1
 #
-# This is OPTIONAL — FreeSearch has a built-in /api/onion-proxy endpoint
+# This is OPTIONAL — abbiey.search has a built-in /api/onion-proxy endpoint
 # that does the same thing. This standalone script is for advanced users
 # who want a dedicated proxy outside of Flask.
 
@@ -110,7 +110,7 @@ while ($true) {
         $response.ContentType = "text/html; charset=utf-8"
     }
 
-    # CORS headers for FreeSearch
+    # CORS headers for abbiey.search
     $response.Headers.Add("Access-Control-Allow-Origin", "http://localhost:8000")
 
     $response.ContentLength64 = $buffer.Length

@@ -1,12 +1,27 @@
 document.addEventListener("DOMContentLoaded", () => {
   const html = document.documentElement;
 
+  // ===== Search loading indicator =====
+  const searchForm = document.getElementById("search-form");
+  const searchBtn = document.querySelector(".search-btn");
+  if (searchForm && searchBtn) {
+    searchForm.addEventListener("submit", () => {
+      const q = document.getElementById("search-input");
+      if (!q || !q.value.trim()) return;
+      searchBtn.classList.add("loading");
+      searchBtn.innerHTML = '<span class="btn-spinner"></span> Searching';
+      const bar = document.createElement("div");
+      bar.className = "search-loading-bar";
+      document.body.appendChild(bar);
+    });
+  }
+
   // ===== Theme toggle =====
   const toggle = document.getElementById("theme-toggle");
   const saved = localStorage.getItem("theme");
   if (saved) html.setAttribute("data-theme", saved);
 
-  toggle.addEventListener("click", () => {
+  if (toggle) toggle.addEventListener("click", () => {
     const next = html.getAttribute("data-theme") === "dark" ? "light" : "dark";
     html.setAttribute("data-theme", next);
     localStorage.setItem("theme", next);
@@ -37,39 +52,105 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // Theme settings popover
-  const themeBtn = document.getElementById("theme-settings-btn");
-  const themePopover = document.getElementById("theme-popover");
-  const themePopoverClose = document.getElementById("theme-popover-close");
+  // ===== Settings Modal =====
+  const _S = {
+    theme:         { key: "theme",                 def: "dark"   },
+    accent:        { key: "accent-color",          def: "#6ee7b7"},
+    density:       { key: "density",               def: "default"},
+    fontSize:      { key: "abbiey_font_size",      def: "medium" },
+    fontFamily:    { key: "abbiey_font_family",    def: "system" },
+    safesearch:    { key: "abbiey_safesearch",     def: "off"    },
+    newTab:        { key: "abbiey_new_tab",        def: "true"   },
+    defaultTab:    { key: "abbiey_default_tab",    def: "text"   },
+    aiSummary:     { key: "abbiey_ai_summary",     def: "true"   },
+    autocomplete:  { key: "abbiey_autocomplete",   def: "true"   },
+    persistRegion: { key: "abbiey_region_persist", def: "false"  },
+    history:       { key: "abbiey_history",        def: "true"   },
+    showCards:     { key: "abbiey_show_cards",     def: "true"   },
+    showFavicons:  { key: "abbiey_show_favicons",  def: "true"   },
+    showDates:     { key: "abbiey_show_dates",     def: "true"   },
+  };
+  function gs(name) { return localStorage.getItem(_S[name].key) ?? _S[name].def; }
+  function ss(name, val) { localStorage.setItem(_S[name].key, val); }
 
-  if (themeBtn && themePopover) {
-    themeBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      themePopover.classList.toggle("open");
-    });
-    themePopoverClose.addEventListener("click", () => {
-      themePopover.classList.remove("open");
-    });
-    // Preset swatches
-    themePopover.querySelectorAll(".color-swatch").forEach(swatch => {
-      swatch.addEventListener("click", () => {
-        applyAccentColor(swatch.dataset.color);
-      });
-    });
+  // Apply all settings on load
+  function applyAllSettings() {
+    // Font size — change html font-size so rem units scale
+    const fsMap = { small: "13.5px", medium: "", large: "17.5px", xl: "20px" };
+    const fs = gs("fontSize");
+    html.style.fontSize = fsMap[fs] || "";
+    html.setAttribute("data-font-size", fs);
 
-    // Custom color picker
-    const customColor = document.getElementById("custom-color");
-    if (customColor) {
-      if (savedAccent) customColor.value = savedAccent;
-      customColor.addEventListener("input", () => {
-        applyAccentColor(customColor.value);
+    // Font family
+    const ffMap = {
+      system: "",
+      serif:  "Georgia, 'Times New Roman', serif",
+      mono:   "'SF Mono', 'Fira Code', Consolas, monospace",
+    };
+    html.setAttribute("data-font-family", gs("fontFamily"));
+    document.body.style.fontFamily = ffMap[gs("fontFamily")] || "";
+
+    // Safe search hidden input
+    const ssInput = document.getElementById("safesearch-input");
+    if (ssInput) ssInput.value = gs("safesearch");
+
+    // Default tab (only set on homepage, not when already on a search tab)
+    if (!window.__searchType) {
+      const typeInput = document.getElementById("search-type-input");
+      if (typeInput) typeInput.value = gs("defaultTab");
+    }
+
+    // Open in new tab
+    if (gs("newTab") === "false") {
+      document.querySelectorAll("a.result-title[target='_blank']").forEach(a => a.removeAttribute("target"));
+    }
+
+    // AI summary
+    const aiCard = document.getElementById("ai-summary-card");
+    if (aiCard && gs("aiSummary") === "false") aiCard.style.display = "none";
+
+    // Answer cards
+    if (gs("showCards") === "false") {
+      [".calculator-card",".color-card",".unit-convert-card",".knowledge-panel",
+       ".weather-card",".dictionary-card",".qr-card"].forEach(sel => {
+        document.querySelectorAll(sel).forEach(el => { el.style.display = "none"; });
       });
+    }
+
+    // Favicons
+    if (gs("showFavicons") === "false") {
+      const st = document.createElement("style");
+      st.id = "hide-favicons-style";
+      st.textContent = ".result-favicon{display:none!important}";
+      document.head.appendChild(st);
+    }
+
+    // Result dates
+    if (gs("showDates") === "false") {
+      const st = document.createElement("style");
+      st.id = "hide-dates-style";
+      st.textContent = ".result-date{display:none!important}";
+      document.head.appendChild(st);
+    }
+
+    // Persist region: restore saved region on page load
+    if (gs("persistRegion") === "true") {
+      const savedReg = localStorage.getItem("abbiey_region");
+      const rInput = document.getElementById("region-input");
+      const rSelect = document.getElementById("region-select");
+      if (savedReg && rInput && !rInput.value) {
+        rInput.value = savedReg;
+        if (rSelect) rSelect.value = savedReg;
+      }
     }
   }
 
-  // ===== Density toggle =====
+  applyAllSettings();
+
+  // ===== Density toggle (header quick-toggle) =====
   const densityBtn = document.getElementById("density-toggle");
   const densityLevels = ["compact", "default", "comfortable"];
-  const savedDensity = localStorage.getItem("density") || "default";
+  const savedDensity = gs("density");
   html.setAttribute("data-density", savedDensity);
 
   if (densityBtn) {
@@ -78,11 +159,180 @@ document.addEventListener("DOMContentLoaded", () => {
       const idx = densityLevels.indexOf(current);
       const next = densityLevels[(idx + 1) % densityLevels.length];
       html.setAttribute("data-density", next);
-      localStorage.setItem("density", next);
-      // Brief visual indicator
+      ss("density", next);
       densityBtn.title = `Density: ${next}`;
+      // keep settings modal in sync if open
+      syncBtnGroup("density-group", next);
     });
     densityBtn.title = `Density: ${savedDensity}`;
+  }
+
+  // ===== Open / close settings modal =====
+  const settingsBtn = document.getElementById("theme-settings-btn");
+  const settingsOverlay = document.getElementById("settings-overlay");
+  const settingsClose = document.getElementById("settings-close");
+
+  function openSettings() {
+    settingsOverlay.removeAttribute("hidden");
+    syncSettingsUI();
+  }
+  function closeSettings() { settingsOverlay.setAttribute("hidden", ""); }
+
+  if (settingsBtn) settingsBtn.addEventListener("click", (e) => { e.stopPropagation(); openSettings(); });
+  if (settingsClose) settingsClose.addEventListener("click", closeSettings);
+  if (settingsOverlay) {
+    settingsOverlay.addEventListener("click", (e) => { if (e.target === settingsOverlay) closeSettings(); });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !settingsOverlay.hasAttribute("hidden")) closeSettings(); });
+  }
+
+  // ===== Sync UI to current values =====
+  function syncBtnGroup(id, activeVal) {
+    const g = document.getElementById(id);
+    if (!g) return;
+    g.querySelectorAll(".settings-seg-btn").forEach(b => b.classList.toggle("active", b.dataset.val === activeVal));
+  }
+  function syncToggle(id, checked) {
+    const el = document.getElementById(id);
+    if (el) el.checked = checked;
+  }
+  function syncSettingsUI() {
+    syncBtnGroup("theme-btn-group",    gs("theme"));
+    syncBtnGroup("density-group",      gs("density"));
+    syncBtnGroup("font-size-group",    gs("fontSize"));
+    syncBtnGroup("font-family-group",  gs("fontFamily"));
+    syncBtnGroup("safesearch-group",   gs("safesearch"));
+    syncBtnGroup("default-tab-group",  gs("defaultTab"));
+    syncBtnGroup("newtab-group",       gs("newTab"));
+    syncToggle("ai-summary-toggle",    gs("aiSummary")     === "true");
+    syncToggle("autocomplete-toggle",  gs("autocomplete")  === "true");
+    syncToggle("persist-region-toggle",gs("persistRegion") === "true");
+    syncToggle("history-toggle",       gs("history")       === "true");
+    syncToggle("cards-toggle",         gs("showCards")     === "true");
+    syncToggle("favicons-toggle",      gs("showFavicons")  === "true");
+    syncToggle("dates-toggle",         gs("showDates")     === "true");
+    const cc = document.getElementById("custom-color");
+    if (cc) cc.value = gs("accent");
+    // mark active swatch
+    document.querySelectorAll(".color-swatch").forEach(s => {
+      s.classList.toggle("active", s.dataset.color === gs("accent"));
+    });
+  }
+
+  // ===== Wire segmented button groups =====
+  function wireBtnGroup(groupId, settingName, onChange) {
+    const g = document.getElementById(groupId);
+    if (!g) return;
+    g.querySelectorAll(".settings-seg-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        ss(settingName, btn.dataset.val);
+        syncBtnGroup(groupId, btn.dataset.val);
+        if (onChange) onChange(btn.dataset.val);
+      });
+    });
+  }
+  function wireToggle(id, settingName, onChange) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener("change", () => {
+      ss(settingName, el.checked ? "true" : "false");
+      if (onChange) onChange(el.checked);
+    });
+  }
+
+  wireBtnGroup("theme-btn-group", "theme", (val) => {
+    html.setAttribute("data-theme", val);
+    localStorage.setItem("theme", val);
+  });
+  wireBtnGroup("density-group", "density", (val) => {
+    html.setAttribute("data-density", val);
+    ss("density", val);
+    densityBtn && (densityBtn.title = `Density: ${val}`);
+  });
+  wireBtnGroup("font-size-group", "fontSize", (val) => {
+    const m = { small: "13.5px", medium: "", large: "17.5px", xl: "20px" };
+    html.style.fontSize = m[val] || "";
+    html.setAttribute("data-font-size", val);
+  });
+  wireBtnGroup("font-family-group", "fontFamily", (val) => {
+    const m = { system: "", serif: "Georgia,'Times New Roman',serif", mono: "'SF Mono','Fira Code',Consolas,monospace" };
+    document.body.style.fontFamily = m[val] || "";
+    html.setAttribute("data-font-family", val);
+  });
+  wireBtnGroup("safesearch-group", "safesearch", (val) => {
+    const inp = document.getElementById("safesearch-input");
+    if (inp) inp.value = val;
+  });
+  wireBtnGroup("default-tab-group", "defaultTab", null);
+  wireBtnGroup("newtab-group", "newTab", (val) => {
+    document.querySelectorAll("a.result-title").forEach(a => {
+      if (val === "true") a.setAttribute("target", "_blank");
+      else a.removeAttribute("target");
+    });
+  });
+
+  wireToggle("ai-summary-toggle", "aiSummary", (checked) => {
+    const c = document.getElementById("ai-summary-card");
+    if (c) c.style.display = checked ? "" : "none";
+  });
+  wireToggle("autocomplete-toggle", "autocomplete", null);
+  wireToggle("persist-region-toggle", "persistRegion", null);
+  wireToggle("history-toggle", "history", null);
+  wireToggle("cards-toggle", "showCards", (checked) => {
+    [".calculator-card",".color-card",".unit-convert-card",".knowledge-panel",
+     ".weather-card",".dictionary-card",".qr-card"].forEach(sel => {
+      document.querySelectorAll(sel).forEach(el => { el.style.display = checked ? "" : "none"; });
+    });
+  });
+  wireToggle("favicons-toggle", "showFavicons", (checked) => {
+    let st = document.getElementById("hide-favicons-style");
+    if (!checked) {
+      if (!st) { st = document.createElement("style"); st.id = "hide-favicons-style"; document.head.appendChild(st); }
+      st.textContent = ".result-favicon{display:none!important}";
+    } else if (st) { st.textContent = ""; }
+  });
+  wireToggle("dates-toggle", "showDates", (checked) => {
+    let st = document.getElementById("hide-dates-style");
+    if (!checked) {
+      if (!st) { st = document.createElement("style"); st.id = "hide-dates-style"; document.head.appendChild(st); }
+      st.textContent = ".result-date{display:none!important}";
+    } else if (st) { st.textContent = ""; }
+  });
+
+  // ===== Accent color (in settings modal) =====
+  document.querySelectorAll(".color-swatch").forEach(swatch => {
+    swatch.addEventListener("click", () => {
+      applyAccentColor(swatch.dataset.color);
+      ss("accent", swatch.dataset.color);
+      document.querySelectorAll(".color-swatch").forEach(s => s.classList.toggle("active", s.dataset.color === swatch.dataset.color));
+      const cc = document.getElementById("custom-color");
+      if (cc) cc.value = swatch.dataset.color;
+    });
+  });
+  const customColorInput = document.getElementById("custom-color");
+  if (customColorInput) {
+    if (savedAccent) customColorInput.value = savedAccent;
+    customColorInput.addEventListener("input", () => {
+      applyAccentColor(customColorInput.value);
+      ss("accent", customColorInput.value);
+    });
+  }
+
+  // ===== Clear buttons =====
+  const clearHistBtn = document.getElementById("clear-history-btn");
+  if (clearHistBtn) {
+    clearHistBtn.addEventListener("click", () => {
+      localStorage.removeItem("abbiey_search_history");
+      clearHistBtn.textContent = "Cleared!";
+      setTimeout(() => { clearHistBtn.textContent = "Clear"; }, 1500);
+    });
+  }
+  const clearAllBtn = document.getElementById("clear-all-btn");
+  if (clearAllBtn) {
+    clearAllBtn.addEventListener("click", () => {
+      if (!confirm("Reset all data? This clears history, bookmarks and all settings.")) return;
+      localStorage.clear();
+      location.reload();
+    });
   }
 
   // ===== Region selector =====
@@ -95,6 +345,15 @@ document.addEventListener("DOMContentLoaded", () => {
       if (langInput) {
         const parts = regionSelect.value.split("-");
         langInput.value = parts.length > 1 ? parts[1] : "";
+      }
+      // Persist if enabled
+      if (gs("persistRegion") === "true") {
+        localStorage.setItem("abbiey_region", regionSelect.value);
+      }
+      // Auto-submit if there's already a query
+      const q = document.getElementById("search-input");
+      if (q && q.value.trim()) {
+        document.getElementById("search-form").submit();
       }
     });
   }
@@ -223,7 +482,7 @@ document.addEventListener("DOMContentLoaded", () => {
     let acSeq = 0;
     let activeIdx = -1;
 
-    const HISTORY_KEY = "freesearch_history";
+    const HISTORY_KEY = "abbiey_search_history";
     const MAX_HISTORY = 20;
 
     function getHistory() {
@@ -235,6 +494,7 @@ document.addEventListener("DOMContentLoaded", () => {
       catch {}
     }
     function addHistory(term) {
+      if (gs("history") === "false") return;
       const t = term.trim();
       if (!t) return;
       let items = getHistory().filter(i => i !== t);
@@ -297,6 +557,9 @@ document.addEventListener("DOMContentLoaded", () => {
       clearTimeout(acTimer);
       const val = input.value.trim();
       if (!val) { renderHistory(); return; }
+      if (gs("autocomplete") === "false") { hideDropdown(); return; }
+      // Don't interfere with bang command suggestions
+      if (val.startsWith("!") && !val.includes(" ")) return;
       hideDropdown();
       acTimer = setTimeout(() => fetchSuggestions(val), 120);
     });
@@ -333,36 +596,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Time filter
     const timeSelect = document.getElementById("filter-time");
-    if (timeSelect) {
-      // Pre-select if after: operator exists
-      const currentQ = filterInput ? filterInput.value : "";
-      const afterMatch = currentQ.match(/\bafter:(\S+)/i);
-      if (afterMatch) {
-        // Try to determine which option matches
-        const afterDate = new Date(afterMatch[1]);
-        const now = new Date();
-        const diffDays = Math.round((now - afterDate) / 86400000);
-        if (diffDays <= 0.1) timeSelect.value = "1h";
-        else if (diffDays <= 1) timeSelect.value = "24h";
-        else if (diffDays <= 7) timeSelect.value = "7d";
-        else if (diffDays <= 30) timeSelect.value = "30d";
-        else if (diffDays <= 365) timeSelect.value = "365d";
-      }
+    const dfInput = document.getElementById("df-input");
+    if (timeSelect && dfInput) {
+      // Pre-select from current df value
+      if (dfInput.value) timeSelect.value = dfInput.value;
 
       timeSelect.addEventListener("change", () => {
-        let q = filterInput.value;
-        q = removeOperator(q, "after");
-        if (timeSelect.value) {
-          const now = new Date();
-          const map = { "1h": 1/24, "24h": 1, "7d": 7, "30d": 30, "365d": 365 };
-          const days = map[timeSelect.value] || 0;
-          if (days) {
-            const d = new Date(now.getTime() - days * 86400000);
-            const dateStr = d.toISOString().slice(0, 10);
-            q = `${q} after:${dateStr}`.trim();
-          }
-        }
-        filterInput.value = q;
+        dfInput.value = timeSelect.value;
         applyFilter();
       });
     }
@@ -413,7 +653,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // ===== Infinite scroll (IntersectionObserver) =====
   const sentinel = document.getElementById("scroll-sentinel");
-  if (sentinel) {
+  if (sentinel && !window.__paywall) {
   let loading = false;
   let hasMore = sentinel.dataset.hasMore === "true";
   const container = document.getElementById("results");
@@ -446,7 +686,14 @@ document.addEventListener("DOMContentLoaded", () => {
     sentinel.querySelector(".scroll-loader").classList.remove("hidden");
     showSkeletons(5);
 
-    fetch(`/search?q=${encodeURIComponent(query)}&page=${page}&type=${type}`, {
+    const regionVal = document.getElementById("region-input")?.value || "";
+    const langVal = document.getElementById("lang-input")?.value || "";
+    const dfVal = document.getElementById("df-input")?.value || "";
+    let scrollUrl = `/search?q=${encodeURIComponent(query)}&page=${page}&type=${type}`;
+    if (regionVal) scrollUrl += `&region=${encodeURIComponent(regionVal)}`;
+    if (langVal) scrollUrl += `&lang=${encodeURIComponent(langVal)}`;
+    if (dfVal) scrollUrl += `&df=${encodeURIComponent(dfVal)}`;
+    fetch(scrollUrl, {
       headers: { "X-Requested-With": "XMLHttpRequest" },
     })
       .then(r => r.json())
@@ -468,16 +715,21 @@ document.addEventListener("DOMContentLoaded", () => {
           } else if (type === "videos") {
             el.className = "result video-result";
             el.innerHTML = `${r.thumbnail ? `<a href="${esc(r.url)}" target="_blank" rel="noopener" class="video-thumb"><img src="${esc(r.thumbnail)}" alt="${esc(r.title)}" loading="lazy">${r.duration ? `<span class="duration">${esc(r.duration)}</span>` : ""}</a>` : ""}<div class="result-text"><a href="${esc(r.url)}" target="_blank" rel="noopener" class="result-title">${esc(r.title)}</a>${faviconImg(r.url)}<cite class="result-url">${esc(r.publisher || "")}</cite><p class="result-snippet">${esc(r.description || "")}</p></div>`;
+          } else if (type === "onion") {
+            el.className = "result onion-result";
+            const isOnion = r.onion || (r.url && /\.onion(\/|$)/i.test(r.url));
+            el.innerHTML = `<div class="onion-result-header"><a href="${esc(r.url)}" target="_blank" rel="noopener" class="result-title">${esc(r.title)}</a>${isOnion ? '<span class="onion-badge">.onion</span>' : ""}</div><cite class="result-url">${esc(r.url)}</cite><p class="result-snippet">${esc(r.body || "")}</p>`;
           } else if (type === "code") {
             el.className = "result code-result";
             el.innerHTML = `<div class="code-result-header"><a href="${esc(r.url)}" target="_blank" rel="noopener" class="result-title">${esc(r.title)}</a>${r.language ? `<span class="code-lang-badge">${esc(r.language)}</span>` : ""}<span class="code-source-badge">${esc(r.source || "")}</span></div>${faviconImg(r.url)}<cite class="result-url">${esc(r.url)}</cite><p class="result-snippet">${esc(r.body || "")}</p><div class="code-meta">${r.stars ? `<span class="code-stat">&#9733; ${esc(r.stars)}</span>` : ""}${r.forks ? `<span class="code-stat">&#9906; ${esc(r.forks)}</span>` : ""}</div>`;
           } else {
             el.className = "result";
-            el.innerHTML = `<a href="${esc(r.url)}" target="_blank" rel="noopener" class="result-title">${esc(r.title)}</a>${faviconImg(r.url)}<cite class="result-url">${esc(r.url)}</cite><p class="result-snippet">${esc(r.body || "")}</p>${r.date ? `<time class="result-date">${esc(r.date)}</time>` : ""}`;
+            el.innerHTML = `<button class="bookmark-btn" data-url="${esc(r.url)}" data-title="${esc(r.title)}" data-snippet="${esc(r.body || "")}" aria-label="Save result" title="Save"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg></button><a href="${esc(r.url)}" target="_blank" rel="noopener" class="result-title">${esc(r.title)}</a>${faviconImg(r.url)}<cite class="result-url">${esc(r.url)}</cite><p class="result-snippet">${esc(r.body || "")}</p>${r.date ? `<time class="result-date">${esc(r.date)}</time>` : ""}`;
           }
           frag.appendChild(el);
         });
         container.appendChild(frag);
+        initBookmarkBtns(container);
         sentinel.dataset.page = page;
         if (data.has_more) { hasMore = true; sentinel.querySelector(".scroll-loader").classList.add("hidden"); }
         else { hasMore = false; sentinel.remove(); observer.disconnect(); }
@@ -523,13 +775,6 @@ document.addEventListener("DOMContentLoaded", () => {
   // ===== Consolidated click-outside handler (single delegated listener) =====
   document.addEventListener("click", (e) => {
     const target = e.target;
-
-    // Theme popover close
-    if (themePopover && themePopover.classList.contains("open")) {
-      if (!target.closest(".theme-popover") && !target.closest("#theme-settings-btn")) {
-        themePopover.classList.remove("open");
-      }
-    }
 
     // Privacy popover close
     if (privacyPopover && privacyPopover.classList.contains("open")) {
@@ -834,7 +1079,7 @@ document.addEventListener("DOMContentLoaded", () => {
       let formatted = esc(content)
         .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
         .replace(/\[(.*?)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
-        .replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>')
+        .replace(/(?<!="|">)(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>')
         .replace(/\n/g, "<br>");
       div.innerHTML = `<div class="chat-msg-content">${formatted}</div>`;
       chatMessages.appendChild(div);
@@ -842,6 +1087,209 @@ document.addEventListener("DOMContentLoaded", () => {
       return id;
     }
     function removeMessage(id) { const el = document.getElementById(id); if (el) el.remove(); }
+  }
+
+  // ===== Onion Link Verification =====
+  if (window.__searchType === "onion") {
+    const onionResults = document.querySelectorAll(".onion-result");
+    if (onionResults.length) {
+      const ONION_VERIFIED_KEY = "onion_verified";
+      const ONION_TTL = 10 * 60 * 1000; // 10 minutes, matches server cache
+      const now = Date.now();
+
+      // Load cached statuses, filtering expired entries
+      let verified = {};
+      try {
+        const raw = JSON.parse(localStorage.getItem(ONION_VERIFIED_KEY)) || {};
+        for (const [k, v] of Object.entries(raw)) {
+          if (v && v.ts && now - v.ts < ONION_TTL) verified[k] = v.status;
+        }
+      } catch {}
+
+      // Helper: reorder onion results within their container without disrupting non-result siblings
+      const container = document.getElementById("results");
+      function reorderOnionResults() {
+        if (!container) return;
+        const firstOnion = onionResults[0];
+        if (!firstOnion) return;
+        const sorted = [...onionResults].sort((a, b) => {
+          const aLive = a.classList.contains("onion-live") ? 0 : a.classList.contains("onion-down") ? 2 : 1;
+          const bLive = b.classList.contains("onion-live") ? 0 : b.classList.contains("onion-down") ? 2 : 1;
+          return aLive - bLive;
+        });
+        // Insert before the first non-onion-result sibling after all onion results
+        const ref = container.querySelector(":scope > :not(.onion-result):not(.result)");
+        sorted.forEach(el => container.insertBefore(el, ref));
+      }
+
+      // Add badges — only check actual .onion URLs, skip clearnet DDG fallback results
+      const urls = [];
+      onionResults.forEach(el => {
+        const url = el.dataset.url || "";
+        const header = el.querySelector(".onion-result-header");
+        if (!header) return;
+        // Only verify actual .onion links
+        const isOnion = /\.onion(\/|$)/i.test(url);
+        if (!isOnion) return;
+        const badge = document.createElement("span");
+        badge.className = "onion-status checking";
+        if (verified[url]) {
+          badge.textContent = verified[url] === "live" ? "Live" : "Down";
+          badge.className = "onion-status " + verified[url];
+          if (verified[url] === "down") el.classList.add("onion-down");
+          else el.classList.add("onion-live");
+        } else {
+          badge.textContent = "Checking\u2026";
+        }
+        header.appendChild(badge);
+        urls.push(url);
+      });
+
+      reorderOnionResults();
+
+      // Fire off verification request — skip if all URLs already cached
+      const uncachedUrls = urls.filter(u => !verified[u]);
+      if (uncachedUrls.length) {
+        fetch("/api/onion-check", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ urls: uncachedUrls }),
+        })
+          .then(r => r.json())
+          .then(data => {
+            if (!data.results) return;
+            const res = data.results;
+
+            // Update badges and classes
+            let hasResults = false;
+            onionResults.forEach(el => {
+              const url = el.dataset.url;
+              const status = res[url];
+              if (!status || status === "unknown") {
+                // Tor not available — remove checking badge
+                const badge = el.querySelector(".onion-status.checking");
+                if (badge) badge.remove();
+                return;
+              }
+              hasResults = true;
+              const badge = el.querySelector(".onion-status");
+              if (badge) {
+                badge.textContent = status === "live" ? "Live" : "Down";
+                badge.className = "onion-status " + status;
+              }
+              el.classList.remove("onion-live", "onion-down");
+              el.classList.add(status === "live" ? "onion-live" : "onion-down");
+              verified[url] = status;
+            });
+
+            if (hasResults) reorderOnionResults();
+
+            // Persist to localStorage with timestamps (merge with existing)
+            try {
+              const ts = Date.now();
+              const merged = {};
+              // Keep existing non-expired entries
+              const existing = JSON.parse(localStorage.getItem(ONION_VERIFIED_KEY)) || {};
+              for (const [k, v] of Object.entries(existing)) {
+                if (v && v.ts && ts - v.ts < ONION_TTL) merged[k] = v;
+              }
+              // Add/update current results
+              for (const [k, v] of Object.entries(verified)) {
+                merged[k] = { status: v, ts };
+              }
+              localStorage.setItem(ONION_VERIFIED_KEY, JSON.stringify(merged));
+            } catch {}
+          })
+          .catch(() => {
+            // On error, remove "Checking..." badges
+            onionResults.forEach(el => {
+              const badge = el.querySelector(".onion-status.checking");
+              if (badge) badge.remove();
+            });
+          });
+      }
+    }
+  }
+
+  // ===== Bookmarking =====
+  const BOOKMARKS_KEY = "abbiey_bookmarks";
+
+  function getBookmarks() {
+    try { return JSON.parse(localStorage.getItem(BOOKMARKS_KEY)) || []; }
+    catch { return []; }
+  }
+  function saveBookmarks(items) {
+    try { localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(items)); } catch {}
+  }
+  function isBookmarked(url) {
+    return getBookmarks().some(b => b.url === url);
+  }
+  function addBookmark(url, title, snippet) {
+    const items = getBookmarks().filter(b => b.url !== url);
+    items.unshift({ url, title, snippet, saved: Date.now() });
+    saveBookmarks(items);
+  }
+  function removeBookmark(url) {
+    saveBookmarks(getBookmarks().filter(b => b.url !== url));
+  }
+  function updateBookmarkBadge() {
+    const badge = document.getElementById("bookmark-count-badge");
+    if (!badge) return;
+    const count = getBookmarks().length;
+    badge.textContent = count > 0 ? count : "";
+    badge.style.display = count > 0 ? "inline-flex" : "none";
+  }
+  function initBookmarkBtns(scope) {
+    (scope || document).querySelectorAll(".bookmark-btn:not([data-bm-init])").forEach(btn => {
+      btn.setAttribute("data-bm-init", "1");
+      const url = btn.dataset.url;
+      if (isBookmarked(url)) btn.classList.add("bookmarked");
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (isBookmarked(url)) {
+          removeBookmark(url);
+          btn.classList.remove("bookmarked");
+        } else {
+          addBookmark(url, btn.dataset.title, btn.dataset.snippet);
+          btn.classList.add("bookmarked");
+        }
+        updateBookmarkBadge();
+      });
+    });
+  }
+
+  initBookmarkBtns();
+  updateBookmarkBadge();
+
+  // Render saved tab
+  if (window.__searchType === "saved") {
+    const savedContainer = document.getElementById("saved-results-container");
+    if (savedContainer) {
+      const bookmarks = getBookmarks();
+      if (!bookmarks.length) {
+        savedContainer.innerHTML = '<p class="no-results">No saved results yet. Click the bookmark icon on any result to save it.</p>';
+      } else {
+        savedContainer.innerHTML = bookmarks.map(b => `
+          <article class="result saved-result">
+            <button class="bookmark-remove-btn" data-url="${esc(b.url)}" aria-label="Remove bookmark" title="Remove">&#10005;</button>
+            <a href="${esc(b.url)}" target="_blank" rel="noopener" class="result-title">${esc(b.title)}</a>
+            <cite class="result-url">${esc(b.url)}</cite>
+            <p class="result-snippet">${esc(b.snippet || "")}</p>
+          </article>
+        `).join("");
+        savedContainer.querySelectorAll(".bookmark-remove-btn").forEach(btn => {
+          btn.addEventListener("click", () => {
+            removeBookmark(btn.dataset.url);
+            btn.closest(".saved-result").remove();
+            updateBookmarkBadge();
+            if (!getBookmarks().length) {
+              savedContainer.innerHTML = '<p class="no-results">No saved results.</p>';
+            }
+          });
+        });
+      }
+    }
   }
 
   // ===== Related Searches =====

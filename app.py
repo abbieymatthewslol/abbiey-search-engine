@@ -1,5 +1,5 @@
 """
-FreeSearch - A privacy-respecting, non-judgmental search engine.
+abbiey.search - A privacy-respecting, non-judgmental search engine.
 No tracking. No filtering. No logs. Just results.
 """
 
@@ -8,6 +8,7 @@ import os
 import re
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict
 from urllib.parse import parse_qs, quote_plus, unquote, urlparse
 
@@ -15,7 +16,7 @@ import feedparser
 import httpx
 from cachetools import TTLCache
 from ddgs import DDGS
-from flask import Flask, render_template, request, jsonify, redirect
+from flask import Flask, render_template, request, jsonify, redirect, session
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
@@ -37,7 +38,7 @@ def domain_filter(url):
 RESULTS_PER_PAGE = 20
 MAX_PAGE = 50
 MAX_QUERY_LENGTH = 2000
-ALLOWED_TYPES = {"text", "images", "news", "videos", "code", "onion"}
+ALLOWED_TYPES = {"text", "images", "news", "videos", "code", "onion", "saved"}
 CACHE_FETCH_SIZE = 100  # Fetch enough results to serve multiple pages
 
 logging.basicConfig(level=logging.INFO)
@@ -59,9 +60,9 @@ limiter = Limiter(
 _cache = TTLCache(maxsize=500, ttl=300)
 _cache_lock = threading.Lock()
 
-# SearXNG dynamic instance cache
-_searxng_cache = {"instances": None, "expires": 0}
-_searxng_lock = threading.Lock()
+# Onion link status cache (TTL 10 min)
+_onion_status_cache = TTLCache(maxsize=2000, ttl=600)
+_onion_status_lock = threading.Lock()
 
 # Lazy-init shared httpx client
 _http = None
@@ -136,10 +137,27 @@ def _build_engine_query(clean_query, operators):
 # Dictionary lookup
 # ---------------------------------------------------------------------------
 _DEFINE_RE = re.compile(
-    r"^(?:define\s+|what\s+is\s+(?:a\s+|an\s+|the\s+)?|meaning\s+of\s+)(.+?)$"
+    r"^(?:define\s+|definition\s+of\s+|what\s+is\s+(?:a\s+|an\s+|the\s+)?|meaning\s+of\s+)(.+?)$"
     r"|^(.+?)\s+(?:definition|meaning)$",
     re.IGNORECASE,
 )
+
+_QR_RE = re.compile(
+    r"^(?:qr\s+code\s+for\s+|generate\s+qr\s+(?:code\s+)?(?:for\s+)?|qr\s+)(.+)$",
+    re.IGNORECASE,
+)
+
+
+def _try_qr(query):
+    """Detect QR code generation queries. Returns {data, image_url} or None."""
+    m = _QR_RE.match(query.strip())
+    if not m:
+        return None
+    data = m.group(1).strip()
+    if not data or len(data) > 500:
+        return None
+    image_url = f"https://api.qrserver.com/v1/create-qr-code/?size=200x200&data={quote_plus(data)}"
+    return {"data": data, "image_url": image_url}
 
 
 def _try_dictionary(query):
@@ -261,9 +279,12 @@ def _try_calculator(query):
     except SyntaxError:
         return None
     try:
+        import math
         result = eval(expr, _CALC_SAFE_GLOBALS, _CALC_SAFE_LOCALS)
         if isinstance(result, (int, float, complex)):
             if isinstance(result, float):
+                if math.isinf(result) or math.isnan(result):
+                    return {"expression": q, "result": str(result)}
                 if result == int(result) and abs(result) < 1e15:
                     result = int(result)
                 else:
@@ -480,7 +501,7 @@ def _try_knowledge_panel(query):
                 "format": "json",
                 "redirects": 1,
             },
-            headers={"User-Agent": "FreeSearch/1.0 (privacy search engine)"},
+            headers={"User-Agent": "abbiey.search/1.0 (privacy search engine)"},
             timeout=3.0,
         )
         data = resp.json()
@@ -591,13 +612,20 @@ _TEMPLATE_DEFAULTS = dict(
     query="", results=[], search_type="text", has_more=False, page=1,
     entities=[], primary_entity=None, entity_results=[], operators={},
     region="", lang="", dictionary=None, calculator=None, color=None,
-    unit_convert=None, knowledge=None, weather=None,
+    unit_convert=None, knowledge=None, weather=None, qr=None, time_filter="",
 )
 
 
 @app.route("/")
 def index():
     return render_template("index.html", **_TEMPLATE_DEFAULTS)
+
+
+@app.route("/payment-success")
+def payment_success():
+    session["paid"] = True
+    session["search_count"] = 0
+    return render_template("index.html", payment_success=True, **_TEMPLATE_DEFAULTS)
 
 
 @app.route("/search")
@@ -608,12 +636,35 @@ def search():
     search_type = request.args.get("type", "text")
     region = request.args.get("region", "").strip() or None
     lang = request.args.get("lang", "").strip() or None
+    time_filter = request.args.get("df", "").strip()
+    if time_filter not in {"d", "w", "m", "y"}:
+        time_filter = ""
+    safesearch = request.args.get("safesearch", "off").strip()
+    if safesearch not in {"off", "moderate", "strict"}:
+        safesearch = "off"
 
     if search_type not in ALLOWED_TYPES:
         search_type = "text"
 
     if not query:
         return render_template("index.html", **_TEMPLATE_DEFAULTS)
+
+    if search_type == "saved":
+        return render_template("index.html", query=query, results=[], search_type="saved",
+                               has_more=False, page=1, entities=[], primary_entity=None,
+                               entity_results=[], operators={}, region=region or "",
+                               lang=lang or "", dictionary=None, calculator=None, color=None,
+                               unit_convert=None, knowledge=None, weather=None, qr=None,
+                               time_filter="")
+
+    # --- Paywall: track search count ---
+    FREE_SEARCH_LIMIT = 2
+    if not session.get("paid"):
+        session["search_count"] = session.get("search_count", 0) + 1
+
+    paywall = False
+    if not session.get("paid") and session.get("search_count", 0) > FREE_SEARCH_LIMIT:
+        paywall = True
 
     # Bang commands — redirect immediately
     bang_m = _BANG_RE.match(query)
@@ -642,7 +693,7 @@ def search():
             geo_resp = httpx.get(
                 "https://nominatim.openstreetmap.org/search",
                 params={"q": primary.normalized, "format": "json", "limit": "1"},
-                headers={"User-Agent": "FreeSearch/1.0"},
+                headers={"User-Agent": "abbiey.search/1.0"},
                 timeout=3.0,
             )
             geo_data = geo_resp.json()
@@ -653,10 +704,12 @@ def search():
             logger.warning("Nominatim geocoding failed for address=%s", primary.normalized)
 
     if request.headers.get("X-Requested-With") == "XMLHttpRequest":
-        results = _fetch_results(clean_query, page, search_type, region, lang, operators)
+        if paywall:
+            return jsonify({"results": [], "has_more": False, "paywall": True})
+        results = _fetch_results(clean_query, page, search_type, region, lang, operators, time_filter=time_filter, safesearch=safesearch)
         return jsonify(results)
 
-    results = _fetch_results(clean_query, 1, search_type, region, lang, operators)
+    results = _fetch_results(clean_query, 1, search_type, region, lang, operators, time_filter=time_filter, safesearch=safesearch)
 
     # Fetch entity-specific results on page 1 (text only)
     entity_results = []
@@ -678,6 +731,7 @@ def search():
 
     # Dictionary card (text tab, page 1 only)
     dictionary = None
+    qr = None
     calculator = None
     color = None
     unit_convert = None
@@ -685,6 +739,7 @@ def search():
     weather = None
     if search_type == "text" and page == 1:
         dictionary = _try_dictionary(query)
+        qr = _try_qr(query)
         # Color picker (before entity detection so #hex doesn't become hashtag)
         color = _try_color_picker(query)
         # Calculator
@@ -703,9 +758,9 @@ def search():
     return render_template(
         "index.html",
         query=query,
-        results=results["results"],
+        results=results["results"] if not paywall else results["results"][:3],
         search_type=search_type,
-        has_more=results["has_more"],
+        has_more=results["has_more"] if not paywall else False,
         page=1,
         entities=[asdict(e) for e in entities],
         primary_entity=asdict(primary) if primary else None,
@@ -714,11 +769,14 @@ def search():
         region=region or "",
         lang=lang or "",
         dictionary=dictionary,
+        qr=qr,
         calculator=calculator,
         color=color,
         unit_convert=unit_convert,
         knowledge=knowledge,
         weather=weather,
+        time_filter=time_filter,
+        paywall=paywall,
     )
 
 
@@ -864,20 +922,116 @@ def api_onion_proxy():
         )
         return Response(content, content_type=resp.headers.get("content-type", "text/html"))
     except Exception as e:
+        from html import escape as _esc
         error_type = type(e).__name__
+        safe_url = _esc(url, quote=True)
         return f"""<!DOCTYPE html>
 <html><head><title>Onion Proxy Error</title></head>
 <body style="background:#0a0a0a;color:#e4e4e7;font-family:system-ui;padding:2rem;max-width:600px;margin:0 auto">
 <h2 style="color:#f87171">Cannot reach .onion site</h2>
-<p><strong>URL:</strong> <code>{url}</code></p>
-<p><strong>Error:</strong> {error_type}</p>
+<p><strong>URL:</strong> <code>{safe_url}</code></p>
+<p><strong>Error:</strong> {_esc(error_type)}</p>
 <p style="color:#a1a1aa">Make sure Tor is running on port 9050. You can:</p>
 <ul style="color:#a1a1aa">
 <li>Open Tor Browser (it starts a SOCKS proxy automatically)</li>
 <li>Or run <code>tor</code> as a standalone service</li>
 </ul>
-<p><a href="{url}" style="color:#a78bfa">Try opening directly in Tor Browser &rarr;</a></p>
+<p><a href="{safe_url}" style="color:#a78bfa">Try opening directly in Tor Browser &rarr;</a></p>
 </body></html>""", 502
+
+
+# ---------------------------------------------------------------------------
+# Onion Link Verification API
+# ---------------------------------------------------------------------------
+
+_ONION_HOST_RE = re.compile(r"^[a-z2-7]{16,56}\.onion$")
+
+
+def _check_single_onion(url):
+    """Check a single .onion URL via local Tor SOCKS proxy. Returns (url, status).
+
+    Requires Tor running on port 9050.  If Tor is not available, returns
+    "unknown" so the frontend doesn't show misleading live/down badges.
+    """
+    # Check cache first
+    with _onion_status_lock:
+        cached = _onion_status_cache.get(url)
+    if cached is not None:
+        return url, cached
+
+    parsed = urlparse(url)
+    hostname = parsed.hostname or ""
+    if not _ONION_HOST_RE.match(hostname):
+        return url, "down"
+
+    try:
+        transport = httpx.HTTPTransport(proxy="socks5://127.0.0.1:9050")
+        with httpx.Client(transport=transport, timeout=10.0, follow_redirects=True) as client:
+            resp = client.head(
+                url,
+                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; rv:128.0) Gecko/20100101 Firefox/128.0"},
+            )
+        status = "live" if resp.status_code < 400 else "down"
+    except Exception:
+        # Tor not running or site unreachable — can't distinguish, report unknown
+        status = "unknown"
+
+    if status != "unknown":
+        with _onion_status_lock:
+            _onion_status_cache[url] = status
+    return url, status
+
+
+@app.route("/api/onion-check", methods=["POST"])
+@limiter.limit("20/minute")
+def api_onion_check():
+    """Check reachability of .onion URLs via Tor2web gateway."""
+    data = request.get_json(silent=True) or {}
+    urls = data.get("urls", [])
+
+    if not isinstance(urls, list) or not urls:
+        return jsonify({"error": "Provide a list of URLs"}), 400
+
+    # Cap to 30 URLs per request
+    urls = [u for u in urls[:30] if isinstance(u, str) and u.startswith("http")]
+
+    results = {}
+    # Return cached results immediately, queue uncached for checking
+    uncached = []
+    for url in urls:
+        with _onion_status_lock:
+            cached = _onion_status_cache.get(url)
+        if cached is not None:
+            results[url] = cached
+        else:
+            uncached.append(url)
+
+    # Check uncached URLs in parallel
+    if uncached:
+        with ThreadPoolExecutor(max_workers=10) as pool:
+            futures = {pool.submit(_check_single_onion, u): u for u in uncached}
+            for future in as_completed(futures):
+                try:
+                    url, status = future.result()
+                    results[url] = status
+                except Exception:
+                    results[futures[future]] = "down"
+
+    return jsonify({"results": results})
+
+
+def _is_private_ip(hostname):
+    """Check if a hostname resolves to a private/internal IP."""
+    import socket
+    import ipaddress
+    try:
+        for info in socket.getaddrinfo(hostname, None):
+            addr = ipaddress.ip_address(info[4][0])
+            if addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved:
+                return True
+    except (socket.gaierror, ValueError):
+        return False
+    return False
 
 
 @app.route("/api/preview")
@@ -887,15 +1041,19 @@ def api_preview():
     url = request.args.get("url", "").strip()
     if not url or not url.startswith("http"):
         return jsonify({"error": "Invalid URL"}), 400
-    if ".onion" in urlparse(url).netloc:
+    parsed_preview = urlparse(url)
+    if ".onion" in (parsed_preview.netloc or ""):
         return jsonify({"error": "Cannot preview .onion addresses without Tor Browser"}), 400
+    hostname = parsed_preview.hostname or ""
+    if not hostname or _is_private_ip(hostname):
+        return jsonify({"error": "Invalid URL"}), 400
 
     try:
         resp = httpx.get(
             url,
             timeout=4.0,
             follow_redirects=True,
-            headers={"User-Agent": "Mozilla/5.0 (compatible; FreeSearch/1.0)"},
+            headers={"User-Agent": "Mozilla/5.0 (compatible; abbiey.search/1.0)"},
         )
         resp.raise_for_status()
         html = resp.text[:100000]  # Cap at 100KB
@@ -968,79 +1126,11 @@ def api_preview():
 # ---------------------------------------------------------------------------
 
 def _ddg_chat(messages):
-    """Call DuckDuckGo AI Chat via duck.ai. Free, no API key.
-    messages: list of {"role": "user"|"assistant", "content": "..."}
-    Returns the assistant's response text.
+    """Call DuckDuckGo AI Chat. Currently non-functional — DDG now requires
+    a JavaScript browser challenge for VQD tokens. Raises immediately so
+    callers fall through to extractive fallback without wasting time.
     """
-    import json as _json
-
-    # Use a fresh client with browser-like headers for the chat session
-    with httpx.Client(timeout=30.0, follow_redirects=True) as client:
-        # Step 1: Visit duck.ai to get cookies
-        client.get(
-            "https://duck.ai",
-            headers={
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                              "AppleWebKit/537.36 (KHTML, like Gecko) "
-                              "Chrome/131.0.0.0 Safari/537.36",
-                "Accept": "text/html,application/xhtml+xml",
-            },
-        )
-
-        # Step 2: Get VQD token
-        status_resp = client.get(
-            "https://duckduckgo.com/duckchat/v1/status",
-            headers={
-                "x-vqd-accept": "1",
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                              "AppleWebKit/537.36 (KHTML, like Gecko) "
-                              "Chrome/131.0.0.0 Safari/537.36",
-                "Referer": "https://duck.ai/",
-                "Origin": "https://duck.ai",
-                "Accept": "*/*",
-            },
-        )
-        status_resp.raise_for_status()
-        vqd = status_resp.headers.get("x-vqd-4", "")
-        if not vqd:
-            raise RuntimeError("No VQD token — DDG requires browser challenge")
-
-        # Step 3: Send chat request
-        chat_resp = client.post(
-            "https://duckduckgo.com/duckchat/v1/chat",
-            headers={
-                "x-vqd-4": vqd,
-                "Content-Type": "application/json",
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                              "AppleWebKit/537.36 (KHTML, like Gecko) "
-                              "Chrome/131.0.0.0 Safari/537.36",
-                "Referer": "https://duck.ai/",
-                "Origin": "https://duck.ai",
-                "Accept": "text/event-stream",
-            },
-            json={
-                "model": "gpt-4o-mini",
-                "messages": messages,
-            },
-        )
-        chat_resp.raise_for_status()
-
-        # Step 4: Parse SSE response
-        full_response = []
-        for line in chat_resp.text.splitlines():
-            if line.startswith("data: "):
-                payload = line[6:]
-                if payload == "[DONE]":
-                    break
-                try:
-                    chunk = _json.loads(payload)
-                    msg = chunk.get("message", "")
-                    if msg:
-                        full_response.append(msg)
-                except (ValueError, KeyError):
-                    continue
-
-    return "".join(full_response)
+    raise RuntimeError("DDG AI Chat unavailable — JS challenge required")
 
 
 def _extractive_research(question, results):
@@ -1222,62 +1312,12 @@ def api_ai_summary():
 # Fallback infrastructure — every query MUST return results
 # ---------------------------------------------------------------------------
 
-SEARXNG_INSTANCES = [
-    "https://search.bus-hit.me",
-    "https://searx.be",
-    "https://searxng.site",
-    "https://search.sapti.me",
-    "https://searx.tiekoetter.com",
-    "https://search.ononoki.org",
-    "https://searx.oxf.me",
-    "https://search.mdosch.de",
-    "https://etsi.me",
-    "https://searx.namejeff.xyz",
-]
-
-
-def _get_searxng_instances():
-    """Get SearXNG instances, trying dynamic discovery first."""
-    now = time.time()
-    with _searxng_lock:
-        if _searxng_cache["instances"] and now < _searxng_cache["expires"]:
-            return _searxng_cache["instances"]
-
-    # Try dynamic discovery
-    try:
-        resp = _get_http().get(
-            "https://searx.space/data/instances.json", timeout=5.0
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        instances = []
-        for url, info in data.get("instances", {}).items():
-            http_info = info.get("http", {})
-            if (
-                info.get("network_type") == "normal"
-                and http_info.get("status_code") == 200
-            ):
-                clean_url = url.rstrip("/")
-                if clean_url.startswith("http"):
-                    instances.append(clean_url)
-        if instances:
-            with _searxng_lock:
-                _searxng_cache["instances"] = instances[:20]
-                _searxng_cache["expires"] = now + 3600  # 1 hour
-            logger.info("Discovered %d SearXNG instances", len(instances[:20]))
-            return instances[:20]
-    except Exception:
-        logger.warning("SearXNG discovery failed, using hardcoded list")
-
-    return SEARXNG_INSTANCES
-
-
 # ---- Layer 1: DDG multi-backend ----
 
-def _try_ddg(query, max_results, search_type, region=None):
-    """Primary: ddgs library with all backends enabled, safesearch off."""
+def _try_ddg(query, max_results, search_type, region=None, time_filter=None, safesearch="off"):
+    """Primary: ddgs library with all backends enabled."""
     ddg = DDGS()
-    kwargs = {"safesearch": "off"}
+    kwargs = {"safesearch": safesearch or "off"}
     if region:
         kwargs["region"] = region
 
@@ -1294,6 +1334,8 @@ def _try_ddg(query, max_results, search_type, region=None):
             for r in raw
         ]
     elif search_type == "news":
+        if time_filter and time_filter in {"d", "w", "m", "y"}:
+            kwargs["timelimit"] = time_filter
         raw = list(ddg.news(query, max_results=max_results, **kwargs))
         return [
             {
@@ -1321,6 +1363,8 @@ def _try_ddg(query, max_results, search_type, region=None):
             for r in raw
         ]
     else:
+        if time_filter and time_filter in {"d", "w", "m", "y"}:
+            kwargs["timelimit"] = time_filter
         raw = list(ddg.text(
             query,
             max_results=max_results,
@@ -1336,100 +1380,7 @@ def _try_ddg(query, max_results, search_type, region=None):
         ]
 
 
-# ---- Layer 2: SearXNG (aggregates 70+ engines) ----
-
-def _map_searxng(raw, search_type):
-    """Map SearXNG result dicts to our internal format."""
-    if search_type == "images":
-        return [
-            {
-                "title": r.get("title", ""),
-                "url": r.get("url", r.get("img_src", "")),
-                "image": r.get("img_src", ""),
-                "thumbnail": r.get("thumbnail_src", r.get("img_src", "")),
-                "source": r.get("engine", ""),
-            }
-            for r in raw
-        ]
-    elif search_type == "news":
-        return [
-            {
-                "title": r.get("title", ""),
-                "url": r.get("url", ""),
-                "body": r.get("content", ""),
-                "source": r.get("engine", ""),
-                "date": r.get("publishedDate", ""),
-            }
-            for r in raw
-        ]
-    elif search_type == "videos":
-        return [
-            {
-                "title": r.get("title", ""),
-                "url": r.get("url", ""),
-                "description": r.get("content", ""),
-                "publisher": r.get("engine", ""),
-                "thumbnail": r.get("thumbnail", ""),
-                "duration": r.get("length", ""),
-            }
-            for r in raw
-        ]
-    else:
-        return [
-            {
-                "title": r.get("title", ""),
-                "url": r.get("url", ""),
-                "body": r.get("content", ""),
-            }
-            for r in raw
-        ]
-
-
-def _try_searxng(query, search_type, pages=1, lang=None):
-    """Try SearXNG instances (dynamic + hardcoded) with failover."""
-    category_map = {
-        "text": "general",
-        "images": "images",
-        "news": "news",
-        "videos": "videos",
-    }
-    category = category_map.get(search_type, "general")
-    instances = _get_searxng_instances()
-
-    for instance in instances:
-        all_results = []
-        try:
-            for pageno in range(1, pages + 1):
-                params = {
-                    "q": query,
-                    "format": "json",
-                    "categories": category,
-                    "safesearch": "0",
-                    "pageno": str(pageno),
-                }
-                if lang:
-                    params["language"] = lang
-                resp = _get_http().get(f"{instance}/search", params=params)
-                resp.raise_for_status()
-                data = resp.json()
-                raw = data.get("results", [])
-                if not raw:
-                    break
-                all_results.extend(_map_searxng(raw, search_type))
-
-            if all_results:
-                logger.info(
-                    "SearXNG fallback via %s: %d results", instance, len(all_results)
-                )
-                return all_results
-        except Exception:
-            logger.warning("SearXNG instance %s failed", instance, exc_info=True)
-            continue
-
-    return []
-
-
-# ---- Layer 3: Wikipedia / MediaWiki API (text only) ----
+# ---- Layer 2: Wikipedia / MediaWiki API (text only) ----
 
 def _try_wikipedia(query, lang=None):
     """Query Wikipedia's opensearch + extracts API."""
@@ -1528,15 +1479,22 @@ def _try_mojeek(query):
         resp = _get_http().get(
             "https://www.mojeek.com/search",
             params={"q": query},
-            headers={"User-Agent": "FreeSearch/1.0"},
+            headers={"User-Agent": "abbiey.search/1.0"},
         )
         resp.raise_for_status()
         html = resp.text
         links = re.findall(
-            r'<a[^>]+class="ob"[^>]+href="([^"]+)"[^>]*>(.*?)</a>',
+            r'<a[^>]*class="title"[^>]*href="([^"]+)"[^>]*>(.*?)</a>',
             html,
             re.DOTALL,
         )
+        if not links:
+            # Fallback: href before class
+            links = re.findall(
+                r'<a[^>]*href="([^"]+)"[^>]*class="title"[^>]*>(.*?)</a>',
+                html,
+                re.DOTALL,
+            )
         snippets = re.findall(r'<p class="s">(.*?)</p>', html, re.DOTALL)
         for i, (url, title) in enumerate(links):
             clean_title = re.sub(r"<[^>]+>", "", title).strip()
@@ -1639,7 +1597,7 @@ def _try_openverse(query):
         resp = _get_http().get(
             "https://api.openverse.org/v1/images/",
             params={"q": query, "page_size": 20},
-            headers={"User-Agent": "FreeSearch/1.0"},
+            headers={"User-Agent": "abbiey.search/1.0", "Accept": "application/json"},
         )
         resp.raise_for_status()
         data = resp.json()
@@ -1929,12 +1887,12 @@ def _try_onion_ddg(query, max_results=30):
 
 # ---- Orchestrator ----
 
-def _fetch_results(query, page, search_type, region=None, lang=None, operators=None):
+def _fetch_results(query, page, search_type, region=None, lang=None, operators=None, time_filter=None, safesearch="off"):
     """Fetch results with caching. Returns paginated slice."""
     operators = operators or {}
     # Include operators in cache key to prevent cross-contamination
     ops_str = "&".join(f"{k}={','.join(v)}" for k, v in sorted(operators.items())) if operators else ""
-    cache_key = f"{query}|{search_type}|{region or ''}|{lang or ''}|{ops_str}"
+    cache_key = f"{query}|{search_type}|{region or ''}|{lang or ''}|{ops_str}|{time_filter or ''}|{safesearch or 'off'}"
 
     # Check cache
     with _cache_lock:
@@ -1961,19 +1919,11 @@ def _fetch_results(query, page, search_type, region=None, lang=None, operators=N
     else:
         # Layer 1: DDG multi-backend
         try:
-            results = _try_ddg(effective_query, max_results, search_type, region)
+            results = _try_ddg(effective_query, max_results, search_type, region, time_filter=time_filter, safesearch=safesearch)
         except Exception:
             logger.exception("DDG failed for query=%s type=%s", query, search_type)
 
-        # Layer 2: SearXNG
-        if not results:
-            logger.info("DDG empty, trying SearXNG")
-            try:
-                results = _try_searxng(effective_query, search_type, pages=3, lang=lang)
-            except Exception:
-                logger.exception("SearXNG failed for query=%s", query)
-
-        # Image-specific fallbacks (layers 2b, 2c)
+        # Image-specific fallbacks
         if not results and search_type == "images":
             logger.info("Image search empty, trying Openverse")
             results = _try_openverse(query)

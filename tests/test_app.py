@@ -1,4 +1,4 @@
-"""Tests for FreeSearch app routes, caching, fallbacks, chat API, and feature cards."""
+"""Tests for abbiey.search app routes, caching, fallbacks, chat API, and feature cards."""
 
 import json
 from unittest.mock import patch, MagicMock
@@ -17,12 +17,12 @@ class TestRoutes:
     def test_index_returns_200(self, client):
         resp = client.get("/")
         assert resp.status_code == 200
-        assert b"FreeSearch" in resp.data
+        assert b"abbiey.search" in resp.data
 
     def test_search_empty_query_shows_index(self, client):
         resp = client.get("/search?q=")
         assert resp.status_code == 200
-        assert b"FreeSearch" in resp.data
+        assert b"abbiey.search" in resp.data
 
     def test_search_with_query(self, client, mock_ddg):
         resp = client.get("/search?q=python")
@@ -177,7 +177,6 @@ class TestFallbackChain:
 
     def test_all_engines_fail_returns_empty(self, client):
         with patch("app._try_ddg", side_effect=Exception("fail")), \
-             patch("app._try_searxng", return_value=[]), \
              patch("app._try_wikipedia", return_value=[]), \
              patch("app._try_wiby", return_value=[]), \
              patch("app._try_mojeek", return_value=[]), \

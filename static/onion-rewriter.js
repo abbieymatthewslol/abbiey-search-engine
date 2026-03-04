@@ -3,7 +3,7 @@
  *
  * Strategy (in preference order):
  *   1. Local Tor proxy at /api/onion-proxy?url=...  (if user has Tor running)
- *   2. Tor2web gateway (onion.ws) — clearnet gateway, no Tor install needed
+ *   2. Tor2web gateway (onion.ly) — clearnet gateway, no Tor install needed
  *   3. Raw .onion link (for users already in Tor Browser)
  *
  * The active mode is stored in localStorage and can be changed via the
@@ -19,16 +19,16 @@
   // ---------------------------------------------------------------------------
   // Config
   // ---------------------------------------------------------------------------
-  const GATEWAY_SUFFIX = ".onion.ws";          // Tor2web clearnet gateway
+  const GATEWAY_SUFFIX = ".onion.ly";          // Tor2web clearnet gateway
   const LOCAL_PROXY    = "/api/onion-proxy?url="; // Flask proxy route
 
   const MODES = {
-    gateway:  { label: "Tor2web Gateway", desc: "Open via onion.ws (no Tor needed)" },
+    gateway:  { label: "Tor2web Gateway", desc: "Open via onion.ly (no Tor needed)" },
     proxy:    { label: "Local Tor Proxy",  desc: "Route through local Tor (port 9050)" },
     raw:      { label: "Raw .onion",       desc: "Direct link (requires Tor Browser)" },
   };
 
-  let activeMode = localStorage.getItem("onion-mode") || "gateway";
+  let activeMode = localStorage.getItem("onion-mode") || "raw";
 
   // ---------------------------------------------------------------------------
   // Rewrite a single .onion URL based on current mode
@@ -42,7 +42,7 @@
 
       switch (activeMode) {
         case "gateway": {
-          // http://abc123.onion/path  =>  https://abc123.onion.ws/path
+          // http://abc123.onion/path  =>  https://abc123.onion.ly/path
           const gwHost = u.hostname + GATEWAY_SUFFIX.replace(".onion", "");
           return `https://${gwHost}${u.pathname}${u.search}${u.hash}`;
         }

@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% if query %}{{ query }} - FreeSearch{% else %}FreeSearch{% endif %}</title>
+    <title>{% if query %}{{ query }} - abbiey.search{% else %}abbiey.search{% endif %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔍</text></svg>">
 </head>
 <body class="{% if query %}has-results{% endif %}">
 
     <header>
-        <a href="/" class="logo">Free<span>Search</span></a>
+        <a href="/" class="logo">abbiey.<span>search</span></a>
         <div class="header-controls">
             {# Privacy badge #}
             <button class="privacy-badge" id="privacy-badge" aria-label="Privacy stats" title="Privacy stats">
@@ -53,25 +53,166 @@
         </div>
     </header>
 
-    {# ===== THEME SETTINGS POPOVER ===== #}
-    <div class="theme-popover" id="theme-popover">
-        <div class="theme-popover-header">
-            <span>Accent Color</span>
-            <button class="theme-popover-close" id="theme-popover-close">&times;</button>
-        </div>
-        <div class="theme-color-presets" id="color-presets">
-            <button class="color-swatch" data-color="#6ee7b7" style="background:#6ee7b7" title="Emerald (default)"></button>
-            <button class="color-swatch" data-color="#60a5fa" style="background:#60a5fa" title="Blue"></button>
-            <button class="color-swatch" data-color="#f472b6" style="background:#f472b6" title="Pink"></button>
-            <button class="color-swatch" data-color="#fb923c" style="background:#fb923c" title="Orange"></button>
-            <button class="color-swatch" data-color="#a78bfa" style="background:#a78bfa" title="Purple"></button>
-            <button class="color-swatch" data-color="#facc15" style="background:#facc15" title="Yellow"></button>
-            <button class="color-swatch" data-color="#f87171" style="background:#f87171" title="Red"></button>
-            <button class="color-swatch" data-color="#2dd4bf" style="background:#2dd4bf" title="Teal"></button>
-        </div>
-        <div class="theme-custom-row">
-            <label for="custom-color">Custom:</label>
-            <input type="color" id="custom-color" value="#6ee7b7">
+    {# ===== SETTINGS MODAL ===== #}
+    <div class="settings-overlay" id="settings-overlay" hidden>
+        <div class="settings-modal" id="settings-modal" role="dialog" aria-label="Settings">
+            <div class="settings-modal-header">
+                <h2 class="settings-modal-title">Settings</h2>
+                <button class="settings-modal-close" id="settings-close" aria-label="Close">&times;</button>
+            </div>
+            <div class="settings-modal-body">
+
+                {# ===== APPEARANCE ===== #}
+                <section class="settings-section">
+                    <h3 class="settings-section-title">Appearance</h3>
+                    <div class="settings-row">
+                        <span class="settings-row-label">Theme</span>
+                        <div class="settings-btn-group" id="theme-btn-group">
+                            <button class="settings-seg-btn" data-val="dark">Dark</button>
+                            <button class="settings-seg-btn" data-val="light">Light</button>
+                        </div>
+                    </div>
+                    <div class="settings-row">
+                        <span class="settings-row-label">Accent color</span>
+                        <div class="settings-accent-row">
+                            <div class="theme-color-presets" id="color-presets">
+                                <button class="color-swatch" data-color="#6ee7b7" style="background:#6ee7b7" title="Emerald"></button>
+                                <button class="color-swatch" data-color="#60a5fa" style="background:#60a5fa" title="Blue"></button>
+                                <button class="color-swatch" data-color="#f472b6" style="background:#f472b6" title="Pink"></button>
+                                <button class="color-swatch" data-color="#fb923c" style="background:#fb923c" title="Orange"></button>
+                                <button class="color-swatch" data-color="#a78bfa" style="background:#a78bfa" title="Purple"></button>
+                                <button class="color-swatch" data-color="#facc15" style="background:#facc15" title="Yellow"></button>
+                                <button class="color-swatch" data-color="#f87171" style="background:#f87171" title="Red"></button>
+                                <button class="color-swatch" data-color="#2dd4bf" style="background:#2dd4bf" title="Teal"></button>
+                            </div>
+                            <input type="color" id="custom-color" value="#6ee7b7" title="Custom color" class="settings-color-picker">
+                        </div>
+                    </div>
+                    <div class="settings-row">
+                        <span class="settings-row-label">Font size</span>
+                        <div class="settings-btn-group" id="font-size-group">
+                            <button class="settings-seg-btn" data-val="small">S</button>
+                            <button class="settings-seg-btn" data-val="medium">M</button>
+                            <button class="settings-seg-btn" data-val="large">L</button>
+                            <button class="settings-seg-btn" data-val="xl">XL</button>
+                        </div>
+                    </div>
+                    <div class="settings-row">
+                        <span class="settings-row-label">Font</span>
+                        <div class="settings-btn-group" id="font-family-group">
+                            <button class="settings-seg-btn" data-val="system">System</button>
+                            <button class="settings-seg-btn" data-val="serif">Serif</button>
+                            <button class="settings-seg-btn" data-val="mono">Mono</button>
+                        </div>
+                    </div>
+                    <div class="settings-row">
+                        <span class="settings-row-label">Density</span>
+                        <div class="settings-btn-group" id="density-group">
+                            <button class="settings-seg-btn" data-val="compact">Compact</button>
+                            <button class="settings-seg-btn" data-val="default">Default</button>
+                            <button class="settings-seg-btn" data-val="comfortable">Comfortable</button>
+                        </div>
+                    </div>
+                </section>
+
+                {# ===== SEARCH ===== #}
+                <section class="settings-section">
+                    <h3 class="settings-section-title">Search</h3>
+                    <div class="settings-row">
+                        <span class="settings-row-label">Safe search</span>
+                        <div class="settings-btn-group" id="safesearch-group">
+                            <button class="settings-seg-btn" data-val="off">Off</button>
+                            <button class="settings-seg-btn" data-val="moderate">Moderate</button>
+                            <button class="settings-seg-btn" data-val="strict">Strict</button>
+                        </div>
+                    </div>
+                    <div class="settings-row">
+                        <span class="settings-row-label">Default tab</span>
+                        <div class="settings-btn-group" id="default-tab-group">
+                            <button class="settings-seg-btn" data-val="text">All</button>
+                            <button class="settings-seg-btn" data-val="images">Images</button>
+                            <button class="settings-seg-btn" data-val="news">News</button>
+                            <button class="settings-seg-btn" data-val="videos">Videos</button>
+                            <button class="settings-seg-btn" data-val="code">Code</button>
+                        </div>
+                    </div>
+                    <div class="settings-row">
+                        <span class="settings-row-label">Open results</span>
+                        <div class="settings-btn-group" id="newtab-group">
+                            <button class="settings-seg-btn" data-val="true">New tab</button>
+                            <button class="settings-seg-btn" data-val="false">Same tab</button>
+                        </div>
+                    </div>
+                    <div class="settings-row">
+                        <span class="settings-row-label">AI Summary</span>
+                        <label class="settings-toggle">
+                            <input type="checkbox" id="ai-summary-toggle" checked>
+                            <span class="settings-toggle-track"></span>
+                        </label>
+                    </div>
+                    <div class="settings-row">
+                        <span class="settings-row-label">Autocomplete</span>
+                        <label class="settings-toggle">
+                            <input type="checkbox" id="autocomplete-toggle" checked>
+                            <span class="settings-toggle-track"></span>
+                        </label>
+                    </div>
+                    <div class="settings-row">
+                        <span class="settings-row-label">Remember region</span>
+                        <label class="settings-toggle">
+                            <input type="checkbox" id="persist-region-toggle">
+                            <span class="settings-toggle-track"></span>
+                        </label>
+                    </div>
+                </section>
+
+                {# ===== LAYOUT ===== #}
+                <section class="settings-section">
+                    <h3 class="settings-section-title">Layout</h3>
+                    <div class="settings-row">
+                        <span class="settings-row-label">Answer cards</span>
+                        <label class="settings-toggle">
+                            <input type="checkbox" id="cards-toggle" checked>
+                            <span class="settings-toggle-track"></span>
+                        </label>
+                    </div>
+                    <div class="settings-row">
+                        <span class="settings-row-label">Favicons</span>
+                        <label class="settings-toggle">
+                            <input type="checkbox" id="favicons-toggle" checked>
+                            <span class="settings-toggle-track"></span>
+                        </label>
+                    </div>
+                    <div class="settings-row">
+                        <span class="settings-row-label">Result dates</span>
+                        <label class="settings-toggle">
+                            <input type="checkbox" id="dates-toggle" checked>
+                            <span class="settings-toggle-track"></span>
+                        </label>
+                    </div>
+                </section>
+
+                {# ===== PRIVACY ===== #}
+                <section class="settings-section">
+                    <h3 class="settings-section-title">Privacy</h3>
+                    <div class="settings-row">
+                        <span class="settings-row-label">Search history</span>
+                        <label class="settings-toggle">
+                            <input type="checkbox" id="history-toggle" checked>
+                            <span class="settings-toggle-track"></span>
+                        </label>
+                    </div>
+                    <div class="settings-row">
+                        <span class="settings-row-label">Clear search history</span>
+                        <button class="settings-danger-btn" id="clear-history-btn">Clear</button>
+                    </div>
+                    <div class="settings-row">
+                        <span class="settings-row-label">Reset all settings &amp; data</span>
+                        <button class="settings-danger-btn" id="clear-all-btn">Reset everything</button>
+                    </div>
+                </section>
+
+            </div>
         </div>
     </div>
 
@@ -105,9 +246,6 @@
     <div class="app-layout {% if query %}has-chat{% endif %}">
     <main>
         <div class="search-container">
-            {% if not query %}
-            {% endif %}
-
             <form action="/search" method="GET" id="search-form">
                 <div class="search-box-wrapper">
                     <div class="search-box">
@@ -120,6 +258,8 @@
                 <input type="hidden" name="type" id="search-type-input" value="{{ search_type or 'text' }}">
                 <input type="hidden" name="region" id="region-input" value="{{ region or '' }}">
                 <input type="hidden" name="lang" id="lang-input" value="{{ lang or '' }}">
+                <input type="hidden" name="df" id="df-input" value="{{ time_filter or '' }}">
+                <input type="hidden" name="safesearch" id="safesearch-input" value="off">
             </form>
 
             {% if query %}
@@ -144,17 +284,17 @@
                 <a href="/search?q={{ query|urlencode }}&type=videos{% if region %}&region={{ region }}{% endif %}" class="tab {% if search_type == 'videos' %}active{% endif %}">Videos</a>
                 <a href="/search?q={{ query|urlencode }}&type=code{% if region %}&region={{ region }}{% endif %}" class="tab {% if search_type == 'code' %}active{% endif %}">Code</a>
                 <a href="/search?q={{ query|urlencode }}&type=onion{% if region %}&region={{ region }}{% endif %}" class="tab {% if search_type == 'onion' %}active{% endif %}">Deep Web</a>
+                <a href="/search?q={{ query|urlencode }}&type=saved" class="tab {% if search_type == 'saved' %}active{% endif %}">Saved <span class="bookmark-count-badge" id="bookmark-count-badge"></span></a>
             </nav>
 
             {# ===== QUICK FILTERS BAR ===== #}
             <div class="filter-bar" id="filter-bar">
                 <select class="filter-select" id="filter-time" aria-label="Time filter">
                     <option value="">Any time</option>
-                    <option value="1h">Past hour</option>
-                    <option value="24h">Past 24h</option>
-                    <option value="7d">Past week</option>
-                    <option value="30d">Past month</option>
-                    <option value="365d">Past year</option>
+                    <option value="d" {% if time_filter == 'd' %}selected{% endif %}>Past 24h</option>
+                    <option value="w" {% if time_filter == 'w' %}selected{% endif %}>Past week</option>
+                    <option value="m" {% if time_filter == 'm' %}selected{% endif %}>Past month</option>
+                    <option value="y" {% if time_filter == 'y' %}selected{% endif %}>Past year</option>
                 </select>
                 <div class="filter-pills" id="filter-pills">
                     <button class="filter-pill{% if operators and 'filetype' in operators and 'pdf' in operators.filetype %} active{% endif %}" data-ft="pdf">PDF</button>
@@ -305,6 +445,19 @@
                 </div>
                 {% endfor %}
             </div>
+        </div>
+        {% endif %}
+
+        {# ===== QR CODE CARD ===== #}
+        {% if qr %}
+        <div class="qr-card">
+            <div class="qr-card-label">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="3" height="3"/><rect x="18" y="14" width="3" height="3"/><rect x="14" y="18" width="3" height="3"/><rect x="18" y="18" width="3" height="3"/></svg>
+                <span>QR Code</span>
+            </div>
+            <img class="qr-image" src="{{ qr.image_url }}" alt="QR code for {{ qr.data }}" loading="lazy">
+            <div class="qr-data">{{ qr.data }}</div>
+            <a class="qr-download-btn" href="{{ qr.image_url }}&download=1" download="qr-code.png">Download PNG</a>
         </div>
         {% endif %}
 
@@ -490,7 +643,11 @@
 
         {# ===== MAIN RESULTS ===== #}
         <div id="results" class="results-container" data-type="{{ search_type }}">
-            {% if results %}
+            {% if search_type == 'saved' %}
+                <div id="saved-results-container">
+                    <noscript><p class="no-results">Saved bookmarks require JavaScript.</p></noscript>
+                </div>
+            {% elif results %}
                 {% for r in results %}
                     {% if search_type == 'images' %}
                     <div class="image-card" data-full="{{ r.image or r.thumbnail }}" data-title="{{ r.title }}" data-source="{{ r.source or '' }}" data-url="{{ r.url }}">
@@ -544,6 +701,9 @@
                     </article>
                     {% else %}
                     <article class="result" data-url="{{ r.url }}">
+                        <button class="bookmark-btn" data-url="{{ r.url }}" data-title="{{ r.title|e }}" data-snippet="{{ r.body|e }}" aria-label="Save result" title="Save">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>
+                        </button>
                         <a href="{{ r.url }}" target="_blank" rel="noopener" class="result-title">{{ r.title }}</a>
                         <img class="result-favicon" src="https://icons.duckduckgo.com/ip3/{{ r.url|domain }}/favicon.ico" onerror="this.style.display='none'" alt="" loading="lazy"><cite class="result-url">{{ r.url }}</cite>
                         <p class="result-snippet">{{ r.body }}</p>
@@ -654,7 +814,7 @@
     </div>
 
     <footer>
-        <p>FreeSearch &mdash; No tracking. No profiling. No judgment.</p>
+        <p>abbiey.search &mdash; No tracking. No profiling. No judgment.</p>
         <p class="footer-sub">We don't log your searches. Your data stays yours.</p>
     </footer>
 
@@ -662,6 +822,40 @@
     <script>
         window.__searchQuery = {{ query|tojson }};
         window.__searchType = {{ search_type|tojson }};
+        {% if paywall %}window.__paywall = true;{% endif %}
+    </script>
+    {% endif %}
+
+    {# ===== PAYWALL OVERLAY ===== #}
+    {% if paywall %}
+    <div class="paywall-overlay" id="paywall-overlay">
+        <div class="paywall-card">
+            <div class="paywall-icon">&#128275;</div>
+            <div class="paywall-title">You've used your free searches</div>
+            <div class="paywall-desc">Unlock unlimited searches with a one-time payment. No subscriptions, no tracking — just results.</div>
+            <div class="paywall-price">$10</div>
+            <div class="paywall-price-sub">one-time payment &middot; unlimited forever</div>
+            <ul class="paywall-features">
+                <li>Unlimited searches across all tabs</li>
+                <li>AI summaries &amp; research assistant</li>
+                <li>Deep web &amp; entity intelligence</li>
+                <li>Zero tracking, always</li>
+            </ul>
+            <a href="https://buy.stripe.com/4gM9AS0ZK9gw3aK2Szb7y08" class="paywall-btn">Unlock Unlimited Searches</a>
+        </div>
+    </div>
+    {% endif %}
+
+    {# ===== PAYMENT SUCCESS TOAST ===== #}
+    {% if payment_success %}
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            const toast = document.createElement("div");
+            toast.style.cssText = "position:fixed;top:1.5rem;left:50%;transform:translateX(-50%);background:var(--accent,#6ee7b7);color:#0a0a0a;padding:.75rem 1.5rem;border-radius:8px;font-weight:700;z-index:10000;animation:paywall-fade-in .3s ease";
+            toast.textContent = "Payment successful! Unlimited searches unlocked.";
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 5000);
+        });
     </script>
     {% endif %}
     {% if query and search_type == 'code' %}

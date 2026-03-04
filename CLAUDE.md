@@ -1,4 +1,4 @@
-# FreeSearch
+# abbiey.search
 
 Privacy-respecting search engine with no tracking, filtering, or logs.
 

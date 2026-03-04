@@ -43,7 +43,7 @@ _IPV4_RE = re.compile(
 )
 _USERNAME_RE = re.compile(r"(?:^|\s)@([A-Za-z0-9_.]{2,30})\b")
 _NAME_RE = re.compile(r"\b([A-Z][a-z]{1,20}(?:\s+[A-Z][a-z]{1,20}){1,3})\b")
-_PHONE_DIGITS_RE = re.compile(r"[\d\s\-().+]{7,20}")
+_PHONE_DIGITS_RE = re.compile(r"[\d\s\-()+]{7,20}")
 
 # Crypto wallet patterns
 _BTC_LEGACY_RE = re.compile(r"\b[13][a-km-zA-HJ-NP-Z1-9]{24,33}\b")
@@ -115,10 +115,10 @@ def detect_entities(query: str) -> List[Entity]:
     q = query.strip()
 
     # 0. Weather queries (high priority — return early)
-    wm = _WEATHER_RE.match(q)
+    wm = _WEATHER_RE.search(q)
     if wm:
         location = wm.group(1).strip()
-        if location:
+        if location and location.lower() not in ("in", "for"):
             entities.append(Entity(
                 type="weather",
                 value=q,
@@ -134,6 +134,12 @@ def detect_entities(query: str) -> List[Entity]:
         # Skip if this looks like an IP address
         if _IPV4_RE.search(raw):
             continue
+        # Skip phone detection if the query is geographic coordinates
+        coord_m = _COORDS_RE.search(q)
+        if coord_m and "." in q:
+            lat, lon = float(coord_m.group(1)), float(coord_m.group(2))
+            if -90 <= lat <= 90 and -180 <= lon <= 180:
+                continue
         # Skip if embedded inside a hex/crypto-looking string
         start, end = match.start(), match.end()
         if start > 0 and re.match(r'[0-9a-fA-Fx]', q[start - 1]):
