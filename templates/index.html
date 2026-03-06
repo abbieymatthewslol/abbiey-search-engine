@@ -50,10 +50,18 @@
                 <svg class="icon-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
                 <svg class="icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
             </button>
+
+            {# User account nav #}
+            {% if current_user %}
+            <a href="/profile" class="user-avatar-chip" title="Your profile" aria-label="Profile">
+                <span class="user-avatar-initials">{{ (current_user.display_name or current_user.username)[0] | upper }}</span>
+                <span class="user-avatar-name">{{ current_user.display_name or current_user.username }}</span>
+            </a>
+            {% else %}
+            <a href="/login" class="header-auth-btn" aria-label="Sign in">Sign in</a>
+            {% endif %}
         </div>
     </header>
-
-    {# ===== SETTINGS MODAL ===== #}
     <div class="settings-overlay" id="settings-overlay" hidden>
         <div class="settings-modal" id="settings-modal" role="dialog" aria-label="Settings">
             <div class="settings-modal-header">
@@ -222,17 +230,17 @@
             <span>Your Privacy</span>
             <button class="privacy-popover-close" id="privacy-popover-close">&times;</button>
         </div>
-        <div class="privacy-stats">
+        <div class="privacy-stats" id="privacy-stats">
             <div class="privacy-stat">
-                <span class="privacy-stat-number">0</span>
-                <span class="privacy-stat-label">cookies set</span>
-            </div>
-            <div class="privacy-stat">
-                <span class="privacy-stat-number">0</span>
+                <span class="privacy-stat-number" id="pstat-trackers">0</span>
                 <span class="privacy-stat-label">searches logged</span>
             </div>
             <div class="privacy-stat">
-                <span class="privacy-stat-number">0</span>
+                <span class="privacy-stat-number" id="pstat-personal">0</span>
+                <span class="privacy-stat-label">cookies set</span>
+            </div>
+            <div class="privacy-stat">
+                <span class="privacy-stat-number" id="pstat-shared">0</span>
                 <span class="privacy-stat-label">data shared</span>
             </div>
         </div>
@@ -251,6 +259,10 @@
                     <div class="search-box">
                         <svg class="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
                         <input type="text" name="q" id="search-input" value="{{ query or '' }}" placeholder="Search anything — names, numbers, emails, usernames..." autocomplete="off" autofocus>
+                        <button type="button" class="voice-btn" id="voice-btn" aria-label="Search by voice" title="Voice search">
+                            <svg class="voice-icon-mic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2M12 19v4M8 23h8"/></svg>
+                            <svg class="voice-icon-stop" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="display:none"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+                        </button>
                         <button type="submit" class="search-btn">Search</button>
                     </div>
                     <div class="ac-dropdown" id="ac-dropdown"></div>
@@ -260,7 +272,13 @@
                 <input type="hidden" name="lang" id="lang-input" value="{{ lang or '' }}">
                 <input type="hidden" name="df" id="df-input" value="{{ time_filter or '' }}">
                 <input type="hidden" name="safesearch" id="safesearch-input" value="off">
+                <p class="bang-hint" aria-hidden="true">Try bangs: <span>!w</span> Wikipedia &middot; <span>!yt</span> YouTube &middot; <span>!gh</span> GitHub &middot; <span>!so</span> StackOverflow</p>
             </form>
+
+            {% if not query %}
+            {# ===== TRENDING (homepage only) ===== #}
+            <div id="trending-home" class="trending-home"></div>
+            {% endif %}
 
             {% if query %}
             {# Active operator chips #}
@@ -304,7 +322,40 @@
                     <button class="filter-pill{% if operators and 'filetype' in operators and 'csv' in operators.filetype %} active{% endif %}" data-ft="csv">CSV</button>
                 </div>
                 <input type="text" class="filter-site-input" id="filter-site" placeholder="site:" value="{% if operators and 'site' in operators %}{{ operators.site[0] }}{% endif %}" aria-label="Filter by site">
+                {# ===== VIEW MODE SWITCHER ===== #}
+                <div class="view-mode-switcher" id="view-mode-switcher" role="group" aria-label="View mode">
+                    <button class="view-mode-btn active" data-view="list" title="List view" aria-label="List view">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+                    </button>
+                    <button class="view-mode-btn" data-view="grid" title="Grid view" aria-label="Grid view">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+                    </button>
+                    <button class="view-mode-btn" data-view="compact" title="Compact view" aria-label="Compact view">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 10h18M3 14h18M3 18h18"/></svg>
+                    </button>
+                </div>
             </div>
+
+            {# ===== QUERY EXPANSION NOTICE ===== #}
+            {% if expansion_terms %}
+            <div class="expansion-notice" id="expansion-notice">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                Also searching for:
+                {% for term in expansion_terms %}
+                <span class="expansion-term">{{ term }}</span>{% if not loop.last %},{% endif %}
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            {# ===== IN-RESULTS FILTER BAR ===== #}
+            {% if results and search_type not in ('images', 'saved') %}
+            <div class="results-filter-bar" id="results-filter-bar">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                <input type="text" id="results-filter-input" class="results-filter-input" placeholder="Filter these results…" autocomplete="off" aria-label="Filter results">
+                <span class="results-filter-count" id="results-filter-count"></span>
+                <button class="results-filter-clear" id="results-filter-clear" aria-label="Clear filter" style="display:none">&times;</button>
+            </div>
+            {% endif %}
             {% endif %}
         </div>
 
@@ -700,24 +751,39 @@
                         <p class="result-snippet">{{ r.body }}</p>
                     </article>
                     {% else %}
-                    <article class="result" data-url="{{ r.url }}">
+                    <article class="result" data-url="{{ r.url }}" data-source-type="{{ r.source_type or '' }}">
                         <button class="bookmark-btn" data-url="{{ r.url }}" data-title="{{ r.title|e }}" data-snippet="{{ r.body|e }}" aria-label="Save result" title="Save">
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>
                         </button>
+                        <div class="result-domain-row">
+                            <img class="result-favicon" src="https://icons.duckduckgo.com/ip3/{{ r.url|domain }}/favicon.ico" onerror="this.style.display='none'" alt="" loading="lazy">
+                            <span class="result-domain">{{ r.url|domain }}</span>
+                            {% if r.source_type %}<span class="source-type-badge source-type-{{ r.source_type }}">{{ r.source_type }}</span>{% endif %}
+                            {% if r.source %}<span class="result-source-label">{{ r.source }}</span>{% endif %}
+                        </div>
                         <a href="{{ r.url }}" target="_blank" rel="noopener" class="result-title">{{ r.title }}</a>
-                        <img class="result-favicon" src="https://icons.duckduckgo.com/ip3/{{ r.url|domain }}/favicon.ico" onerror="this.style.display='none'" alt="" loading="lazy"><cite class="result-url">{{ r.url }}</cite>
                         <p class="result-snippet">{{ r.body }}</p>
                         {% if r.date %}<time class="result-date">{{ r.date }}</time>{% endif %}
                     </article>
                     {% endif %}
                 {% endfor %}
             {% else %}
+                {% if search_type == 'onion' %}
+                <div class="no-results-deep">
+                    <p class="no-results">Deep web search returned no results.</p>
+                    <p class="no-results-hint">Ahmia.fi may be temporarily unreachable, or no .onion sites matched your query. Try broader keywords or check back shortly.</p>
+                </div>
+                {% else %}
                 <p class="no-results">No results found. Try different keywords.</p>
+                {% endif %}
             {% endif %}
         </div>
 
         {# ===== RELATED SEARCHES ===== #}
         <div id="related-searches" class="related-searches"></div>
+
+        {# ===== TRENDING SEARCHES ===== #}
+        <div id="trending-searches" class="trending-searches" style="display:none"></div>
 
         {% if has_more %}
         <div id="scroll-sentinel" data-page="1" data-query="{{ query }}" data-type="{{ search_type }}" data-has-more="true">
@@ -822,28 +888,7 @@
     <script>
         window.__searchQuery = {{ query|tojson }};
         window.__searchType = {{ search_type|tojson }};
-        {% if paywall %}window.__paywall = true;{% endif %}
     </script>
-    {% endif %}
-
-    {# ===== PAYWALL OVERLAY ===== #}
-    {% if paywall %}
-    <div class="paywall-overlay" id="paywall-overlay">
-        <div class="paywall-card">
-            <div class="paywall-icon">&#128275;</div>
-            <div class="paywall-title">You've used your free searches</div>
-            <div class="paywall-desc">Unlock unlimited searches with a one-time payment. No subscriptions, no tracking — just results.</div>
-            <div class="paywall-price">$10</div>
-            <div class="paywall-price-sub">one-time payment &middot; unlimited forever</div>
-            <ul class="paywall-features">
-                <li>Unlimited searches across all tabs</li>
-                <li>AI summaries &amp; research assistant</li>
-                <li>Deep web &amp; entity intelligence</li>
-                <li>Zero tracking, always</li>
-            </ul>
-            <a href="https://buy.stripe.com/4gM9AS0ZK9gw3aK2Szb7y08" class="paywall-btn">Unlock Unlimited Searches</a>
-        </div>
-    </div>
     {% endif %}
 
     {# ===== PAYMENT SUCCESS TOAST ===== #}

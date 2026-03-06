@@ -1,3 +1,14 @@
+// Sync paid access token from localStorage to cookie so server can validate it
+// across restarts without requiring re-payment.
+(function syncAccessCookie() {
+  try {
+    const token = localStorage.getItem("abbiey_access_token");
+    if (token && token.length === 32) {
+      document.cookie = "abbiey_token=" + token + ";path=/;max-age=" + (365 * 24 * 3600) + ";SameSite=Lax";
+    }
+  } catch (e) {}
+})();
+
 document.addEventListener("DOMContentLoaded", () => {
   const html = document.documentElement;
 
@@ -176,7 +187,14 @@ document.addEventListener("DOMContentLoaded", () => {
     settingsOverlay.removeAttribute("hidden");
     syncSettingsUI();
   }
-  function closeSettings() { settingsOverlay.setAttribute("hidden", ""); }
+  function closeSettings() {
+    if (!settingsOverlay || settingsOverlay.hasAttribute("hidden")) return;
+    settingsOverlay.classList.add("closing");
+    setTimeout(() => {
+      settingsOverlay.setAttribute("hidden", "");
+      settingsOverlay.classList.remove("closing");
+    }, 140);
+  }
 
   if (settingsBtn) settingsBtn.addEventListener("click", (e) => { e.stopPropagation(); openSettings(); });
   if (settingsClose) settingsClose.addEventListener("click", closeSettings);
@@ -363,9 +381,24 @@ document.addEventListener("DOMContentLoaded", () => {
   const privacyPopover = document.getElementById("privacy-popover");
   const privacyPopoverClose = document.getElementById("privacy-popover-close");
   if (privacyBadge && privacyPopover) {
+    let privacyStatsFetched = false;
     privacyBadge.addEventListener("click", (e) => {
       e.stopPropagation();
       privacyPopover.classList.toggle("open");
+      if (!privacyStatsFetched && privacyPopover.classList.contains("open")) {
+        privacyStatsFetched = true;
+        fetch("/api/privacy-stats")
+          .then(r => r.json())
+          .then(data => {
+            const t = document.getElementById("pstat-trackers");
+            const p = document.getElementById("pstat-personal");
+            const s = document.getElementById("pstat-shared");
+            if (t) t.textContent = data.trackers ?? 0;
+            if (p) p.textContent = data.personal_data ?? 0;
+            if (s) s.textContent = data.third_party_shared ?? 0;
+          })
+          .catch(() => { /* keep default 0s on error */ });
+      }
     });
     if (privacyPopoverClose) {
       privacyPopoverClose.addEventListener("click", () => {
@@ -382,6 +415,10 @@ document.addEventListener("DOMContentLoaded", () => {
     fetch(`/api/ai-summary?q=${encodeURIComponent(window.__searchQuery)}`)
       .then(r => r.json())
       .then(data => {
+        if (data.error === "rate_limited") {
+          aiBody.innerHTML = `<div class="ai-summary-text ai-unavailable">AI summary temporarily unavailable &mdash; too many requests. Results shown below.</div>`;
+          return;
+        }
         if (data.error) { aiCard.classList.add("ai-hidden"); return; }
         // Render summary with clickable citations
         let summary = esc(data.summary);
@@ -415,18 +452,25 @@ document.addEventListener("DOMContentLoaded", () => {
   const acDropdown = document.getElementById("ac-dropdown");
   if (searchInput && acDropdown) {
     const bangList = [
-      {bang: "!w", label: "Wikipedia", desc: "Search Wikipedia"},
-      {bang: "!yt", label: "YouTube", desc: "Search YouTube"},
-      {bang: "!gh", label: "GitHub", desc: "Search GitHub"},
-      {bang: "!so", label: "StackOverflow", desc: "Search StackOverflow"},
-      {bang: "!r", label: "Reddit", desc: "Search Reddit"},
-      {bang: "!a", label: "Amazon", desc: "Search Amazon"},
-      {bang: "!g", label: "Google", desc: "Search Google"},
-      {bang: "!tw", label: "X / Twitter", desc: "Search X"},
-      {bang: "!npm", label: "npm", desc: "Search npm"},
-      {bang: "!pypi", label: "PyPI", desc: "Search PyPI"},
-      {bang: "!mdn", label: "MDN", desc: "Search MDN"},
-      {bang: "!maps", label: "Maps", desc: "Search OpenStreetMap"},
+      {bang: "!w",    label: "Wikipedia",    desc: "Search Wikipedia"},
+      {bang: "!wiki", label: "Wikipedia",    desc: "Search Wikipedia"},
+      {bang: "!yt",   label: "YouTube",      desc: "Search YouTube"},
+      {bang: "!gh",   label: "GitHub",       desc: "Search GitHub"},
+      {bang: "!so",   label: "StackOverflow",desc: "Search StackOverflow"},
+      {bang: "!r",    label: "Reddit",       desc: "Search Reddit"},
+      {bang: "!a",    label: "Amazon",       desc: "Search Amazon"},
+      {bang: "!g",    label: "Google",       desc: "Search Google"},
+      {bang: "!tw",   label: "X / Twitter",  desc: "Search X"},
+      {bang: "!npm",  label: "npm",          desc: "Search npm"},
+      {bang: "!pypi", label: "PyPI",         desc: "Search PyPI"},
+      {bang: "!mdn",  label: "MDN",          desc: "Search MDN"},
+      {bang: "!maps", label: "Maps",         desc: "Search OpenStreetMap"},
+      {bang: "!ddg",  label: "DuckDuckGo",   desc: "Search DuckDuckGo"},
+      {bang: "!sp",   label: "Spotify",      desc: "Search Spotify"},
+      {bang: "!img",  label: "Google Images",desc: "Search Google Images"},
+      {bang: "!hn",   label: "Hacker News",  desc: "Search Hacker News"},
+      {bang: "!wb",   label: "Wayback Machine", desc: "Search Internet Archive"},
+      {bang: "!x",    label: "X / Twitter",  desc: "Search X"},
     ];
     searchInput.addEventListener("input", () => {
       const val = searchInput.value;
@@ -653,7 +697,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // ===== Infinite scroll (IntersectionObserver) =====
   const sentinel = document.getElementById("scroll-sentinel");
-  if (sentinel && !window.__paywall) {
+  if (sentinel) {
   let loading = false;
   let hasMore = sentinel.dataset.hasMore === "true";
   const container = document.getElementById("results");
@@ -1307,6 +1351,235 @@ document.addEventListener("DOMContentLoaded", () => {
       })
       .catch(() => {});
   }
+
+  // ===== Trending Searches =====
+  (function initTrending() {
+    function renderTrending(container, items, compact) {
+      if (!items.length) return;
+      const pills = items.map((t, i) =>
+        `<a class="trending-pill" href="/search?q=${encodeURIComponent(t.query)}&type=text" style="animation-delay:${i * 0.04}s">
+          ${esc(t.query)}${!compact ? `<span class="trending-count">${t.count}</span>` : ""}
+        </a>`
+      ).join("");
+      container.innerHTML =
+        `<div class="trending-header">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+          Trending now
+        </div>
+        <div class="trending-pills">${pills}</div>`;
+      container.style.display = "";
+    }
+
+    // Homepage trending
+    const homeEl = document.getElementById("trending-home");
+    // Results page trending (shown after related searches)
+    const resultsEl = document.getElementById("trending-searches");
+
+    if (homeEl || resultsEl) {
+      fetch("/api/trends")
+        .then(r => r.json())
+        .then(items => {
+          if (!Array.isArray(items) || !items.length) return;
+          if (homeEl) renderTrending(homeEl, items.slice(0, 8), false);
+          if (resultsEl) renderTrending(resultsEl, items.slice(0, 6), true);
+        })
+        .catch(() => {});
+    }
+  })();
+
+  // ===== Feature 1: Voice Search =====
+  (function initVoiceSearch() {
+    const voiceBtn = document.getElementById("voice-btn");
+    if (!voiceBtn) return;
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      voiceBtn.style.display = "none";
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.lang = navigator.language || "en-US";
+
+    const micIcon  = voiceBtn.querySelector(".voice-icon-mic");
+    const stopIcon = voiceBtn.querySelector(".voice-icon-stop");
+    const input    = document.getElementById("search-input");
+    let listening  = false;
+
+    function startListening() {
+      listening = true;
+      voiceBtn.classList.add("listening");
+      micIcon.style.display  = "none";
+      stopIcon.style.display = "";
+      voiceBtn.setAttribute("aria-label", "Stop listening");
+      recognition.start();
+    }
+
+    function stopListening() {
+      listening = false;
+      voiceBtn.classList.remove("listening");
+      micIcon.style.display  = "";
+      stopIcon.style.display = "none";
+      voiceBtn.setAttribute("aria-label", "Voice search");
+      recognition.stop();
+    }
+
+    voiceBtn.addEventListener("click", () => {
+      if (listening) stopListening();
+      else startListening();
+    });
+
+    recognition.addEventListener("result", (e) => {
+      const transcript = Array.from(e.results)
+        .map(r => r[0].transcript)
+        .join("");
+      input.value = transcript;
+      // Auto-submit on final result
+      if (e.results[e.results.length - 1].isFinal) {
+        stopListening();
+        if (transcript.trim()) document.getElementById("search-form").submit();
+      }
+    });
+
+    recognition.addEventListener("end",   () => { if (listening) stopListening(); });
+    recognition.addEventListener("error", () => stopListening());
+  })();
+
+  // ===== Feature 2: In-Results Filter =====
+  (function initResultsFilter() {
+    const filterInput = document.getElementById("results-filter-input");
+    const filterCount = document.getElementById("results-filter-count");
+    const filterClear = document.getElementById("results-filter-clear");
+    if (!filterInput) return;
+
+    const container = document.getElementById("results");
+    if (!container) return;
+
+    function getResults() {
+      return Array.from(container.querySelectorAll(".result:not(.result-compact)"));
+    }
+
+    function highlight(el, term) {
+      // Highlight in title and snippet only
+      [".result-title", ".result-snippet"].forEach(sel => {
+        const node = el.querySelector(sel);
+        if (!node) return;
+        // Strip old highlights first
+        node.innerHTML = node.innerHTML.replace(/<mark class="result-filter-highlight">([^<]*)<\/mark>/gi, "$1");
+        if (!term) return;
+        const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        node.innerHTML = node.innerHTML.replace(
+          new RegExp(`(${escaped})`, "gi"),
+          '<mark class="result-filter-highlight">$1</mark>'
+        );
+      });
+    }
+
+    function applyFilter(term) {
+      const results = getResults();
+      const q = term.trim().toLowerCase();
+      let visible = 0;
+
+      results.forEach(r => {
+        const text = (r.textContent || "").toLowerCase();
+        const match = !q || text.includes(q);
+        r.classList.toggle("filter-hidden", !match);
+        if (match) {
+          visible++;
+          highlight(r, q ? term.trim() : "");
+        }
+      });
+
+      if (q) {
+        filterCount.textContent = `${visible} of ${results.length}`;
+        filterClear.style.display = "";
+      } else {
+        filterCount.textContent = "";
+        filterClear.style.display = "none";
+      }
+    }
+
+    filterInput.addEventListener("input", () => applyFilter(filterInput.value));
+    filterClear.addEventListener("click", () => {
+      filterInput.value = "";
+      applyFilter("");
+      filterInput.focus();
+    });
+  })();
+
+  // ===== Feature 3: View Mode Switcher =====
+  (function initViewMode() {
+    const switcher  = document.getElementById("view-mode-switcher");
+    const container = document.getElementById("results");
+    if (!switcher || !container) return;
+
+    const STORAGE_KEY = "abbiey_view_mode";
+    const saved = localStorage.getItem(STORAGE_KEY) || "list";
+
+    function setView(mode) {
+      // Update container attribute
+      container.removeAttribute("data-view");
+      if (mode !== "list") container.setAttribute("data-view", mode);
+
+      // Sync buttons
+      switcher.querySelectorAll(".view-mode-btn").forEach(btn => {
+        btn.classList.toggle("active", btn.dataset.view === mode);
+      });
+
+      localStorage.setItem(STORAGE_KEY, mode);
+    }
+
+    // Apply saved mode on load
+    setView(saved);
+
+    switcher.addEventListener("click", (e) => {
+      const btn = e.target.closest(".view-mode-btn");
+      if (btn) setView(btn.dataset.view);
+    });
+  })();
+
+  // ===== Ripple micro-interaction on primary buttons =====
+  document.querySelectorAll(".search-btn, .error-home-btn").forEach(btn => {
+    btn.addEventListener("pointerdown", function(e) {
+      const rect = this.getBoundingClientRect();
+      const size = Math.max(rect.width, rect.height) * 2;
+      const wave = document.createElement("span");
+      wave.className = "ripple-wave";
+      wave.style.cssText = `width:${size}px;height:${size}px;left:${e.clientX - rect.left - size / 2}px;top:${e.clientY - rect.top - size / 2}px`;
+      this.appendChild(wave);
+      wave.addEventListener("animationend", () => wave.remove(), { once: true });
+    });
+  });
+
+  // ===== Tab sliding indicator =====
+  (function initTabIndicator() {
+    const tabsEl = document.querySelector(".search-tabs");
+    if (!tabsEl) return;
+
+    const indicator = document.createElement("div");
+    indicator.className = "tab-indicator";
+    tabsEl.appendChild(indicator);
+
+    function moveIndicator() {
+      const active = tabsEl.querySelector(".tab.active");
+      if (!active) { indicator.style.width = "0"; return; }
+      const tRect = active.getBoundingClientRect();
+      const cRect = tabsEl.getBoundingClientRect();
+      indicator.style.left  = (tRect.left - cRect.left) + "px";
+      indicator.style.width = tRect.width + "px";
+    }
+
+    // Initial position (no transition on first paint)
+    indicator.style.transition = "none";
+    requestAnimationFrame(() => {
+      moveIndicator();
+      requestAnimationFrame(() => { indicator.style.transition = ""; });
+    });
+
+    window.addEventListener("resize", moveIndicator, { passive: true });
+  })();
 });
 
 function esc(str) {

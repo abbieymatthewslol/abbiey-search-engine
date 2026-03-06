@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payment Successful — abbiey.search</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔍</text></svg>">
+    <style>
+        .success-page {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+        }
+        .success-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 2.5rem 2rem;
+            max-width: 480px;
+            width: 100%;
+            text-align: center;
+            box-shadow: 0 24px 60px rgba(0,0,0,.4);
+            animation: heroIn .5s cubic-bezier(.16,1,.3,1) both;
+        }
+        .success-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            display: block;
+            animation: popIn .6s cubic-bezier(.34,1.56,.64,1) .15s both;
+        }
+        @keyframes popIn {
+            from { transform: scale(0) rotate(-15deg); opacity: 0; }
+            to   { transform: scale(1) rotate(0deg); opacity: 1; }
+        }
+        .success-title {
+            font-size: 1.6rem;
+            font-weight: 800;
+            color: var(--text);
+            margin-bottom: .5rem;
+        }
+        .success-subtitle {
+            color: var(--text-dim);
+            font-size: .95rem;
+            line-height: 1.6;
+            margin-bottom: 1.75rem;
+        }
+        .success-email {
+            color: var(--accent);
+            font-weight: 600;
+        }
+        .success-features {
+            list-style: none;
+            text-align: left;
+            margin: 0 0 1.75rem;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            gap: .5rem;
+        }
+        .success-features li {
+            display: flex;
+            align-items: center;
+            gap: .6rem;
+            font-size: .9rem;
+            color: var(--text);
+        }
+        .success-features li::before {
+            content: "✓";
+            color: var(--accent);
+            font-weight: 700;
+            font-size: 1rem;
+            flex-shrink: 0;
+        }
+        .success-btn {
+            display: inline-block;
+            background: var(--accent);
+            color: #0a0a0a;
+            font-weight: 700;
+            font-size: 1rem;
+            padding: .75rem 2rem;
+            border-radius: 10px;
+            text-decoration: none;
+            border: none;
+            cursor: pointer;
+            transition: transform .2s cubic-bezier(.34,1.56,.64,1), box-shadow .2s ease;
+            width: 100%;
+        }
+        .success-btn:hover {
+            transform: translateY(-2px) scale(1.02);
+            box-shadow: 0 8px 24px rgba(110,231,183,.35);
+        }
+        .success-btn:active { transform: scale(.97); }
+        .verified-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: .35rem;
+            background: rgba(110,231,183,.1);
+            border: 1px solid rgba(110,231,183,.3);
+            color: var(--accent);
+            font-size: .75rem;
+            font-weight: 600;
+            padding: .3rem .75rem;
+            border-radius: 20px;
+            margin-bottom: 1.5rem;
+        }
+        .support-note {
+            margin-top: 1.25rem;
+            font-size: .78rem;
+            color: var(--text-dim);
+        }
+        .support-note a { color: var(--accent); text-decoration: none; }
+        .support-note a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <div class="success-page">
+        <div class="success-card">
+            <span class="success-icon">🎉</span>
+            <h1 class="success-title">You're all set!</h1>
+
+            {% if verified %}
+            <div class="verified-badge">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+                Payment verified
+            </div>
+            <p class="success-subtitle">
+                Thank you{% if email %}, <span class="success-email">{{ email }}</span>{% endif %}!
+                Your full access to abbiey.search is now active.
+            </p>
+            {% else %}
+            <p class="success-subtitle">
+                Thank you for your payment! Your full access to abbiey.search is now active.
+            </p>
+            {% endif %}
+
+            <ul class="success-features">
+                <li>Unlimited searches — no paywall interruptions</li>
+                <li>All result tabs: All, Images, News, Videos, Code, Deep Web</li>
+                <li>AI Summary &amp; Research Assistant</li>
+                <li>Voice search, view modes &amp; all power features</li>
+                <li>Zero tracking, zero ads, zero data selling</li>
+                <li>One-time payment — no subscription, ever</li>
+            </ul>
+
+            <a href="/" class="success-btn" id="search-now-btn">Start Searching</a>
+
+            <p class="support-note">
+                Keep this page bookmarked — it restores your access on any device.<br>
+                Need help? <a href="mailto:support@abbiey.search">support@abbiey.search</a>
+            </p>
+        </div>
+    </div>
+
+    <script>
+        // Store access token in localStorage so the paywall stays unlocked
+        // even after the session expires or on a different browser tab.
+        const token = {{ access_token|tojson }};
+        if (token) {
+            localStorage.setItem("abbiey_access_token", token);
+            localStorage.setItem("abbiey_paid", "true");
+        } else {
+            // Fallback for legacy / direct visits
+            localStorage.setItem("abbiey_paid", "true");
+        }
+
+        // Restore saved theme preference
+        const savedTheme = localStorage.getItem("theme") || "dark";
+        document.documentElement.setAttribute("data-theme", savedTheme);
+    </script>
+</body>
+</html>

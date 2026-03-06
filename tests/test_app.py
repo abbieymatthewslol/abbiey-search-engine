@@ -180,7 +180,13 @@ class TestFallbackChain:
              patch("app._try_wikipedia", return_value=[]), \
              patch("app._try_wiby", return_value=[]), \
              patch("app._try_mojeek", return_value=[]), \
-             patch("app._try_ddg_instant", return_value=[]):
+             patch("app._try_ddg_instant", return_value=[]), \
+             patch("app._try_marginalia", return_value=[]), \
+             patch("app._try_stract", return_value=[]), \
+             patch("app._try_searxng", return_value=[]), \
+             patch("app._try_hackernews_text", return_value=[]), \
+             patch("app._try_reddit_text", return_value=[]), \
+             patch("app._try_internet_archive_text", return_value=[]):
 
             resp = client.get("/search?q=obscure_xyz", headers={"X-Requested-With": "XMLHttpRequest"})
             data = resp.get_json()
@@ -284,7 +290,9 @@ class TestChatAPI:
         # Verify history was passed in messages
         call_args = mock_chat.call_args[0][0]  # first positional arg (messages list)
         roles = [m["role"] for m in call_args]
-        assert roles.count("user") >= 3  # context + history + current message
+        # context is now in system role; history user + current message = 2 user msgs
+        assert roles.count("user") >= 2
+        assert "system" in roles  # context goes in system role
 
     def test_chat_long_message(self, client):
         resp = client.post("/api/chat", json={

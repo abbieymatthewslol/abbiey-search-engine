@@ -58,8 +58,8 @@ def mock_ddg():
 
 @pytest.fixture
 def mock_chat():
-    """Mock _ddg_chat to avoid real DuckDuckGo AI Chat calls."""
-    with patch("app._ddg_chat") as mock:
+    """Mock _ollama_chat to avoid real Ollama calls."""
+    with patch("app._ollama_chat") as mock:
         mock.return_value = "This is a mock AI response based on search results."
         yield mock
 

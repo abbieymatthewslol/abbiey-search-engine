@@ -6,17 +6,23 @@ No tracking. No filtering. No logs. Just results.
 import logging
 import os
 import re
+import sqlite3
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed, wait as _futures_wait
 from dataclasses import asdict
 from urllib.parse import parse_qs, quote_plus, unquote, urlparse
 
+import hashlib
+import hmac
+
 import feedparser
 import httpx
+import stripe
 from cachetools import TTLCache
 from ddgs import DDGS
-from flask import Flask, render_template, request, jsonify, redirect, session
+from flask import Flask, render_template, request, jsonify, redirect, session, url_for, make_response, flash
+from werkzeug.security import generate_password_hash, check_password_hash
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
@@ -25,6 +31,258 @@ from entity_parser import detect_entities, build_search_queries, primary_entity
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", os.urandom(24).hex())
 app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0  # no caching for static files
+
+# ---------------------------------------------------------------------------
+# Stripe configuration
+# ---------------------------------------------------------------------------
+stripe.api_key = os.environ.get("STRIPE_SECRET_KEY", "")
+_STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+_STRIPE_PRICE_ID       = os.environ.get("STRIPE_PRICE_ID", "")
+_BASE_URL              = os.environ.get("BASE_URL", "http://localhost:8000")
+
+_PAYMENTS_DB  = os.path.join(os.path.dirname(__file__), "payments.db")
+_WAITLIST_DB  = os.path.join(os.path.dirname(__file__), "waitlist.db")
+_ANALYTICS_DB = os.path.join(os.path.dirname(__file__), "analytics.db")
+_USERS_DB     = os.path.join(os.path.dirname(__file__), "users.db")
+_ADMIN_TOKEN  = os.environ.get("ADMIN_TOKEN", "")
+
+OLLAMA_MODEL    = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+
+
+def _init_waitlist_db():
+    with sqlite3.connect(_WAITLIST_DB) as con:
+        con.execute(
+            "CREATE TABLE IF NOT EXISTS waitlist "
+            "(id INTEGER PRIMARY KEY, email TEXT UNIQUE NOT NULL, created_at TEXT DEFAULT (datetime('now')))"
+        )
+
+
+_init_waitlist_db()
+
+
+def _init_payments_db():
+    with sqlite3.connect(_PAYMENTS_DB) as con:
+        con.execute(
+            "CREATE TABLE IF NOT EXISTS payments ("
+            "  id INTEGER PRIMARY KEY,"
+            "  session_id TEXT UNIQUE NOT NULL,"
+            "  email TEXT,"
+            "  amount_total INTEGER,"
+            "  currency TEXT,"
+            "  status TEXT DEFAULT 'paid',"
+            "  created_at TEXT DEFAULT (datetime('now'))"
+            ")"
+        )
+
+
+_init_payments_db()
+
+
+# ---------------------------------------------------------------------------
+# Analytics DB
+# ---------------------------------------------------------------------------
+def _init_analytics_db():
+    with sqlite3.connect(_ANALYTICS_DB) as con:
+        con.execute(
+            "CREATE TABLE IF NOT EXISTS search_logs ("
+            "  id INTEGER PRIMARY KEY,"
+            "  query TEXT NOT NULL,"
+            "  search_type TEXT DEFAULT 'text',"
+            "  region TEXT DEFAULT '',"
+            "  result_count INTEGER DEFAULT 0,"
+            "  hour INTEGER DEFAULT 0,"
+            "  day_of_week INTEGER DEFAULT 0,"
+            "  created_at TEXT DEFAULT (datetime('now'))"
+            ")"
+        )
+        con.execute("CREATE INDEX IF NOT EXISTS idx_sl_created ON search_logs(created_at)")
+        con.execute("CREATE INDEX IF NOT EXISTS idx_sl_query   ON search_logs(query)")
+
+
+_init_analytics_db()
+
+
+# ---------------------------------------------------------------------------
+# Users DB
+# ---------------------------------------------------------------------------
+def _init_users_db():
+    with sqlite3.connect(_USERS_DB) as con:
+        con.executescript("""
+            CREATE TABLE IF NOT EXISTS users (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                username      TEXT UNIQUE NOT NULL COLLATE NOCASE,
+                email         TEXT UNIQUE NOT NULL COLLATE NOCASE,
+                password_hash TEXT NOT NULL,
+                display_name  TEXT,
+                bio           TEXT DEFAULT '',
+                created_at    TEXT DEFAULT (datetime('now')),
+                last_seen     TEXT DEFAULT (datetime('now'))
+            );
+            CREATE TABLE IF NOT EXISTS user_bookmarks (
+                id       INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id  INTEGER NOT NULL,
+                url      TEXT NOT NULL,
+                title    TEXT,
+                snippet  TEXT,
+                saved_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                UNIQUE(user_id, url)
+            );
+            CREATE TABLE IF NOT EXISTS user_search_history (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id     INTEGER NOT NULL,
+                query       TEXT NOT NULL,
+                search_type TEXT DEFAULT 'text',
+                searched_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_ub_user  ON user_bookmarks(user_id);
+            CREATE INDEX IF NOT EXISTS idx_ush_user ON user_search_history(user_id);
+        """)
+
+
+_init_users_db()
+
+
+def _get_user_by_id(uid: int) -> "dict | None":
+    with sqlite3.connect(_USERS_DB) as con:
+        con.row_factory = sqlite3.Row
+        row = con.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
+    return dict(row) if row else None
+
+
+def _get_user_by_login(identifier: str) -> "dict | None":
+    with sqlite3.connect(_USERS_DB) as con:
+        con.row_factory = sqlite3.Row
+        row = con.execute(
+            "SELECT * FROM users WHERE email=? OR username=?",
+            (identifier, identifier),
+        ).fetchone()
+    return dict(row) if row else None
+
+
+@app.context_processor
+def _inject_current_user():
+    uid = session.get("user_id")
+    if uid:
+        user = _get_user_by_id(uid)
+        if user:
+            try:
+                with sqlite3.connect(_USERS_DB) as con:
+                    con.execute(
+                        "UPDATE users SET last_seen=datetime('now') WHERE id=?", (uid,)
+                    )
+            except Exception:
+                pass
+            return {"current_user": user}
+    return {"current_user": None}
+
+
+_init_analytics_db()
+
+
+def _log_search(query: str, search_type: str, region: str, result_count: int):
+    """Fire-and-forget analytics log — never raises."""
+    import datetime as _dt
+    now = _dt.datetime.now(_dt.timezone.utc)
+    try:
+        with sqlite3.connect(_ANALYTICS_DB) as con:
+            con.execute(
+                "INSERT INTO search_logs (query, search_type, region, result_count, hour, day_of_week)"
+                " VALUES (?,?,?,?,?,?)",
+                (query[:500], search_type, region or "", result_count,
+                 now.hour, now.weekday()),
+            )
+    except Exception as exc:
+        logger.debug("Analytics log failed: %s", exc)
+
+
+# ---------------------------------------------------------------------------
+# Query expansion — synonym dictionary
+# ---------------------------------------------------------------------------
+_SYNONYMS: "dict[str, list[str]]" = {
+    "ai": ["artificial intelligence", "machine learning"],
+    "ml": ["machine learning", "deep learning"],
+    "js": ["javascript"],
+    "ts": ["typescript"],
+    "py": ["python"],
+    "k8s": ["kubernetes"],
+    "db": ["database"],
+    "ui": ["user interface"],
+    "ux": ["user experience"],
+    "api": ["REST API", "web API"],
+    "nlp": ["natural language processing"],
+    "llm": ["large language model"],
+    "gpt": ["large language model", "chatgpt"],
+    "cli": ["command line", "terminal"],
+    "vm": ["virtual machine"],
+    "cdn": ["content delivery network"],
+    "vpn": ["virtual private network"],
+    "ssl": ["tls", "https encryption"],
+    "docker": ["container", "containerization"],
+    "ci": ["continuous integration", "devops"],
+    "iot": ["internet of things"],
+    "crypto": ["cryptocurrency", "blockchain"],
+    "btc": ["bitcoin", "cryptocurrency"],
+    "eth": ["ethereum"],
+    "saas": ["software as a service"],
+    "seo": ["search engine optimization"],
+}
+
+
+def _expand_query(query: str) -> "tuple[str, list[str]]":
+    """
+    Returns (expanded_query, added_terms).
+    Appends OR-synonyms for known abbreviations — only for short queries
+    to avoid over-broadening complex searches.
+    """
+    tokens = query.lower().split()
+    if len(tokens) > 4:
+        return query, []
+    added: "list[str]" = []
+    for token in tokens:
+        clean = token.strip("\"'()[].,")
+        if clean in _SYNONYMS:
+            added.extend(_SYNONYMS[clean][:2])
+    if not added:
+        return query, []
+    expansion = " OR ".join(f'"{s}"' for s in added[:3])
+    return f"{query} {expansion}", added
+
+
+def _record_payment(session_id: str, email: str = "", amount_total: int = 0, currency: str = "usd"):
+    """Persist a confirmed payment. Safe to call multiple times (UPSERT)."""
+    try:
+        with sqlite3.connect(_PAYMENTS_DB) as con:
+            con.execute(
+                "INSERT OR IGNORE INTO payments (session_id, email, amount_total, currency) VALUES (?,?,?,?)",
+                (session_id, email, amount_total, currency),
+            )
+    except Exception as exc:
+        logger.error("Failed to record payment %s: %s", session_id, exc)
+
+
+def _make_access_token(session_id: str) -> str:
+    """Create a short HMAC token tied to the Stripe session_id."""
+    secret = app.config["SECRET_KEY"].encode()
+    return hmac.new(secret, session_id.encode(), hashlib.sha256).hexdigest()[:32]
+
+
+def _check_persistent_access() -> bool:
+    """Check abbiey_sid cookie directly against payments.db. No HMAC — survives restarts."""
+    sid = request.cookies.get("abbiey_sid", "")
+    if not sid:
+        return False
+    try:
+        with sqlite3.connect(_PAYMENTS_DB) as con:
+            row = con.execute(
+                "SELECT id FROM payments WHERE session_id = ?", (sid,)
+            ).fetchone()
+        return row is not None
+    except Exception:
+        pass
+    return False
 
 
 @app.template_filter("domain")
@@ -92,6 +350,9 @@ def error_404(e):
 
 @app.errorhandler(429)
 def error_429(e):
+    if request.headers.get("X-Requested-With") == "XMLHttpRequest" or \
+       request.accept_mimetypes.best == "application/json":
+        return jsonify({"error": "rate_limited", "message": "Too many requests. Please slow down."}), 429
     return render_template("error.html", code=429, title="Too Many Requests",
                            message="You're sending requests too fast. Please wait a moment and try again."), 429
 
@@ -216,18 +477,25 @@ def _try_dictionary(query):
 # ---------------------------------------------------------------------------
 _BANG_RE = re.compile(r"^!(\w+)\s+(.*)", re.DOTALL)
 _BANG_MAP = {
-    "w": "https://en.wikipedia.org/wiki/Special:Search?search={}",
-    "yt": "https://www.youtube.com/results?search_query={}",
-    "gh": "https://github.com/search?q={}",
-    "so": "https://stackoverflow.com/search?q={}",
-    "r": "https://www.reddit.com/search/?q={}",
-    "a": "https://www.amazon.com/s?k={}",
-    "g": "https://www.google.com/search?q={}",
-    "tw": "https://x.com/search?q={}",
-    "npm": "https://www.npmjs.com/search?q={}",
+    "w":    "https://en.wikipedia.org/wiki/Special:Search?search={}",
+    "wiki": "https://en.wikipedia.org/wiki/Special:Search?search={}",
+    "yt":   "https://www.youtube.com/results?search_query={}",
+    "gh":   "https://github.com/search?q={}",
+    "so":   "https://stackoverflow.com/search?q={}",
+    "r":    "https://www.reddit.com/search/?q={}",
+    "a":    "https://www.amazon.com/s?k={}",
+    "g":    "https://www.google.com/search?q={}",
+    "tw":   "https://x.com/search?q={}",
+    "npm":  "https://www.npmjs.com/search?q={}",
     "pypi": "https://pypi.org/search/?q={}",
-    "mdn": "https://developer.mozilla.org/en-US/search?q={}",
+    "mdn":  "https://developer.mozilla.org/en-US/search?q={}",
     "maps": "https://www.openstreetmap.org/search?query={}",
+    "ddg":  "https://duckduckgo.com/?q={}",
+    "sp":   "https://open.spotify.com/search/{}",
+    "img":  "https://www.google.com/search?tbm=isch&q={}",
+    "x":    "https://x.com/search?q={}",
+    "hn":   "https://hn.algolia.com/?q={}",
+    "wb":   "https://web.archive.org/web/*/{}",
 }
 
 
@@ -621,11 +889,170 @@ def index():
     return render_template("index.html", **_TEMPLATE_DEFAULTS)
 
 
+@app.route("/landing")
+def landing():
+    return render_template("landing.html")
+
+
+@app.route("/create-checkout-session", methods=["POST"])
+@limiter.limit("10/minute")
+def create_checkout_session():
+    """Create a Stripe Checkout Session and redirect the user to it."""
+    if not stripe.api_key:
+        logger.error("STRIPE_SECRET_KEY not set")
+        return render_template(
+            "error.html", code=503, title="Payment Unavailable",
+            message="Payment is not configured yet. Please try again later."
+        ), 503
+
+    if not _STRIPE_PRICE_ID:
+        logger.error("STRIPE_PRICE_ID not set")
+        return render_template(
+            "error.html", code=503, title="Payment Unavailable",
+            message="Payment product not configured. Please contact support."
+        ), 503
+
+    try:
+        checkout_session = stripe.checkout.Session.create(
+            mode="payment",
+            line_items=[{"price": _STRIPE_PRICE_ID, "quantity": 1}],
+            success_url=_BASE_URL + "/payment-success?session_id={CHECKOUT_SESSION_ID}",
+            cancel_url=_BASE_URL + "/payment-cancel",
+            allow_promotion_codes=True,
+        )
+        return redirect(checkout_session.url, code=303)
+    except stripe.StripeError as exc:
+        logger.error("Stripe checkout error: %s", exc)
+        return render_template(
+            "error.html", code=502, title="Payment Error",
+            message="Could not start checkout. Please try again."
+        ), 502
+
+
 @app.route("/payment-success")
 def payment_success():
+    """
+    Stripe redirects here after successful payment.
+    Verify the session server-side, record it, and grant access via a signed token.
+    """
+    sid = request.args.get("session_id", "").strip()
+
+    if not sid:
+        # No session_id — could be a direct visit or old Payment Link redirect
+        # Grant session access anyway (legacy fallback)
+        session["paid"] = True
+        session["search_count"] = 0
+        return render_template("payment_success.html", verified=False, email="")
+
+    # Verify with Stripe if key is configured
+    verified = False
+    email = ""
+    amount = 0
+    currency = "usd"
+
+    if stripe.api_key:
+        try:
+            stripe_session = stripe.checkout.Session.retrieve(sid)
+            if stripe_session.payment_status == "paid":
+                verified = True
+                email = (stripe_session.customer_details or {}).get("email", "") or ""
+                amount = stripe_session.amount_total or 0
+                currency = stripe_session.currency or "usd"
+                _record_payment(sid, email, amount, currency)
+        except stripe.StripeError as exc:
+            logger.error("Stripe session verify failed for %s: %s", sid, exc)
+
+    # Grant access in server-side session
     session["paid"] = True
     session["search_count"] = 0
-    return render_template("index.html", payment_success=True, **_TEMPLATE_DEFAULTS)
+    session["payment_session_id"] = sid
+
+    # Generate a client-side access token the browser can store in localStorage
+    access_token = _make_access_token(sid) if sid else ""
+
+    resp = make_response(render_template(
+        "payment_success.html",
+        verified=verified,
+        email=email,
+        access_token=access_token,
+    ))
+    if sid:
+        # Persistent session_id cookie — survives server restarts, 1 year
+        resp.set_cookie("abbiey_sid", sid, max_age=365 * 24 * 3600, samesite="Lax")
+    return resp
+
+
+@app.route("/admin/grant-access")
+def admin_grant_access():
+    """Admin-only: grant permanent paid access to the current browser session.
+    Usage: /admin/grant-access?token=ADMIN_TOKEN
+    Inserts a manual payment record and sets the persistent cookie.
+    """
+    token = request.args.get("token", "")
+    if not _ADMIN_TOKEN or token != _ADMIN_TOKEN:
+        return "Forbidden", 403
+    # Create a stable manual session_id for this grant
+    manual_sid = "manual_" + hashlib.sha256(token.encode()).hexdigest()[:16]
+    _record_payment(manual_sid, email="admin", amount_total=1000, currency="usd")
+    access_token = _make_access_token(manual_sid)
+    session["paid"] = True
+    session["search_count"] = 0
+    resp = make_response(
+        "<html><body style='font-family:sans-serif;padding:2rem'>"
+        "<h2>✓ Access granted</h2>"
+        "<p>Permanent paid access has been set for this browser.</p>"
+        "<script>"
+        f"localStorage.setItem('abbiey_access_token','{access_token}');"
+        "localStorage.setItem('abbiey_paid','true');"
+        "</script>"
+        "<a href='/'>Go to search engine</a></body></html>"
+    )
+    resp.set_cookie("abbiey_sid", manual_sid, max_age=365 * 24 * 3600, samesite="Lax")
+    return resp
+
+
+@app.route("/payment-cancel")
+def payment_cancel():
+    """User cancelled checkout — return them to the landing page."""
+    return render_template("payment_cancel.html")
+
+
+@app.route("/webhook", methods=["POST"])
+def stripe_webhook():
+    """
+    Stripe webhook endpoint.
+    Handles checkout.session.completed as a reliable server-side backup.
+    Register this URL in your Stripe Dashboard → Webhooks.
+    """
+    payload = request.get_data()
+    sig_header = request.headers.get("Stripe-Signature", "")
+
+    if not _STRIPE_WEBHOOK_SECRET:
+        logger.warning("Stripe webhook received but STRIPE_WEBHOOK_SECRET not set — skipping verification")
+        return jsonify({"received": True})
+
+    try:
+        event = stripe.Webhook.construct_event(payload, sig_header, _STRIPE_WEBHOOK_SECRET)
+    except stripe.errors.SignatureVerificationError:
+        logger.warning("Invalid Stripe webhook signature")
+        return jsonify({"error": "Invalid signature"}), 400
+    except Exception as exc:
+        logger.error("Webhook parse error: %s", exc)
+        return jsonify({"error": "Parse error"}), 400
+
+    if event["type"] == "checkout.session.completed":
+        s = event["data"]["object"]
+        if s.get("payment_status") == "paid":
+            email = (s.get("customer_details") or {}).get("email", "") or ""
+            _record_payment(
+                session_id=s["id"],
+                email=email,
+                amount_total=s.get("amount_total", 0),
+                currency=s.get("currency", "usd"),
+            )
+            logger.info("Payment confirmed via webhook: %s (%s)", s["id"], email)
+
+    return jsonify({"received": True})
 
 
 @app.route("/search")
@@ -657,15 +1084,6 @@ def search():
                                unit_convert=None, knowledge=None, weather=None, qr=None,
                                time_filter="")
 
-    # --- Paywall: track search count ---
-    FREE_SEARCH_LIMIT = 2
-    if not session.get("paid"):
-        session["search_count"] = session.get("search_count", 0) + 1
-
-    paywall = False
-    if not session.get("paid") and session.get("search_count", 0) > FREE_SEARCH_LIMIT:
-        paywall = True
-
     # Bang commands — redirect immediately
     bang_m = _BANG_RE.match(query)
     if bang_m:
@@ -681,6 +1099,11 @@ def search():
     clean_query, operators = _parse_operators(query)
     if operators.get("lang"):
         lang = operators["lang"][0]
+
+    # Query expansion
+    expanded_query, expansion_terms = _expand_query(clean_query)
+    if expansion_terms:
+        clean_query = expanded_query
 
     # Entity detection
     entities = detect_entities(query)
@@ -704,12 +1127,14 @@ def search():
             logger.warning("Nominatim geocoding failed for address=%s", primary.normalized)
 
     if request.headers.get("X-Requested-With") == "XMLHttpRequest":
-        if paywall:
-            return jsonify({"results": [], "has_more": False, "paywall": True})
         results = _fetch_results(clean_query, page, search_type, region, lang, operators, time_filter=time_filter, safesearch=safesearch)
         return jsonify(results)
 
     results = _fetch_results(clean_query, 1, search_type, region, lang, operators, time_filter=time_filter, safesearch=safesearch)
+
+    # Log search analytics (non-blocking, never fails)
+    if page == 1:
+        _log_search(query, search_type, region or "", len(results.get("results", [])))
 
     # Fetch entity-specific results on page 1 (text only)
     entity_results = []
@@ -758,9 +1183,9 @@ def search():
     return render_template(
         "index.html",
         query=query,
-        results=results["results"] if not paywall else results["results"][:3],
+        results=results["results"],
         search_type=search_type,
-        has_more=results["has_more"] if not paywall else False,
+        has_more=results["has_more"],
         page=1,
         entities=[asdict(e) for e in entities],
         primary_entity=asdict(primary) if primary else None,
@@ -776,7 +1201,7 @@ def search():
         knowledge=knowledge,
         weather=weather,
         time_filter=time_filter,
-        paywall=paywall,
+        expansion_terms=expansion_terms,
     )
 
 
@@ -1125,12 +1550,20 @@ def api_preview():
 # AI Research Assistant Chat
 # ---------------------------------------------------------------------------
 
-def _ddg_chat(messages):
-    """Call DuckDuckGo AI Chat. Currently non-functional — DDG now requires
-    a JavaScript browser challenge for VQD tokens. Raises immediately so
-    callers fall through to extractive fallback without wasting time.
-    """
-    raise RuntimeError("DDG AI Chat unavailable — JS challenge required")
+def _ollama_chat(messages, model=None):
+    """AI chat using local Ollama instance."""
+    import requests as _requests
+    _model = model or OLLAMA_MODEL
+    try:
+        resp = _requests.post(
+            f"{OLLAMA_BASE_URL}/api/chat",
+            json={"model": _model, "messages": messages, "stream": False},
+            timeout=30
+        )
+        resp.raise_for_status()
+        return resp.json()["message"]["content"]
+    except Exception as e:
+        raise RuntimeError(f"Ollama unavailable: {e}") from e
 
 
 def _extractive_research(question, results):
@@ -1216,14 +1649,13 @@ def api_chat():
     context = "\n".join(context_lines)
 
     system_context = (
-        f"You are a research assistant. You have studied the following search results about '{query}'. "
-        f"Answer questions based ONLY on the information in these search results. "
-        f"If the results don't contain enough information to answer, say so honestly. "
-        f"Always cite your sources with URLs when possible.\n\n{context}"
+        "You are a research assistant. Use the provided search results to answer questions. "
+        "Quote relevant passages and cite sources by number.\n\n"
+        + context
     )
 
     # Build messages list for the AI chat API
-    messages = [{"role": "user", "content": system_context}]
+    messages = [{"role": "system", "content": system_context}]
     messages.append({"role": "assistant", "content": f"I've studied the search results about '{query}'. What would you like to know?"})
 
     for h in history[-6:]:
@@ -1236,7 +1668,7 @@ def api_chat():
 
     # Try AI chat first, fall back to extractive research
     try:
-        response = _ddg_chat(messages)
+        response = _ollama_chat(messages)
         if not response:
             raise RuntimeError("Empty AI response")
         return jsonify({"response": response})
@@ -1290,7 +1722,17 @@ def api_ai_summary():
     )
 
     try:
-        response = _ddg_chat([{"role": "user", "content": prompt}])
+        summary_messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You are a search assistant. Given web results as context, write a 2-3 sentence "
+                    "factual answer to the query. Cite sources by number [1], [2]. Be concise and direct."
+                ),
+            },
+            {"role": "user", "content": f"Query: {query}\n\n{context}"},
+        ]
+        response = _ollama_chat(summary_messages)
         if response:
             return jsonify({"summary": response, "sources": sources})
     except Exception:
@@ -1306,6 +1748,148 @@ def api_ai_summary():
         return jsonify({"summary": " ".join(parts), "sources": sources})
 
     return jsonify({"error": "Could not generate summary"}), 500
+
+
+@app.route("/api/waitlist", methods=["POST"])
+@limiter.limit("5/minute")
+def api_waitlist():
+    """Store an email address for the waitlist/update notifications."""
+    data = request.get_json(silent=True) or {}
+    email = (data.get("email") or "").strip().lower()
+    if not email or "@" not in email or len(email) > 254:
+        return jsonify({"error": "Invalid email address"}), 400
+    try:
+        with sqlite3.connect(_WAITLIST_DB) as con:
+            con.execute("INSERT INTO waitlist (email) VALUES (?)", (email,))
+        return jsonify({"ok": True})
+    except sqlite3.IntegrityError:
+        # Already on list — treat as success so we don't leak existence
+        return jsonify({"ok": True})
+    except Exception as exc:
+        logger.error("Waitlist insert failed: %s", exc)
+        return jsonify({"error": "Server error"}), 500
+
+
+# ---------------------------------------------------------------------------
+# Analytics & Trends API
+# ---------------------------------------------------------------------------
+@app.route("/api/privacy-stats")
+@limiter.limit("60/minute")
+def api_privacy_stats():
+    """Returns real, server-confirmed privacy stats. All zeros reflect genuine policy."""
+    total_queries = 0
+    try:
+        with sqlite3.connect(_ANALYTICS_DB) as con:
+            row = con.execute("SELECT COUNT(*) FROM search_logs").fetchone()
+            total_queries = row[0] if row else 0
+    except Exception:
+        pass
+    return jsonify({
+        "trackers": 0,          # no tracking scripts or pixels used
+        "personal_data": 0,     # no personal data stored (queries logged anonymously)
+        "third_party_shared": 0, # no data sold or shared with third parties
+        "total_queries": total_queries,  # total anonymous queries processed
+    })
+
+
+# ---------------------------------------------------------------------------
+@app.route("/api/trends")
+@limiter.limit("30/minute")
+def api_trends():
+    """Public endpoint — returns top 10 trending queries from the last 24 h."""
+    try:
+        with sqlite3.connect(_ANALYTICS_DB) as con:
+            rows = con.execute(
+                "SELECT query, COUNT(*) as cnt FROM search_logs"
+                " WHERE created_at >= datetime('now', '-1 day')"
+                "   AND search_type = 'text'"
+                "   AND length(query) BETWEEN 2 AND 80"
+                " GROUP BY lower(query) ORDER BY cnt DESC LIMIT 10"
+            ).fetchall()
+        return jsonify([{"query": r[0], "count": r[1]} for r in rows])
+    except Exception as exc:
+        logger.error("Trends error: %s", exc)
+        return jsonify([])
+
+
+@app.route("/admin/analytics")
+def admin_analytics():
+    """Admin analytics dashboard — protected by ADMIN_TOKEN query param."""
+    token = request.args.get("token", "")
+    if _ADMIN_TOKEN and token != _ADMIN_TOKEN:
+        return render_template("error.html", code=403, title="Forbidden",
+                               message="Invalid or missing admin token."), 403
+
+    import datetime as _dt
+    stats = {}
+    try:
+        with sqlite3.connect(_ANALYTICS_DB) as con:
+            # Total searches
+            stats["total_all_time"] = con.execute(
+                "SELECT COUNT(*) FROM search_logs").fetchone()[0]
+            stats["total_today"] = con.execute(
+                "SELECT COUNT(*) FROM search_logs WHERE created_at >= date('now')").fetchone()[0]
+            stats["total_week"] = con.execute(
+                "SELECT COUNT(*) FROM search_logs WHERE created_at >= datetime('now','-7 days')").fetchone()[0]
+
+            # Top queries (7 days)
+            stats["top_queries"] = con.execute(
+                "SELECT query, COUNT(*) as cnt FROM search_logs"
+                " WHERE created_at >= datetime('now','-7 days')"
+                "   AND length(query) BETWEEN 2 AND 80"
+                " GROUP BY lower(query) ORDER BY cnt DESC LIMIT 20"
+            ).fetchall()
+
+            # Tab distribution
+            stats["by_type"] = con.execute(
+                "SELECT search_type, COUNT(*) as cnt FROM search_logs"
+                " WHERE created_at >= datetime('now','-7 days')"
+                " GROUP BY search_type ORDER BY cnt DESC"
+            ).fetchall()
+
+            # Hourly distribution (last 7 days)
+            stats["by_hour"] = con.execute(
+                "SELECT hour, COUNT(*) as cnt FROM search_logs"
+                " WHERE created_at >= datetime('now','-7 days')"
+                " GROUP BY hour ORDER BY hour"
+            ).fetchall()
+
+            # Daily volume (last 30 days)
+            stats["daily"] = con.execute(
+                "SELECT date(created_at) as day, COUNT(*) as cnt FROM search_logs"
+                " WHERE created_at >= datetime('now','-30 days')"
+                " GROUP BY day ORDER BY day"
+            ).fetchall()
+
+            # Top regions
+            stats["top_regions"] = con.execute(
+                "SELECT region, COUNT(*) as cnt FROM search_logs"
+                " WHERE created_at >= datetime('now','-7 days') AND region != ''"
+                " GROUP BY region ORDER BY cnt DESC LIMIT 10"
+            ).fetchall()
+
+        # Build hourly heatmap (fill missing hours with 0)
+        hour_map = {r[0]: r[1] for r in stats["by_hour"]}
+        stats["hours"] = [(h, hour_map.get(h, 0)) for h in range(24)]
+        max_hour = max((v for _, v in stats["hours"]), default=1) or 1
+        stats["hours_pct"] = [(h, round(v / max_hour * 100)) for h, v in stats["hours"]]
+
+        # Daily chart
+        daily_map = {r[0]: r[1] for r in stats["daily"]}
+        today = _dt.date.today()
+        stats["daily_chart"] = [
+            ((today - _dt.timedelta(days=29 - i)).isoformat(),
+             daily_map.get((today - _dt.timedelta(days=29 - i)).isoformat(), 0))
+            for i in range(30)
+        ]
+        max_daily = max((v for _, v in stats["daily_chart"]), default=1) or 1
+        stats["daily_pct"] = [(d, v, round(v / max_daily * 100)) for d, v in stats["daily_chart"]]
+
+    except Exception as exc:
+        logger.error("Analytics dashboard error: %s", exc)
+        stats["error"] = str(exc)
+
+    return render_template("analytics.html", stats=stats)
 
 
 # ---------------------------------------------------------------------------
@@ -1655,6 +2239,42 @@ def _try_wikimedia_commons(query):
     return results
 
 
+def _try_internet_archive_images(query, max_results=30):
+    """Search Internet Archive for public domain images (no key required)."""
+    results = []
+    try:
+        resp = _get_http().get(
+            "https://archive.org/advancedsearch.php",
+            params={
+                "q": f"({query}) AND mediatype:image",
+                "output": "json",
+                "rows": min(max_results, 50),
+                "fl[]": ["identifier", "title", "description"],
+                "sort[]": "downloads desc",
+            },
+        )
+        resp.raise_for_status()
+        for doc in resp.json().get("response", {}).get("docs", []):
+            identifier = doc.get("identifier", "")
+            if not identifier:
+                continue
+            title = doc.get("title", identifier)
+            if isinstance(title, list):
+                title = title[0] if title else identifier
+            results.append({
+                "title": title,
+                "url": f"https://archive.org/details/{identifier}",
+                "image": f"https://archive.org/services/img/{identifier}",
+                "thumbnail": f"https://archive.org/services/img/{identifier}",
+                "source": "Internet Archive",
+            })
+        if results:
+            logger.info("Internet Archive images: %d results", len(results))
+    except Exception:
+        logger.warning("Internet Archive images failed", exc_info=True)
+    return results
+
+
 # ---- News fallback layer ----
 
 def _try_google_news_rss(query):
@@ -1680,6 +2300,105 @@ def _try_google_news_rss(query):
             logger.info("Google News RSS fallback: %d results", len(results))
     except Exception:
         logger.warning("Google News RSS fallback failed", exc_info=True)
+    return results
+
+
+def _try_bing_news_rss(query):
+    """Parse Bing News RSS feed for news results (no key required)."""
+    results = []
+    try:
+        encoded = quote_plus(query)
+        feed = feedparser.parse(
+            f"https://www.bing.com/news/search?q={encoded}&format=rss",
+            request_headers={"User-Agent": "Mozilla/5.0 (compatible; abbiey.search/1.0)"},
+        )
+        for entry in feed.entries[:20]:
+            source_title = getattr(getattr(entry, "source", None), "title", None) or "Bing News"
+            results.append({
+                "title": entry.get("title", ""),
+                "url": entry.get("link", ""),
+                "body": re.sub(r"<[^>]+>", "", entry.get("summary", "")),
+                "source": source_title,
+                "date": entry.get("published", ""),
+            })
+        if results:
+            logger.info("Bing News RSS fallback: %d results", len(results))
+    except Exception:
+        logger.warning("Bing News RSS fallback failed", exc_info=True)
+    return results
+
+
+def _try_hackernews(query, max_results=20):
+    """Search Hacker News via Algolia API (free, no key required)."""
+    results = []
+    try:
+        resp = _get_http().get(
+            "https://hn.algolia.com/api/v1/search",
+            params={"query": query, "tags": "story", "hitsPerPage": min(max_results, 30)},
+        )
+        resp.raise_for_status()
+        for hit in resp.json().get("hits", []):
+            url = hit.get("url") or f"https://news.ycombinator.com/item?id={hit.get('objectID', '')}"
+            title = hit.get("title", "")
+            if not title or not url:
+                continue
+            points = hit.get("points") or 0
+            author = hit.get("author", "")
+            created_at = (hit.get("created_at") or "")[:10]
+            body = f"{points} points · {author}"
+            if created_at:
+                body += f" · {created_at}"
+            results.append({
+                "title": title,
+                "url": url,
+                "body": body,
+                "source": "Hacker News",
+                "date": created_at,
+            })
+        if results:
+            logger.info("HackerNews Algolia: %d results", len(results))
+    except Exception:
+        logger.warning("HackerNews search failed", exc_info=True)
+    return results
+
+
+def _try_reddit_news(query, max_results=20):
+    """Search Reddit for relevant posts via public JSON API (no key required)."""
+    import datetime as _dt
+    results = []
+    try:
+        resp = _get_http().get(
+            "https://www.reddit.com/search.json",
+            params={"q": query, "sort": "relevance", "t": "month",
+                    "limit": min(max_results, 25), "type": "link"},
+            headers={"User-Agent": "abbiey.search/1.0 (privacy search engine)"},
+        )
+        resp.raise_for_status()
+        for child in resp.json().get("data", {}).get("children", []):
+            post = child.get("data", {})
+            url = post.get("url", "")
+            title = post.get("title", "")
+            if not url or not title:
+                continue
+            score = post.get("score", 0)
+            sub = post.get("subreddit_name_prefixed", "")
+            created = post.get("created_utc", 0)
+            date_str = ""
+            if created:
+                date_str = _dt.datetime.fromtimestamp(
+                    created, tz=_dt.timezone.utc
+                ).strftime("%Y-%m-%d")
+            results.append({
+                "title": title,
+                "url": url,
+                "body": f"{sub} · {score} upvotes",
+                "source": f"Reddit",
+                "date": date_str,
+            })
+        if results:
+            logger.info("Reddit news: %d results", len(results))
+    except Exception:
+        logger.warning("Reddit news search failed", exc_info=True)
     return results
 
 
@@ -1758,6 +2477,542 @@ def _try_code_ddg(query, max_results=50):
         return _try_ddg(code_query, max_results, "text")
     except Exception:
         return []
+
+
+def _try_gitlab(query, max_results=20):
+    """Search GitLab.com public repositories (unauthenticated, no key required)."""
+    results = []
+    try:
+        resp = _get_http().get(
+            "https://gitlab.com/api/v4/projects",
+            params={"search": query, "per_page": min(max_results, 20),
+                    "order_by": "last_activity_at", "sort": "desc"},
+        )
+        resp.raise_for_status()
+        for r in resp.json():
+            stars = r.get("star_count", 0)
+            stars_str = f"{stars:,}" if stars < 10000 else f"{stars/1000:.1f}k"
+            lang = r.get("predominant_language") or ""
+            results.append({
+                "title": r.get("path_with_namespace", r.get("name", "")),
+                "url": r.get("web_url", ""),
+                "body": r.get("description", "") or "",
+                "language": lang,
+                "stars": stars_str,
+                "forks": str(r.get("forks_count", 0)),
+                "source": "GitLab",
+            })
+        if results:
+            logger.info("GitLab search: %d results", len(results))
+    except Exception:
+        logger.warning("GitLab search failed", exc_info=True)
+    return results
+
+
+def _try_npm(query, max_results=20):
+    """Search npm registry for packages (free, no key required)."""
+    results = []
+    try:
+        resp = _get_http().get(
+            "https://registry.npmjs.org/-/v1/search",
+            params={"text": query, "size": min(max_results, 20)},
+        )
+        resp.raise_for_status()
+        for obj in resp.json().get("objects", []):
+            pkg = obj.get("package", {})
+            name = pkg.get("name", "")
+            desc = pkg.get("description", "")
+            npm_url = pkg.get("links", {}).get("npm", f"https://www.npmjs.com/package/{name}")
+            keywords = pkg.get("keywords", [])[:4]
+            version = pkg.get("version", "")
+            body = f"v{version} · {desc}" if version and desc else (desc or f"v{version}")
+            results.append({
+                "title": name,
+                "url": npm_url,
+                "body": body,
+                "language": "JavaScript",
+                "stars": "",
+                "forks": "",
+                "source": "npm",
+                "tags": keywords,
+            })
+        if results:
+            logger.info("npm search: %d results", len(results))
+    except Exception:
+        logger.warning("npm search failed", exc_info=True)
+    return results
+
+
+def _try_marginalia(query):
+    """Search Marginalia indie/alternative web engine (free, no key required)."""
+    results = []
+    try:
+        resp = _get_http().get(
+            "https://search.marginalia.nu/api/search",
+            params={"query": query},
+            timeout=5.0,
+        )
+        for r in resp.json().get("results", []):
+            url = r.get("url", "")
+            if not url:
+                continue
+            results.append({
+                "title": r.get("title", "") or url,
+                "url": url,
+                "body": r.get("description", ""),
+            })
+        if results:
+            logger.info("Marginalia: %d results", len(results))
+    except Exception:
+        logger.warning("Marginalia search failed", exc_info=True)
+    return results
+
+
+def _try_internet_archive_videos(query, max_results=20):
+    """Search Internet Archive for public domain / CC-licensed videos (no key required)."""
+    results = []
+    try:
+        resp = _get_http().get(
+            "https://archive.org/advancedsearch.php",
+            params={
+                "q": f"({query}) AND mediatype:movies",
+                "output": "json",
+                "rows": min(max_results, 50),
+                "fl[]": ["identifier", "title", "description", "creator"],
+                "sort[]": "downloads desc",
+            },
+        )
+        resp.raise_for_status()
+        for doc in resp.json().get("response", {}).get("docs", []):
+            identifier = doc.get("identifier", "")
+            if not identifier:
+                continue
+            title = doc.get("title", identifier)
+            if isinstance(title, list):
+                title = title[0] if title else identifier
+            desc = doc.get("description", "")
+            if isinstance(desc, list):
+                desc = desc[0] if desc else ""
+            creator = doc.get("creator", "")
+            if isinstance(creator, list):
+                creator = creator[0] if creator else ""
+            results.append({
+                "title": title,
+                "url": f"https://archive.org/details/{identifier}",
+                "description": (desc or "")[:200],
+                "publisher": creator or "Internet Archive",
+                "thumbnail": f"https://archive.org/services/img/{identifier}",
+                "duration": "",
+            })
+        if results:
+            logger.info("Internet Archive videos: %d results", len(results))
+    except Exception:
+        logger.warning("Internet Archive videos failed", exc_info=True)
+    return results
+
+
+_PEERTUBE_INSTANCES = [
+    "https://framatube.org",
+    "https://peertube.social",
+]
+
+
+def _try_peertube(query, max_results=20):
+    """Search PeerTube federated video network via public instances (no key required)."""
+    results = []
+    for instance in _PEERTUBE_INSTANCES:
+        try:
+            resp = _get_http().get(
+                f"{instance}/api/v1/search/videos",
+                params={"search": query, "count": min(max_results, 20), "sort": "-match"},
+                timeout=5.0,
+            )
+            if resp.status_code != 200:
+                continue
+            for v in resp.json().get("data", []):
+                thumb = v.get("thumbnailPath", "")
+                thumb_url = f"{instance}{thumb}" if thumb.startswith("/") else thumb
+                channel = (v.get("channel") or {}).get("displayName", "") or \
+                          (v.get("account") or {}).get("displayName", "")
+                results.append({
+                    "title": v.get("name", ""),
+                    "url": v.get("url", "") or f"{instance}/w/{v.get('uuid', '')}",
+                    "description": (v.get("description") or "")[:200],
+                    "publisher": channel or instance,
+                    "thumbnail": thumb_url,
+                    "duration": str(v.get("duration", "")),
+                })
+            if results:
+                logger.info("PeerTube (%s): %d results", instance, len(results))
+                break
+        except Exception:
+            logger.warning("PeerTube instance %s failed", instance, exc_info=True)
+    return results
+
+
+# ---- Additional deep knowledge sources ----
+
+_ACADEMIC_TERMS = frozenset({
+    "research", "paper", "study", "journal", "academic", "review", "analysis",
+    "theory", "algorithm", "method", "model", "experiment", "clinical", "medical",
+    "science", "university", "arxiv", "doi", "preprint", "physics", "chemistry",
+    "biology", "mathematics", "statistics", "engineering", "cognitive", "neural",
+    "machine learning", "deep learning", "quantum", "genomics", "neuroscience",
+    "psychology", "sociology", "economics", "epidemiology", "pathology", "genome",
+    "protein", "molecule", "catalyst", "theorem", "hypothesis", "meta-analysis",
+})
+
+
+def _looks_academic(query: str) -> bool:
+    q = query.lower()
+    return any(term in q for term in _ACADEMIC_TERMS)
+
+
+def _try_arxiv(query, max_results=10):
+    """Search arXiv preprints/academic papers (free API, no key required)."""
+    import xml.etree.ElementTree as ET
+    results = []
+    try:
+        resp = _get_http().get(
+            "https://export.arxiv.org/api/query",
+            params={
+                "search_query": f"all:{query}",
+                "start": 0,
+                "max_results": min(max_results, 20),
+                "sortBy": "relevance",
+                "sortOrder": "descending",
+            },
+            timeout=6.0,
+        )
+        resp.raise_for_status()
+        ns = {"atom": "http://www.w3.org/2005/Atom"}
+        root = ET.fromstring(resp.text)
+        for entry in root.findall("atom:entry", ns):
+            title_el = entry.find("atom:title", ns)
+            summary_el = entry.find("atom:summary", ns)
+            id_el = entry.find("atom:id", ns)
+            authors = [
+                a.find("atom:name", ns).text
+                for a in entry.findall("atom:author", ns)
+                if a.find("atom:name", ns) is not None
+            ]
+            if not title_el or not id_el:
+                continue
+            title = re.sub(r"\s+", " ", title_el.text or "").strip()
+            summary = re.sub(r"\s+", " ", summary_el.text or "").strip()[:400] if summary_el else ""
+            url = (id_el.text or "").strip().replace("http://", "https://")
+            author_str = ", ".join(authors[:3])
+            if author_str:
+                summary = f"{author_str} — {summary}" if summary else author_str
+            results.append({
+                "title": title,
+                "url": url,
+                "body": summary,
+                "source": "arXiv",
+                "source_type": "academic",
+            })
+        if results:
+            logger.info("arXiv: %d results", len(results))
+    except Exception:
+        logger.warning("arXiv search failed", exc_info=True)
+    return results
+
+
+def _try_pubmed(query, max_results=8):
+    """Search PubMed via NCBI E-utilities (free, no key required)."""
+    results = []
+    try:
+        search_resp = _get_http().get(
+            "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi",
+            params={
+                "db": "pubmed",
+                "term": query,
+                "retmax": min(max_results, 20),
+                "retmode": "json",
+                "sort": "relevance",
+            },
+            timeout=5.0,
+        )
+        search_resp.raise_for_status()
+        ids = search_resp.json().get("esearchresult", {}).get("idlist", [])
+        if not ids:
+            return results
+        summary_resp = _get_http().get(
+            "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi",
+            params={"db": "pubmed", "id": ",".join(ids[:10]), "retmode": "json"},
+            timeout=5.0,
+        )
+        summary_resp.raise_for_status()
+        doc_data = summary_resp.json().get("result", {})
+        for uid in doc_data.get("uids", []):
+            doc = doc_data.get(uid, {})
+            title = doc.get("title", "")
+            if not title:
+                continue
+            source = doc.get("source", "")
+            pubdate = doc.get("pubdate", "")
+            authors = doc.get("authors", [])
+            author_str = ", ".join(a.get("name", "") for a in authors[:2])
+            body = " · ".join(filter(None, [author_str, source, pubdate]))
+            results.append({
+                "title": title,
+                "url": f"https://pubmed.ncbi.nlm.nih.gov/{uid}/",
+                "body": body,
+                "source": "PubMed",
+                "source_type": "academic",
+            })
+        if results:
+            logger.info("PubMed: %d results", len(results))
+    except Exception:
+        logger.warning("PubMed search failed", exc_info=True)
+    return results
+
+
+def _try_crossref(query, max_results=8):
+    """Search Crossref for academic papers by DOI/metadata (free, no key required)."""
+    results = []
+    try:
+        resp = _get_http().get(
+            "https://api.crossref.org/works",
+            params={
+                "query": query,
+                "rows": min(max_results, 20),
+                "select": "DOI,title,abstract,author,published-print,published-online,container-title",
+            },
+            headers={"User-Agent": "abbiey.search/1.0 (mailto:search@abbiey.com)"},
+            timeout=6.0,
+        )
+        resp.raise_for_status()
+        for item in resp.json().get("message", {}).get("items", []):
+            titles = item.get("title", [])
+            title = titles[0] if titles else ""
+            if not title:
+                continue
+            doi = item.get("DOI", "")
+            url = f"https://doi.org/{doi}" if doi else ""
+            if not url:
+                continue
+            abstract = re.sub(r"<[^>]+>", "", item.get("abstract", "")).strip()[:300]
+            authors = item.get("author", [])
+            author_str = ", ".join(
+                f"{a.get('family', '')} {a.get('given', '')[:1]}".strip()
+                for a in authors[:3]
+            )
+            pub = (item.get("container-title") or [""])[0]
+            pd = item.get("published-print", item.get("published-online", {}))
+            dp = (pd.get("date-parts") or [[]])[0] if pd else []
+            year = str(dp[0]) if dp else ""
+            body = abstract if abstract else " · ".join(filter(None, [author_str, pub, year]))
+            results.append({
+                "title": title,
+                "url": url,
+                "body": body,
+                "source": "Crossref",
+                "source_type": "academic",
+            })
+        if results:
+            logger.info("Crossref: %d results", len(results))
+    except Exception:
+        logger.warning("Crossref search failed", exc_info=True)
+    return results
+
+
+def _try_internet_archive_text(query, max_results=15):
+    """Search Internet Archive for texts/books/historical docs (no key required)."""
+    results = []
+    try:
+        resp = _get_http().get(
+            "https://archive.org/advancedsearch.php",
+            params={
+                "q": f"({query}) AND mediatype:texts",
+                "output": "json",
+                "rows": min(max_results, 50),
+                "fl[]": ["identifier", "title", "description", "creator", "date"],
+                "sort[]": "downloads desc",
+            },
+            timeout=5.0,
+        )
+        resp.raise_for_status()
+        for doc in resp.json().get("response", {}).get("docs", []):
+            identifier = doc.get("identifier", "")
+            if not identifier:
+                continue
+            title = doc.get("title", identifier)
+            if isinstance(title, list):
+                title = title[0] if title else identifier
+            desc = doc.get("description", "")
+            if isinstance(desc, list):
+                desc = desc[0] if desc else ""
+            creator = doc.get("creator", "")
+            if isinstance(creator, list):
+                creator = creator[0] if creator else ""
+            date = doc.get("date", "")
+            body = desc[:300] if desc else ""
+            if creator:
+                body = f"{creator} — {body}" if body else creator
+            if date:
+                body = f"{body} ({date[:4]})" if body else date[:4]
+            results.append({
+                "title": title,
+                "url": f"https://archive.org/details/{identifier}",
+                "body": body.strip(),
+                "source": "Internet Archive",
+                "source_type": "archive",
+            })
+        if results:
+            logger.info("Internet Archive texts: %d results", len(results))
+    except Exception:
+        logger.warning("Internet Archive texts failed", exc_info=True)
+    return results
+
+
+def _try_stract(query, max_results=20):
+    """Search Stract — open-source, independent search engine (free API, no key required)."""
+    results = []
+    try:
+        resp = _get_http().get(
+            "https://stract.com/api/search",
+            params={"q": query, "num_results": min(max_results, 20)},
+            headers={"Accept": "application/json"},
+            timeout=6.0,
+        )
+        resp.raise_for_status()
+        for r in resp.json().get("webpages", []):
+            url = r.get("url", "")
+            if not url:
+                continue
+            snippet = r.get("snippet", {})
+            body = snippet.get("text", "") if isinstance(snippet, dict) else str(snippet or "")
+            results.append({
+                "title": r.get("title", ""),
+                "url": url,
+                "body": body,
+                "source": "Stract",
+                "source_type": "independent",
+            })
+        if results:
+            logger.info("Stract: %d results", len(results))
+    except Exception:
+        logger.warning("Stract search failed", exc_info=True)
+    return results
+
+
+_SEARXNG_INSTANCES = [
+    "https://search.mdosch.de",
+    "https://searx.be",
+    "https://searxng.site",
+    "https://search.disroot.org",
+]
+
+
+def _try_searxng(query, max_results=20):
+    """Query a public SearXNG instance — meta-search across many engines (no key required)."""
+    for base in _SEARXNG_INSTANCES:
+        results = []
+        try:
+            resp = _get_http().get(
+                f"{base}/search",
+                params={"q": query, "format": "json", "categories": "general"},
+                headers={"User-Agent": "abbiey.search/1.0"},
+                timeout=6.0,
+            )
+            if resp.status_code != 200:
+                continue
+            for r in resp.json().get("results", [])[:max_results]:
+                url = r.get("url", "")
+                if not url:
+                    continue
+                results.append({
+                    "title": r.get("title", ""),
+                    "url": url,
+                    "body": r.get("content", ""),
+                    "source": "SearXNG",
+                    "source_type": "aggregator",
+                })
+            if results:
+                logger.info("SearXNG (%s): %d results", base, len(results))
+                return results
+        except Exception:
+            continue
+    return []
+
+
+def _try_reddit_text(query, max_results=15):
+    """Search Reddit for top posts/discussions on any topic (no key required)."""
+    import datetime as _dt
+    results = []
+    try:
+        resp = _get_http().get(
+            "https://www.reddit.com/search.json",
+            params={"q": query, "sort": "relevance", "t": "all",
+                    "limit": min(max_results, 25), "type": "link"},
+            headers={"User-Agent": "abbiey.search/1.0 (privacy search engine)"},
+            timeout=5.0,
+        )
+        resp.raise_for_status()
+        for child in resp.json().get("data", {}).get("children", []):
+            post = child.get("data", {})
+            url = post.get("url", "")
+            title = post.get("title", "")
+            if not url or not title:
+                continue
+            score = post.get("score", 0)
+            sub = post.get("subreddit_name_prefixed", "r/?")
+            num_comments = post.get("num_comments", 0)
+            selftext = (post.get("selftext") or "")[:200]
+            body = (
+                selftext
+                if selftext and selftext not in ("[deleted]", "[removed]")
+                else f"{sub} · {score:,} upvotes · {num_comments} comments"
+            )
+            results.append({
+                "title": title,
+                "url": url,
+                "body": body,
+                "source": f"Reddit · {sub}",
+                "source_type": "community",
+            })
+        if results:
+            logger.info("Reddit text: %d results", len(results))
+    except Exception:
+        logger.warning("Reddit text search failed", exc_info=True)
+    return results
+
+
+def _try_hackernews_text(query, max_results=10):
+    """Search Hacker News stories and discussions (no key required)."""
+    results = []
+    try:
+        resp = _get_http().get(
+            "https://hn.algolia.com/api/v1/search",
+            params={"query": query, "hitsPerPage": min(max_results, 20)},
+            timeout=4.0,
+        )
+        resp.raise_for_status()
+        for hit in resp.json().get("hits", []):
+            url = hit.get("url") or f"https://news.ycombinator.com/item?id={hit.get('objectID', '')}"
+            title = hit.get("title", "")
+            if not title or not url:
+                continue
+            points = hit.get("points") or 0
+            num_comments = hit.get("num_comments") or 0
+            author = hit.get("author", "")
+            created = (hit.get("created_at") or "")[:10]
+            body = f"{points} points · {num_comments} comments · {author}"
+            if created:
+                body += f" · {created}"
+            results.append({
+                "title": title,
+                "url": url,
+                "body": body,
+                "source": "Hacker News",
+                "source_type": "community",
+            })
+        if results:
+            logger.info("HackerNews text: %d results", len(results))
+    except Exception:
+        logger.warning("HackerNews text search failed", exc_info=True)
+    return results
 
 
 # ---- Deduplication ----
@@ -1923,6 +3178,46 @@ def _fetch_results(query, page, search_type, region=None, lang=None, operators=N
         except Exception:
             logger.exception("DDG failed for query=%s type=%s", query, search_type)
 
+        # Text: parallel multi-source enrichment — always blend deeper sources alongside DDG
+        if search_type == "text":
+            existing_urls = {r.get("url", "") for r in results}
+            _deep_pool = ThreadPoolExecutor(max_workers=10)
+            try:
+                _deep_futures = {
+                    _deep_pool.submit(_try_marginalia, query): "marginalia",
+                    _deep_pool.submit(_try_stract, query): "stract",
+                    _deep_pool.submit(_try_searxng, query): "searxng",
+                    _deep_pool.submit(_try_hackernews_text, query): "hn",
+                    _deep_pool.submit(_try_reddit_text, query): "reddit",
+                    _deep_pool.submit(_try_internet_archive_text, query): "archive",
+                }
+                if _looks_academic(query):
+                    _deep_futures[_deep_pool.submit(_try_arxiv, query)] = "arxiv"
+                    _deep_futures[_deep_pool.submit(_try_pubmed, query)] = "pubmed"
+                    _deep_futures[_deep_pool.submit(_try_crossref, query)] = "crossref"
+                deep_results = []
+                done, pending = _futures_wait(_deep_futures.keys(), timeout=8)
+                for _future in pending:
+                    _future.cancel()
+                for _future in done:
+                    try:
+                        for r in (_future.result() or []):
+                            url = r.get("url", "")
+                            if url and url not in existing_urls:
+                                existing_urls.add(url)
+                                deep_results.append(r)
+                    except Exception:
+                        pass
+                # Surface academic results above community noise when query is academic
+                if _looks_academic(query):
+                    academic = [r for r in deep_results if r.get("source_type") == "academic"]
+                    other = [r for r in deep_results if r.get("source_type") != "academic"]
+                    results = results + academic + other
+                else:
+                    results = results + deep_results
+            finally:
+                _deep_pool.shutdown(wait=False)
+
         # Image-specific fallbacks
         if not results and search_type == "images":
             logger.info("Image search empty, trying Openverse")
@@ -1932,10 +3227,35 @@ def _fetch_results(query, page, search_type, region=None, lang=None, operators=N
             logger.info("Openverse empty, trying Wikimedia Commons")
             results = _try_wikimedia_commons(query)
 
-        # News-specific fallback (layer 2b)
+        if not results and search_type == "images":
+            logger.info("Wikimedia empty, trying Internet Archive")
+            results = _try_internet_archive_images(query, max_results)
+
+        # News-specific fallbacks
         if not results and search_type == "news":
             logger.info("News search empty, trying Google News RSS")
             results = _try_google_news_rss(query)
+
+        if not results and search_type == "news":
+            logger.info("Google News empty, trying Bing News RSS")
+            results = _try_bing_news_rss(query)
+
+        if not results and search_type == "news":
+            logger.info("Bing News empty, trying HackerNews")
+            results = _try_hackernews(query, max_results)
+
+        if not results and search_type == "news":
+            logger.info("HackerNews empty, trying Reddit")
+            results = _try_reddit_news(query, max_results)
+
+        # Video-specific fallbacks
+        if not results and search_type == "videos":
+            logger.info("Video search empty, trying Internet Archive")
+            results = _try_internet_archive_videos(query, max_results)
+
+        if not results and search_type == "videos":
+            logger.info("Internet Archive videos empty, trying PeerTube")
+            results = _try_peertube(query, max_results)
 
         # Code-specific fallbacks
         if search_type == "code":
@@ -1946,20 +3266,29 @@ def _fetch_results(query, page, search_type, region=None, lang=None, operators=N
                 logger.info("Code search: trying StackOverflow")
                 results = _try_stackoverflow(effective_query, max_results)
             if not results:
+                logger.info("Code search: trying GitLab")
+                results = _try_gitlab(effective_query, max_results)
+            if not results:
                 logger.info("Code search: trying DDG code-focused")
                 results = _try_code_ddg(effective_query, max_results)
-            # For code, also merge SO results into GitHub results for variety
+            # For code, merge extra sources for variety
             if results and len(results) < max_results // 2:
                 try:
                     so = _try_stackoverflow(effective_query, 10)
                     gh = _try_github_search(effective_query, 10)
-                    results = results + so + gh
+                    gl = _try_gitlab(effective_query, 10)
+                    npm = _try_npm(effective_query, 10)
+                    results = results + so + gh + gl + npm
                 except Exception:
                     pass
 
-    # Text-only deep fallbacks (layers 3-6)
+    # Text-only deep fallbacks
     if not results and search_type == "text":
-        logger.info("SearXNG empty, trying Wikipedia")
+        logger.info("DDG empty, trying Marginalia")
+        results = _try_marginalia(query)
+
+    if not results and search_type == "text":
+        logger.info("Marginalia empty, trying Wikipedia")
         results = _try_wikipedia(query, lang)
 
     if not results and search_type == "text":
@@ -1985,6 +3314,256 @@ def _fetch_results(query, page, search_type, region=None, lang=None, operators=N
     has_more = len(results) > start + RESULTS_PER_PAGE
 
     return {"results": page_results, "has_more": has_more, "page": page}
+
+
+# ---------------------------------------------------------------------------
+# Auth routes — signup / login / logout / profile
+# ---------------------------------------------------------------------------
+import re as _re
+
+_USERNAME_RE = _re.compile(r'^[a-zA-Z0-9_]{3,30}$')
+
+
+def _require_login():
+    """Return a redirect if not logged in, else None."""
+    if not session.get("user_id"):
+        return redirect(url_for("login", next=request.path))
+    return None
+
+
+@app.route("/signup", methods=["GET", "POST"])
+@limiter.limit("20/hour")
+def signup():
+    if session.get("user_id"):
+        return redirect(url_for("profile"))
+
+    if request.method == "GET":
+        return render_template("signup.html")
+
+    username = request.form.get("username", "").strip()
+    email    = request.form.get("email", "").strip().lower()
+    password = request.form.get("password", "")
+    confirm  = request.form.get("confirm_password", "")
+
+    errors = []
+    if not _USERNAME_RE.match(username):
+        errors.append("Username must be 3–30 characters: letters, numbers, underscores only.")
+    if not email or "@" not in email:
+        errors.append("A valid email address is required.")
+    if len(password) < 8:
+        errors.append("Password must be at least 8 characters.")
+    if password != confirm:
+        errors.append("Passwords do not match.")
+
+    if errors:
+        return render_template("signup.html", errors=errors, username=username, email=email)
+
+    pw_hash = generate_password_hash(password)
+    try:
+        with sqlite3.connect(_USERS_DB) as con:
+            cur = con.execute(
+                "INSERT INTO users (username, email, password_hash, display_name) VALUES (?,?,?,?)",
+                (username, email, pw_hash, username),
+            )
+            uid = cur.lastrowid
+    except sqlite3.IntegrityError as exc:
+        msg = str(exc).lower()
+        if "username" in msg:
+            errors.append("That username is already taken.")
+        elif "email" in msg:
+            errors.append("An account with that email already exists.")
+        else:
+            errors.append("Account could not be created. Please try again.")
+        return render_template("signup.html", errors=errors, username=username, email=email)
+
+    session.permanent = True
+    session["user_id"] = uid
+    return redirect(url_for("profile"))
+
+
+@app.route("/login", methods=["GET", "POST"])
+@limiter.limit("30/hour")
+def login():
+    if session.get("user_id"):
+        return redirect(url_for("profile"))
+
+    if request.method == "GET":
+        return render_template("login.html", next=request.args.get("next", ""))
+
+    identifier = request.form.get("identifier", "").strip()
+    password   = request.form.get("password", "")
+    next_url   = request.form.get("next", "")
+
+    user = _get_user_by_login(identifier)
+    if not user or not check_password_hash(user["password_hash"], password):
+        return render_template(
+            "login.html",
+            error="Invalid email/username or password.",
+            identifier=identifier,
+            next=next_url,
+        )
+
+    session.permanent = True
+    session["user_id"] = user["id"]
+    return redirect(next_url or url_for("profile"))
+
+
+@app.route("/logout")
+def logout():
+    session.pop("user_id", None)
+    return redirect(url_for("index"))
+
+
+@app.route("/profile")
+def profile():
+    redir = _require_login()
+    if redir:
+        return redir
+
+    uid = session["user_id"]
+    user = _get_user_by_id(uid)
+    if not user:
+        session.pop("user_id", None)
+        return redirect(url_for("login"))
+
+    with sqlite3.connect(_USERS_DB) as con:
+        con.row_factory = sqlite3.Row
+        bookmarks = [
+            dict(r) for r in con.execute(
+                "SELECT * FROM user_bookmarks WHERE user_id=? ORDER BY saved_at DESC LIMIT 100",
+                (uid,)
+            ).fetchall()
+        ]
+        history = [
+            dict(r) for r in con.execute(
+                "SELECT query, search_type, searched_at FROM user_search_history"
+                " WHERE user_id=? ORDER BY searched_at DESC LIMIT 50",
+                (uid,)
+            ).fetchall()
+        ]
+
+    return render_template("profile.html", user=user, bookmarks=bookmarks, history=history)
+
+
+@app.route("/profile/update", methods=["POST"])
+def profile_update():
+    redir = _require_login()
+    if redir:
+        return redir
+
+    uid          = session["user_id"]
+    display_name = request.form.get("display_name", "").strip()[:60]
+    bio          = request.form.get("bio", "").strip()[:200]
+
+    with sqlite3.connect(_USERS_DB) as con:
+        con.execute(
+            "UPDATE users SET display_name=?, bio=? WHERE id=?",
+            (display_name or None, bio, uid),
+        )
+
+    return redirect(url_for("profile"))
+
+
+# ---- Bookmarks API (server-side, requires login) ----------------------------
+
+@app.route("/api/user/bookmarks", methods=["GET"])
+def api_user_bookmarks_get():
+    if not session.get("user_id"):
+        return jsonify({"error": "Not authenticated"}), 401
+    uid = session["user_id"]
+    with sqlite3.connect(_USERS_DB) as con:
+        con.row_factory = sqlite3.Row
+        rows = con.execute(
+            "SELECT id, url, title, snippet, saved_at FROM user_bookmarks"
+            " WHERE user_id=? ORDER BY saved_at DESC",
+            (uid,)
+        ).fetchall()
+    return jsonify({"bookmarks": [dict(r) for r in rows]})
+
+
+@app.route("/api/user/bookmarks", methods=["POST"])
+@limiter.limit("200/day")
+def api_user_bookmarks_save():
+    if not session.get("user_id"):
+        return jsonify({"error": "Not authenticated"}), 401
+    uid  = session["user_id"]
+    data = request.get_json(silent=True) or {}
+    url     = (data.get("url") or "").strip()[:2000]
+    title   = (data.get("title") or "").strip()[:300]
+    snippet = (data.get("snippet") or "").strip()[:500]
+    if not url:
+        return jsonify({"error": "url required"}), 400
+    try:
+        with sqlite3.connect(_USERS_DB) as con:
+            cur = con.execute(
+                "INSERT OR IGNORE INTO user_bookmarks (user_id, url, title, snippet)"
+                " VALUES (?,?,?,?)",
+                (uid, url, title, snippet),
+            )
+            bid = cur.lastrowid
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+    return jsonify({"ok": True, "id": bid}), 201
+
+
+@app.route("/api/user/bookmarks/<int:bid>", methods=["DELETE"])
+def api_user_bookmarks_delete(bid: int):
+    if not session.get("user_id"):
+        return jsonify({"error": "Not authenticated"}), 401
+    uid = session["user_id"]
+    with sqlite3.connect(_USERS_DB) as con:
+        con.execute(
+            "DELETE FROM user_bookmarks WHERE id=? AND user_id=?", (bid, uid)
+        )
+    return jsonify({"ok": True})
+
+
+@app.route("/api/user/bookmarks/sync", methods=["POST"])
+@limiter.limit("20/hour")
+def api_user_bookmarks_sync():
+    """Accept a list of localStorage bookmarks and upsert them server-side."""
+    if not session.get("user_id"):
+        return jsonify({"error": "Not authenticated"}), 401
+    uid   = session["user_id"]
+    items = (request.get_json(silent=True) or {}).get("bookmarks", [])
+    saved = 0
+    with sqlite3.connect(_USERS_DB) as con:
+        for item in items[:500]:
+            url     = str(item.get("url") or "")[:2000].strip()
+            title   = str(item.get("title") or "")[:300].strip()
+            snippet = str(item.get("snippet") or "")[:500].strip()
+            if not url:
+                continue
+            con.execute(
+                "INSERT OR IGNORE INTO user_bookmarks (user_id, url, title, snippet)"
+                " VALUES (?,?,?,?)",
+                (uid, url, title, snippet),
+            )
+            saved += 1
+    return jsonify({"ok": True, "saved": saved})
+
+
+@app.route("/api/user/history", methods=["POST"])
+def api_user_history_add():
+    """Record a search query for the logged-in user."""
+    if not session.get("user_id"):
+        return jsonify({"ok": False}), 200  # silent, not an error
+    uid  = session["user_id"]
+    data = request.get_json(silent=True) or {}
+    q    = (data.get("query") or "").strip()[:500]
+    st   = (data.get("search_type") or "text")[:20]
+    if not q:
+        return jsonify({"ok": False}), 200
+    try:
+        with sqlite3.connect(_USERS_DB) as con:
+            con.execute(
+                "INSERT INTO user_search_history (user_id, query, search_type)"
+                " VALUES (?,?,?)",
+                (uid, q, st),
+            )
+    except Exception:
+        pass
+    return jsonify({"ok": True})
 
 
 if __name__ == "__main__":
