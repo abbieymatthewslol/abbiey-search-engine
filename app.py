@@ -13,15 +13,12 @@ from concurrent.futures import ThreadPoolExecutor, as_completed, wait as _future
 from dataclasses import asdict
 from urllib.parse import parse_qs, quote_plus, unquote, urlparse
 
-import hashlib
-import hmac
-
 import feedparser
 import httpx
 import stripe
 from cachetools import TTLCache
 from ddgs import DDGS
-from flask import Flask, render_template, request, jsonify, redirect, session, url_for, make_response, flash
+from flask import Flask, render_template, request, jsonify, redirect, session, url_for, flash
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
