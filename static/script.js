@@ -384,25 +384,31 @@ document.addEventListener("DOMContentLoaded", () => {
     let privacyStatsFetched = false;
     privacyBadge.addEventListener("click", (e) => {
       e.stopPropagation();
-      privacyPopover.classList.toggle("open");
-      if (!privacyStatsFetched && privacyPopover.classList.contains("open")) {
-        privacyStatsFetched = true;
-        fetch("/api/privacy-stats")
-          .then(r => r.json())
-          .then(data => {
-            const t = document.getElementById("pstat-trackers");
-            const p = document.getElementById("pstat-personal");
-            const s = document.getElementById("pstat-shared");
-            if (t) t.textContent = data.trackers ?? 0;
-            if (p) p.textContent = data.personal_data ?? 0;
-            if (s) s.textContent = data.third_party_shared ?? 0;
-          })
-          .catch(() => { /* keep default 0s on error */ });
+      if (privacyPopover.classList.contains("open")) {
+        privacyPopover.classList.add("closing");
+        setTimeout(() => { privacyPopover.classList.remove("open", "closing"); }, 150);
+      } else {
+        privacyPopover.classList.add("open");
+        if (!privacyStatsFetched && privacyPopover.classList.contains("open")) {
+          privacyStatsFetched = true;
+          fetch("/api/privacy-stats")
+            .then(r => r.json())
+            .then(data => {
+              const t = document.getElementById("pstat-trackers");
+              const p = document.getElementById("pstat-personal");
+              const s = document.getElementById("pstat-shared");
+              if (t) t.textContent = data.trackers ?? 0;
+              if (p) p.textContent = data.personal_data ?? 0;
+              if (s) s.textContent = data.third_party_shared ?? 0;
+            })
+            .catch(() => { /* keep default 0s on error */ });
+        }
       }
     });
     if (privacyPopoverClose) {
       privacyPopoverClose.addEventListener("click", () => {
-        privacyPopover.classList.remove("open");
+        privacyPopover.classList.add("closing");
+        setTimeout(() => { privacyPopover.classList.remove("open", "closing"); }, 150);
       });
     }
   }
@@ -726,6 +732,8 @@ document.addEventListener("DOMContentLoaded", () => {
   function loadMore() {
     if (loading || !hasMore) return;
     loading = true;
+    const loadMoreBtn = document.querySelector(".load-more-btn");
+    if (loadMoreBtn) loadMoreBtn.classList.add("loading");
     const page = parseInt(sentinel.dataset.page) + 1;
     sentinel.querySelector(".scroll-loader").classList.remove("hidden");
     showSkeletons(5);
@@ -778,8 +786,10 @@ document.addEventListener("DOMContentLoaded", () => {
         if (data.has_more) { hasMore = true; sentinel.querySelector(".scroll-loader").classList.add("hidden"); }
         else { hasMore = false; sentinel.remove(); observer.disconnect(); }
         loading = false;
+        const loadMoreBtnDone = document.querySelector(".load-more-btn");
+        if (loadMoreBtnDone) loadMoreBtnDone.classList.remove("loading");
       })
-      .catch(() => { removeSkeletons(); sentinel.querySelector(".scroll-loader").classList.add("hidden"); loading = false; });
+      .catch(() => { removeSkeletons(); sentinel.querySelector(".scroll-loader").classList.add("hidden"); loading = false; const loadMoreBtnErr = document.querySelector(".load-more-btn"); if (loadMoreBtnErr) loadMoreBtnErr.classList.remove("loading"); });
   }
 
   const observer = new IntersectionObserver((entries) => {
@@ -821,9 +831,10 @@ document.addEventListener("DOMContentLoaded", () => {
     const target = e.target;
 
     // Privacy popover close
-    if (privacyPopover && privacyPopover.classList.contains("open")) {
+    if (privacyPopover && privacyPopover.classList.contains("open") && !privacyPopover.classList.contains("closing")) {
       if (!target.closest(".privacy-popover") && !target.closest("#privacy-badge")) {
-        privacyPopover.classList.remove("open");
+        privacyPopover.classList.add("closing");
+        setTimeout(() => { privacyPopover.classList.remove("open", "closing"); }, 150);
       }
     }
 
