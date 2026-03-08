@@ -37,10 +37,12 @@ _STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
 _STRIPE_PRICE_ID       = os.environ.get("STRIPE_PRICE_ID", "")
 _BASE_URL              = os.environ.get("BASE_URL", "http://localhost:8000")
 
-_PAYMENTS_DB  = os.path.join(os.path.dirname(__file__), "payments.db")
-_WAITLIST_DB  = os.path.join(os.path.dirname(__file__), "waitlist.db")
-_ANALYTICS_DB = os.path.join(os.path.dirname(__file__), "analytics.db")
-_USERS_DB     = os.path.join(os.path.dirname(__file__), "users.db")
+# On Vercel the filesystem is read-only except /tmp; use /tmp when running there.
+_DB_DIR       = "/tmp" if os.environ.get("VERCEL") else os.path.dirname(__file__)
+_PAYMENTS_DB  = os.path.join(_DB_DIR, "payments.db")
+_WAITLIST_DB  = os.path.join(_DB_DIR, "waitlist.db")
+_ANALYTICS_DB = os.path.join(_DB_DIR, "analytics.db")
+_USERS_DB     = os.path.join(_DB_DIR, "users.db")
 _ADMIN_TOKEN  = os.environ.get("ADMIN_TOKEN", "")
 
 OLLAMA_MODEL    = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
