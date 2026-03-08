@@ -1550,6 +1550,7 @@ article.result.code-result { font-size: .9rem; }
 
 /* ===== 14. PRIVACY POPOVER ===== */
 .privacy-popover {
+  display: none;
   position: fixed;
   top: 56px; left: 50%;
   transform: translateX(-50%);
@@ -1562,7 +1563,7 @@ article.result.code-result { font-size: .9rem; }
   padding: 1rem;
   animation: slideUp var(--dur-base) var(--ease-spring);
 }
-.privacy-popover[hidden] { display: none; }
+.privacy-popover.open { display: block; }
 .privacy-popover-header {
   display: flex;
   align-items: center;
@@ -1606,16 +1607,16 @@ article.result.code-result { font-size: .9rem; }
 
 /* ===== 15. LIGHTBOX ===== */
 .lightbox-overlay {
+  display: none;
   position: fixed;
   inset: 0;
   background: rgba(0,0,0,.9);
   z-index: 600;
-  display: flex;
   align-items: center;
   justify-content: center;
   animation: fadeIn var(--dur-fast) var(--ease-out);
 }
-.lightbox-overlay[hidden] { display: none; }
+.lightbox-overlay.active { display: flex; }
 .lightbox-close {
   position: absolute;
   top: 1rem; right: 1rem;
