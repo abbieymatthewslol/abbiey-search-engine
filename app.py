@@ -314,7 +314,7 @@ limiter = Limiter(
 # ---------------------------------------------------------------------------
 # TTL cache for search results — fixes pagination instability
 # ---------------------------------------------------------------------------
-_cache = TTLCache(maxsize=500, ttl=300)
+_cache = TTLCache(maxsize=500, ttl=900)
 _cache_lock = threading.Lock()
 
 # Onion link status cache (TTL 10 min)
@@ -1135,19 +1135,29 @@ def search():
     if page == 1:
         _log_search(query, search_type, region or "", len(results.get("results", [])))
 
-    # Fetch entity-specific results on page 1 (text only)
+    # Fetch entity-specific results on page 1 (text only) — parallel
     entity_results = []
     entity_urls = set()
     if entities and search_type == "text" and page == 1:
-        for eq in entity_queries[:4]:
-            er = _fetch_results(eq["query"], 1, eq["type"])
-            if er["results"]:
-                for r in er["results"][:3]:
-                    entity_urls.add(r.get("url", ""))
-                entity_results.append({
-                    "label": eq["label"],
-                    "results": er["results"][:3],
-                })
+        _eq_slice = entity_queries[:4]
+        with ThreadPoolExecutor(max_workers=4) as _eq_pool:
+            _eq_futures = {
+                _eq_pool.submit(_fetch_results, eq["query"], 1, eq["type"]): eq
+                for eq in _eq_slice
+            }
+            for fut in as_completed(_eq_futures):
+                eq = _eq_futures[fut]
+                try:
+                    er = fut.result(timeout=6)
+                except Exception:
+                    continue
+                if er["results"]:
+                    for r in er["results"][:3]:
+                        entity_urls.add(r.get("url", ""))
+                    entity_results.append({
+                        "label": eq["label"],
+                        "results": er["results"][:3],
+                    })
 
     # Deduplicate: remove entity result URLs from main results
     if entity_urls:
@@ -1172,11 +1182,27 @@ def search():
         # Unit conversion
         if not calculator and not color:
             unit_convert = _try_unit_convert(query)
-        # Weather (check entity type)
-        if primary and primary.type == "weather":
+        # Weather + knowledge panel — run in parallel where possible
+        _want_weather = primary and primary.type == "weather"
+        _want_knowledge = not dictionary and not calculator and not color and not unit_convert
+        if _want_weather and _want_knowledge:
+            with ThreadPoolExecutor(max_workers=2) as _card_pool:
+                _wf = _card_pool.submit(_try_weather, primary.meta.get("location", ""))
+                _kf = _card_pool.submit(_try_knowledge_panel, query)
+                try:
+                    weather = _wf.result(timeout=4)
+                except Exception:
+                    weather = None
+                if not weather:
+                    try:
+                        knowledge = _kf.result(timeout=4)
+                    except Exception:
+                        knowledge = None
+                else:
+                    _kf.cancel()
+        elif _want_weather:
             weather = _try_weather(primary.meta.get("location", ""))
-        # Knowledge panel (only if no special cards already showing)
-        if not dictionary and not calculator and not color and not unit_convert and not weather:
+        elif _want_knowledge:
             knowledge = _try_knowledge_panel(query)
 
     return render_template(
@@ -3171,11 +3197,13 @@ def _fetch_results(query, page, search_type, region=None, lang=None, operators=N
             logger.info("Ahmia empty, trying DDG onion fallback")
             results = _try_onion_ddg(effective_query)
     else:
-        # Layer 1: DDG multi-backend
+        # Layer 1: DDG multi-backend (with timeout guard)
         try:
-            results = _try_ddg(effective_query, max_results, search_type, region, time_filter=time_filter, safesearch=safesearch)
+            with ThreadPoolExecutor(max_workers=1) as _ddg_pool:
+                _ddg_fut = _ddg_pool.submit(_try_ddg, effective_query, max_results, search_type, region, time_filter, safesearch)
+                results = _ddg_fut.result(timeout=5)
         except Exception:
-            logger.exception("DDG failed for query=%s type=%s", query, search_type)
+            logger.exception("DDG failed/timed out for query=%s type=%s", query, search_type)
 
         # Text: parallel multi-source enrichment — always blend deeper sources alongside DDG
         if search_type == "text":
@@ -3217,44 +3245,59 @@ def _fetch_results(query, page, search_type, region=None, lang=None, operators=N
             finally:
                 _deep_pool.shutdown(wait=False)
 
-        # Image-specific fallbacks
+        # Image-specific fallbacks — parallel
         if not results and search_type == "images":
-            logger.info("Image search empty, trying Openverse")
-            results = _try_openverse(query)
+            logger.info("Image search empty, trying parallel fallbacks")
+            with ThreadPoolExecutor(max_workers=3) as _img_pool:
+                _img_futs = [
+                    _img_pool.submit(_try_openverse, query),
+                    _img_pool.submit(_try_wikimedia_commons, query),
+                    _img_pool.submit(_try_internet_archive_images, query, max_results),
+                ]
+                for fut in as_completed(_img_futs):
+                    try:
+                        r = fut.result(timeout=6)
+                        if r:
+                            results = r
+                            break
+                    except Exception:
+                        pass
 
-        if not results and search_type == "images":
-            logger.info("Openverse empty, trying Wikimedia Commons")
-            results = _try_wikimedia_commons(query)
-
-        if not results and search_type == "images":
-            logger.info("Wikimedia empty, trying Internet Archive")
-            results = _try_internet_archive_images(query, max_results)
-
-        # News-specific fallbacks
+        # News-specific fallbacks — parallel
         if not results and search_type == "news":
-            logger.info("News search empty, trying Google News RSS")
-            results = _try_google_news_rss(query)
+            logger.info("News search empty, trying parallel fallbacks")
+            with ThreadPoolExecutor(max_workers=4) as _news_pool:
+                _news_futs = [
+                    _news_pool.submit(_try_google_news_rss, query),
+                    _news_pool.submit(_try_bing_news_rss, query),
+                    _news_pool.submit(_try_hackernews, query, max_results),
+                    _news_pool.submit(_try_reddit_news, query, max_results),
+                ]
+                for fut in as_completed(_news_futs):
+                    try:
+                        r = fut.result(timeout=6)
+                        if r:
+                            results = r
+                            break
+                    except Exception:
+                        pass
 
-        if not results and search_type == "news":
-            logger.info("Google News empty, trying Bing News RSS")
-            results = _try_bing_news_rss(query)
-
-        if not results and search_type == "news":
-            logger.info("Bing News empty, trying HackerNews")
-            results = _try_hackernews(query, max_results)
-
-        if not results and search_type == "news":
-            logger.info("HackerNews empty, trying Reddit")
-            results = _try_reddit_news(query, max_results)
-
-        # Video-specific fallbacks
+        # Video-specific fallbacks — parallel
         if not results and search_type == "videos":
-            logger.info("Video search empty, trying Internet Archive")
-            results = _try_internet_archive_videos(query, max_results)
-
-        if not results and search_type == "videos":
-            logger.info("Internet Archive videos empty, trying PeerTube")
-            results = _try_peertube(query, max_results)
+            logger.info("Video search empty, trying parallel fallbacks")
+            with ThreadPoolExecutor(max_workers=2) as _vid_pool:
+                _vid_futs = [
+                    _vid_pool.submit(_try_internet_archive_videos, query, max_results),
+                    _vid_pool.submit(_try_peertube, query, max_results),
+                ]
+                for fut in as_completed(_vid_futs):
+                    try:
+                        r = fut.result(timeout=6)
+                        if r:
+                            results = r
+                            break
+                    except Exception:
+                        pass
 
         # Code-specific fallbacks
         if search_type == "code":
