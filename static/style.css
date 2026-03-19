@@ -88,15 +88,20 @@ header {
 }
 
 .logo {
-  font-size: 1.15rem;
-  font-weight: 700;
-  letter-spacing: -.02em;
+  font-size: 1.2rem;
+  font-weight: 800;
+  letter-spacing: -.03em;
   color: var(--text);
   text-decoration: none;
-  transition: opacity var(--dur-fast) var(--ease-out);
+  transition: opacity 200ms var(--ease-out);
 }
-.logo:hover { opacity: .8; }
-.logo span { color: var(--accent); }
+.logo:hover { opacity: .75; }
+.logo span {
+  background: linear-gradient(135deg, var(--accent) 0%, color-mix(in srgb, var(--accent) 65%, #7dd3fc) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
 
 .header-controls { display: flex; align-items: center; gap: .375rem; }
 
