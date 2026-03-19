@@ -615,16 +615,37 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function renderHistory() {
       const items = getHistory();
-      if (!items.length) { hideDropdown(); return; }
-      let h = `<div class="ac-header"><span class="ac-header-label">Recent searches</span><button class="ac-clear-btn" id="ac-clear-all" type="button">Clear all</button></div>`;
-      h += items.map((text, i) =>
-        `<div class="ac-item" data-idx="${i}" data-history="1"><span class="ac-item-icon">\u{1F550}</span><span class="ac-item-text">${esc(text)}</span><button class="ac-delete-btn" data-del-idx="${i}" type="button" title="Remove">&times;</button></div>`
+      // Quick shortcuts always shown at bottom when no input
+      const shortcuts = [
+        { icon: "⚡", label: "!w", desc: "Wikipedia" },
+        { icon: "▶", label: "!yt", desc: "YouTube" },
+        { icon: "🐙", label: "!gh", desc: "GitHub" },
+        { icon: "💬", label: "!r", desc: "Reddit" },
+      ];
+      let h = "";
+      if (items.length) {
+        h += `<div class="ac-header"><span class="ac-header-label">Recent</span><button class="ac-clear-btn" id="ac-clear-all" type="button">Clear</button></div>`;
+        h += items.slice(0, 5).map((text, i) =>
+          `<div class="ac-item" data-idx="${i}" data-history="1"><span class="ac-item-icon">🕐</span><span class="ac-item-text">${esc(text)}</span><button class="ac-delete-btn" data-del-idx="${i}" type="button" title="Remove">&times;</button></div>`
+        ).join("");
+      }
+      h += `<div class="ac-section-divider"><span>Quick shortcuts</span></div>`;
+      h += shortcuts.map((s, i) =>
+        `<div class="ac-item ac-shortcut" data-bang="${esc(s.label)}"><span class="ac-item-icon">${s.icon}</span><span class="ac-item-text"><span class="ac-bang-label">${esc(s.label)}</span> <span class="ac-item-desc">${esc(s.desc)}</span></span></div>`
       ).join("");
       dropdown.innerHTML = h;
       activeIdx = -1;
       showDropdown();
       const clearBtn = document.getElementById("ac-clear-all");
       if (clearBtn) clearBtn.addEventListener("click", (e) => { e.stopPropagation(); clearHistory(); hideDropdown(); });
+      dropdown.querySelectorAll(".ac-shortcut").forEach(el => {
+        el.addEventListener("mousedown", (e) => {
+          e.preventDefault();
+          input.value = el.dataset.bang + " ";
+          hideDropdown();
+          input.focus();
+        });
+      });
     }
 
     function getItems() { return dropdown.querySelectorAll(".ac-item"); }
@@ -669,8 +690,18 @@ document.addEventListener("DOMContentLoaded", () => {
     dropdown.addEventListener("mousedown", (e) => {
       const delBtn = e.target.closest(".ac-delete-btn");
       if (delBtn) { e.preventDefault(); e.stopPropagation(); const idx = parseInt(delBtn.getAttribute("data-del-idx")); const items = getHistory(); if (idx >= 0 && idx < items.length) removeHistory(items[idx]); renderHistory(); return; }
-      const item = e.target.closest(".ac-item");
+      const item = e.target.closest(".ac-item:not(.ac-shortcut)");
       if (item) { e.preventDefault(); selectItem(item.querySelector(".ac-item-text").textContent); }
+    });
+
+    // '/' keyboard shortcut to focus search (when not already in an input)
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "/" && document.activeElement !== input &&
+          !["INPUT","TEXTAREA","SELECT"].includes(document.activeElement.tagName)) {
+        e.preventDefault();
+        input.focus();
+        input.select();
+      }
     });
   }
 

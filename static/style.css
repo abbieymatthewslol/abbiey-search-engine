@@ -395,6 +395,23 @@ body:not(.has-results) #search-input { font-size: 1.0625rem; padding: 1.05rem 0;
 .ac-item:hover, .ac-item.active { background: var(--bg-hover); }
 .ac-item svg { color: var(--text-muted); flex-shrink: 0; }
 .ac-item-history { color: var(--text-dim); }
+.ac-item-desc { font-size: .78rem; color: var(--text-muted); margin-left: .15rem; }
+.ac-bang-label { color: var(--accent); font-weight: 600; font-size: .85rem; }
+
+.ac-section-divider {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .35rem 1rem .2rem;
+  font-size: .68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border-subtle);
+  margin-top: .125rem;
+}
+.ac-section-divider:first-child { border-top: none; margin-top: 0; }
 
 /* Bang hint */
 .bang-hint {
