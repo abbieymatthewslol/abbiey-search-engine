@@ -475,6 +475,28 @@ document.addEventListener("DOMContentLoaded", () => {
       .catch(() => { aiCard.classList.add("ai-hidden"); });
   }
 
+  // ===== Rotating placeholder =====
+  const rotatingInput = document.querySelector("[data-placeholder-rotate]");
+  if (rotatingInput && !rotatingInput.value) {
+    const placeholders = [
+      "Search anything…",
+      "Try a name, email, or username…",
+      "Search a domain or IP address…",
+      "Ask anything — weather, math, conversions…",
+      "Try !w Wikipedia or !yt YouTube…",
+      "Search phone numbers, crypto addresses…",
+      "Find people, places, or things…",
+      "Try a hashtag or social handle…",
+    ];
+    let phIdx = 0;
+    function rotatePlaceholder() {
+      phIdx = (phIdx + 1) % placeholders.length;
+      rotatingInput.setAttribute("placeholder", placeholders[phIdx]);
+    }
+    const phInterval = setInterval(rotatePlaceholder, 3500);
+    rotatingInput.addEventListener("focus", () => clearInterval(phInterval));
+  }
+
   // ===== Bang command suggestions =====
   const searchInput = document.getElementById("search-input");
   const acDropdown = document.getElementById("ac-dropdown");

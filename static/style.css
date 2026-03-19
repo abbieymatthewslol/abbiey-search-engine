@@ -398,12 +398,27 @@ body:not(.has-results) #search-input { font-size: 1.0625rem; padding: 1.05rem 0;
 
 /* Bang hint */
 .bang-hint {
-  margin-top: .75rem;
-  font-size: .775rem;
+  margin-top: .875rem;
+  font-size: .75rem;
   color: var(--text-muted);
   text-align: center;
+  letter-spacing: .01em;
 }
 .bang-hint span { color: var(--accent); font-weight: 500; }
+.bang-hint-extra { color: var(--text-muted); font-weight: 400; }
+.bang-hint kbd {
+  display: inline-block;
+  font-size: .7rem;
+  font-family: inherit;
+  font-weight: 600;
+  padding: .05rem .35rem;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-dim);
+  vertical-align: baseline;
+  line-height: 1.5;
+}
 
 /* ===== 7. SEARCH TABS ===== */
 .search-tabs {
