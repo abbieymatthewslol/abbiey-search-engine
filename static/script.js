@@ -203,6 +203,28 @@ document.addEventListener("DOMContentLoaded", () => {
     document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !settingsOverlay.hasAttribute("hidden")) closeSettings(); });
   }
 
+  // ===== Header overflow dropdown =====
+  const overflowBtn = document.getElementById("header-overflow-btn");
+  const overflowMenu = document.getElementById("header-overflow-menu");
+  if (overflowBtn && overflowMenu) {
+    overflowBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (overflowMenu.hasAttribute("hidden")) {
+        overflowMenu.removeAttribute("hidden");
+      } else {
+        overflowMenu.setAttribute("hidden", "");
+      }
+    });
+    document.addEventListener("click", (e) => {
+      if (!overflowMenu.hasAttribute("hidden") && !overflowMenu.contains(e.target) && e.target !== overflowBtn) {
+        overflowMenu.setAttribute("hidden", "");
+      }
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") overflowMenu.setAttribute("hidden", "");
+    });
+  }
+
   // ===== Sync UI to current values =====
   function syncBtnGroup(id, activeVal) {
     const g = document.getElementById(id);

@@ -180,6 +180,57 @@ header {
 }
 .privacy-badge:hover { background: var(--bg-hover); color: var(--accent); }
 
+/* ===== Header overflow dropdown ===== */
+.header-overflow {
+  position: relative;
+}
+.header-overflow-menu {
+  position: absolute;
+  top: calc(100% + .5rem);
+  right: 0;
+  min-width: 210px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  z-index: 400;
+  padding: .5rem;
+  display: flex;
+  flex-direction: column;
+  gap: .125rem;
+  transform-origin: top right;
+  animation: overflowMenuIn 180ms var(--ease-spring) both;
+}
+.header-overflow-menu[hidden] { display: none; }
+@keyframes overflowMenuIn {
+  from { opacity: 0; transform: scale(.94) translateY(-6px); }
+  to   { opacity: 1; transform: scale(1)   translateY(0);    }
+}
+.overflow-menu-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: .4rem .625rem;
+  border-radius: var(--radius-sm);
+  gap: .75rem;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.overflow-menu-row:hover { background: var(--bg-hover); }
+.overflow-menu-label {
+  font-size: .8rem;
+  color: var(--text-dim);
+  font-weight: 500;
+  flex-shrink: 0;
+}
+.overflow-icon-btn {
+  width: 28px; height: 28px;
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  display: flex; align-items: center; justify-content: center;
+  transition: color var(--dur-fast) var(--ease-out);
+}
+.overflow-icon-btn:hover { color: var(--accent); }
+
 /* ===== 4. APP LAYOUT ===== */
 .app-layout {
   display: flex;

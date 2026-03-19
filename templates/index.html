@@ -15,43 +15,58 @@
     <header>
         <a href="/" class="logo">abbiey.<span>search</span></a>
         <div class="header-controls">
-            {# Privacy badge #}
-            <button class="privacy-badge" id="privacy-badge" aria-label="Privacy stats" title="Privacy stats">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                <span>0 trackers</span>
-            </button>
 
-            {# Region selector #}
-            <div class="region-selector">
-                <select id="region-select" aria-label="Search region">
-                    <option value="">All Regions</option>
-                    <option value="us-en" {% if region == 'us-en' %}selected{% endif %}>US</option>
-                    <option value="uk-en" {% if region == 'uk-en' %}selected{% endif %}>UK</option>
-                    <option value="ca-en" {% if region == 'ca-en' %}selected{% endif %}>Canada</option>
-                    <option value="au-en" {% if region == 'au-en' %}selected{% endif %}>Australia</option>
-                    <option value="de-de" {% if region == 'de-de' %}selected{% endif %}>Germany</option>
-                    <option value="fr-fr" {% if region == 'fr-fr' %}selected{% endif %}>France</option>
-                    <option value="es-es" {% if region == 'es-es' %}selected{% endif %}>Spain</option>
-                    <option value="it-it" {% if region == 'it-it' %}selected{% endif %}>Italy</option>
-                    <option value="jp-jp" {% if region == 'jp-jp' %}selected{% endif %}>Japan</option>
-                    <option value="in-en" {% if region == 'in-en' %}selected{% endif %}>India</option>
-                    <option value="br-pt" {% if region == 'br-pt' %}selected{% endif %}>Brazil</option>
-                </select>
+            {# ··· overflow dropdown — contains less-used controls #}
+            <div class="header-overflow" id="header-overflow">
+                <button class="header-btn" id="header-overflow-btn" aria-label="More options" title="More options">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/><circle cx="5" cy="12" r="1.2"/></svg>
+                </button>
+                <div class="header-overflow-menu" id="header-overflow-menu" hidden>
+                    <div class="overflow-menu-row">
+                        <span class="overflow-menu-label">Privacy</span>
+                        <button class="privacy-badge" id="privacy-badge" aria-label="Privacy stats" title="Privacy stats">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                            <span>0 trackers</span>
+                        </button>
+                    </div>
+                    <div class="overflow-menu-row">
+                        <span class="overflow-menu-label">Region</span>
+                        <div class="region-selector">
+                            <select id="region-select" aria-label="Search region">
+                                <option value="">All Regions</option>
+                                <option value="us-en" {% if region == 'us-en' %}selected{% endif %}>US</option>
+                                <option value="uk-en" {% if region == 'uk-en' %}selected{% endif %}>UK</option>
+                                <option value="ca-en" {% if region == 'ca-en' %}selected{% endif %}>Canada</option>
+                                <option value="au-en" {% if region == 'au-en' %}selected{% endif %}>Australia</option>
+                                <option value="de-de" {% if region == 'de-de' %}selected{% endif %}>Germany</option>
+                                <option value="fr-fr" {% if region == 'fr-fr' %}selected{% endif %}>France</option>
+                                <option value="es-es" {% if region == 'es-es' %}selected{% endif %}>Spain</option>
+                                <option value="it-it" {% if region == 'it-it' %}selected{% endif %}>Italy</option>
+                                <option value="jp-jp" {% if region == 'jp-jp' %}selected{% endif %}>Japan</option>
+                                <option value="in-en" {% if region == 'in-en' %}selected{% endif %}>India</option>
+                                <option value="br-pt" {% if region == 'br-pt' %}selected{% endif %}>Brazil</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="overflow-menu-row">
+                        <span class="overflow-menu-label">Density</span>
+                        <button id="density-toggle" class="header-btn overflow-icon-btn" aria-label="Toggle density" title="Layout density">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+                        </button>
+                    </div>
+                    <div class="overflow-menu-row">
+                        <span class="overflow-menu-label">Theme</span>
+                        <button id="theme-toggle" class="header-btn overflow-icon-btn" aria-label="Toggle theme">
+                            <svg class="icon-sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+                            <svg class="icon-moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+                        </button>
+                    </div>
+                </div>
             </div>
 
-            {# Density toggle #}
-            <button id="density-toggle" class="header-btn" aria-label="Toggle density" title="Layout density">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
-            </button>
-
-            {# Theme settings #}
+            {# Always-visible: Settings + Sign in #}
             <button id="theme-settings-btn" class="header-btn" aria-label="Theme settings" title="Customize theme">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-            </button>
-
-            <button id="theme-toggle" aria-label="Toggle theme">
-                <svg class="icon-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
-                <svg class="icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
             </button>
 
             {# User account nav #}
