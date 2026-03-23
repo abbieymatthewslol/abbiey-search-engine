@@ -2,10 +2,6 @@
   "version": 2,
   "builds": [
     {
-      "src": "public/**",
-      "use": "@vercel/static"
-    },
-    {
       "src": "api/index.py",
       "use": "@vercel/python",
       "config": {
@@ -20,10 +16,6 @@
     }
   ],
   "routes": [
-    { "src": "/robots.txt", "dest": "/public/robots.txt" },
-    { "src": "/sitemap.xml", "dest": "/public/sitemap.xml" },
-    { "src": "/opensearch.xml", "dest": "/public/opensearch.xml" },
-    { "src": "/manifest.json", "dest": "/public/manifest.json" },
     {
       "src": "/(.*)",
       "dest": "api/index.py"
