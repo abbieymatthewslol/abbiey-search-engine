@@ -5,9 +5,9 @@ check_deploy.py — Deployment drift detector for abbiey.search
 Compares:
   1. Local git HEAD
   2. GitHub remote HEAD (via API)
-  3. Deployed site's embed commit hash (via <meta name="deploy-hash">)
+  3. Live site template fingerprint (CSS class names + deploy-hash meta)
 
-Exits 0 if all match, 1 if drift is detected.
+Exits 0 if all in sync, 1 if drift detected.
 """
 
 import re
@@ -22,6 +22,13 @@ GITHUB_API = "https://api.github.com/repos/abbieymatthewslol/abbiey-search-engin
 REPO_ROOT  = subprocess.check_output(
     ["git", "rev-parse", "--show-toplevel"]
 ).decode().strip()
+
+# CSS class names that ONLY exist in the current (new) templates.
+# If these are absent from the live page, old templates are still deployed.
+TEMPLATE_FINGERPRINTS = {
+    "/signup": ["auth-main", "auth-container", "auth-field"],
+    "/login":  ["auth-main", "auth-container", "auth-field"],
+}
 
 GREEN  = "\033[92m"
 YELLOW = "\033[93m"
@@ -46,16 +53,24 @@ def get_github_hash():
         print(f"  {YELLOW}⚠ Could not reach GitHub API: {e}{RESET}")
         return None
 
-def get_deployed_hash(url):
+def fetch_html(url):
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "check-deploy/1.0"})
         with urllib.request.urlopen(req, timeout=10) as r:
-            html = r.read().decode("utf-8", errors="ignore")
-        match = re.search(r'<meta name="deploy-hash" content="([^"]+)"', html)
-        return match.group(1) if match else None
+            return r.read().decode("utf-8", errors="ignore")
     except Exception as e:
         print(f"  {YELLOW}⚠ Could not reach {url}: {e}{RESET}")
-        return None
+        return ""
+
+def get_deployed_hash(html):
+    match = re.search(r'<meta name="deploy-hash" content="([^"]+)"', html)
+    return match.group(1) if match else None
+
+def check_template_fingerprint(path, html):
+    """Return (ok, missing) — ok=True if all fingerprint classes found."""
+    classes = TEMPLATE_FINGERPRINTS.get(path, [])
+    missing = [c for c in classes if c not in html]
+    return len(missing) == 0, missing
 
 def short(h, n=7):
     return h[:n] if h else "unknown"
@@ -64,41 +79,49 @@ def main():
     print(f"\n{BOLD}🔍 abbiey.search — Deployment Drift Check{RESET}")
     print("─" * 45)
 
-    local_hash    = get_local_hash()
-    github_hash   = get_github_hash()
-    deployed_hash = get_deployed_hash(LIVE_URL)
+    local_hash  = get_local_hash()
+    github_hash = get_github_hash()
 
-    local_s    = short(local_hash)
-    github_s   = short(github_hash)
-    deployed_s = short(deployed_hash) if deployed_hash else f"{YELLOW}not found (old template?){RESET}"
-
-    github_ok   = bool(github_hash and github_hash.startswith(local_s))
-    deployed_ok = bool(deployed_hash and local_hash.startswith(deployed_hash))
+    local_s  = short(local_hash)
+    github_s = short(github_hash)
+    github_ok = bool(github_hash and github_hash.startswith(local_s))
 
     print(f"  Local HEAD    {local_s}")
     print(f"  GitHub master {github_s}  {symbol(github_ok)}")
-    print(f"  Live site     {deployed_s}  {symbol(deployed_ok)}")
     print()
 
+    # --- Template fingerprint checks ---
+    print(f"  {BOLD}Template checks (live site){RESET}")
+    all_templates_ok = True
+    for path, _ in TEMPLATE_FINGERPRINTS.items():
+        html = fetch_html(LIVE_URL + path)
+        ok, missing = check_template_fingerprint(path, html)
+        deployed_hash = get_deployed_hash(html)
+        hash_s = short(deployed_hash) if deployed_hash else f"{YELLOW}no hash{RESET}"
+        status = symbol(ok)
+        label = f"{LIVE_URL}{path}"
+        if ok:
+            print(f"    {status} {label}  (hash: {hash_s})")
+        else:
+            print(f"    {status} {label}")
+            print(f"       Missing CSS classes: {', '.join(missing)}")
+            print(f"       → Old template still live — trigger a Vercel/Render redeploy.")
+            all_templates_ok = False
+
+    print()
     drift = False
 
     if not github_ok:
-        print(f"{RED}  ✗ Local commits have NOT been pushed to GitHub.{RESET}")
+        print(f"{RED}  ✗ Local commits NOT pushed to GitHub.{RESET}")
         print(f"    Run: git push origin master")
         drift = True
 
-    if not deployed_hash:
-        print(f"{YELLOW}  ⚠ Live site has no deploy-hash meta tag — old template still served.{RESET}")
-        print(f"    → Trigger a manual redeploy on Render/Vercel dashboard.")
-        drift = True
-    elif not deployed_ok:
-        print(f"{RED}  ✗ Live site is BEHIND — Render has not redeployed yet.{RESET}")
-        print(f"    GitHub is at {github_s}, live is at {deployed_s}.")
-        print(f"    → render.com → your service → Manual Deploy → Deploy latest commit.")
+    if not all_templates_ok:
+        print(f"{RED}  ✗ Live templates are stale — repo changes not deployed yet.{RESET}")
         drift = True
 
     if not drift:
-        print(f"{GREEN}  ✓ All in sync — live site is running the latest code.{RESET}")
+        print(f"{GREEN}  ✓ All in sync — live site is running the latest templates.{RESET}")
 
     print()
     sys.exit(1 if drift else 0)
