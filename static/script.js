@@ -27,6 +27,33 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  // ===== Top loading progress bar =====
+  (function initProgressBar() {
+    const bar = document.createElement('div');
+    bar.id = 'nprogress-bar';
+    bar.style.cssText = 'width:0%;opacity:0';
+    document.body.prepend(bar);
+
+    function start() {
+      bar.style.transition = 'none';
+      bar.style.width = '0%';
+      bar.style.opacity = '1';
+      requestAnimationFrame(() => {
+        bar.style.transition = 'width 8s cubic-bezier(.1,1,.1,1)';
+        bar.style.width = '85%';
+      });
+    }
+    function finish() {
+      bar.style.transition = 'width .2s ease, opacity .3s .2s ease';
+      bar.style.width = '100%';
+      bar.style.opacity = '0';
+    }
+
+    const form = document.getElementById('search-form');
+    if (form) form.addEventListener('submit', start);
+    window.addEventListener('pageshow', finish);
+  })();
+
   // ===== Theme toggle =====
   const toggle = document.getElementById("theme-toggle");
   const saved = localStorage.getItem("theme");

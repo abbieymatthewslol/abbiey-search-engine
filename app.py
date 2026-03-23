@@ -29,7 +29,12 @@ from entity_parser import detect_entities, build_search_queries, primary_entity
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", os.urandom(24).hex())
-app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0  # no caching for static files
+app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 31536000  # 1-year cache for static files
+
+from flask_compress import Compress
+Compress(app)
+app.config["COMPRESS_ALGORITHM"] = ["br", "gzip"]
+app.config["COMPRESS_MIN_SIZE"] = 500
 
 def _get_deploy_hash() -> str:
     """Return the current git commit hash baked into the running process."""
@@ -347,8 +352,10 @@ limiter = Limiter(
 # ---------------------------------------------------------------------------
 # TTL cache for search results — fixes pagination instability
 # ---------------------------------------------------------------------------
-_cache = TTLCache(maxsize=500, ttl=900)
+_cache = TTLCache(maxsize=1000, ttl=600)
 _cache_lock = threading.Lock()
+_in_flight: dict = {}
+_in_flight_lock = threading.Lock()
 
 # Onion link status cache (TTL 10 min)
 _onion_status_cache = TTLCache(maxsize=2000, ttl=600)
@@ -361,7 +368,11 @@ _http = None
 def _get_http():
     global _http
     if _http is None:
-        _http = httpx.Client(timeout=3.0, follow_redirects=True)
+        _http = httpx.Client(
+            timeout=3.0,
+            follow_redirects=True,
+            limits=httpx.Limits(max_connections=100, max_keepalive_connections=20, keepalive_expiry=30),
+        )
     return _http
 
 
@@ -3218,6 +3229,26 @@ def _fetch_results(query, page, search_type, region=None, lang=None, operators=N
         has_more = len(cached) > start + RESULTS_PER_PAGE
         return {"results": page_results, "has_more": has_more, "page": page}
 
+    # In-flight deduplication: if another thread is already fetching the same key, wait for it
+    _my_event = None
+    with _in_flight_lock:
+        if cache_key in _in_flight:
+            _wait_event = _in_flight[cache_key]
+        else:
+            _my_event = threading.Event()
+            _in_flight[cache_key] = _my_event
+            _wait_event = None
+
+    if _wait_event is not None:
+        _wait_event.wait(timeout=10)
+        with _cache_lock:
+            cached = _cache.get(cache_key)
+        if cached is not None:
+            start = RESULTS_PER_PAGE * (page - 1)
+            page_results = cached[start : start + RESULTS_PER_PAGE]
+            has_more = len(cached) > start + RESULTS_PER_PAGE
+            return {"results": page_results, "has_more": has_more, "page": page}
+
     # Build effective query with operators
     effective_query = _build_engine_query(query, operators) if operators else query
     max_results = CACHE_FETCH_SIZE
@@ -3383,6 +3414,11 @@ def _fetch_results(query, page, search_type, region=None, lang=None, operators=N
     # Store in cache
     with _cache_lock:
         _cache[cache_key] = results
+
+    if _my_event is not None:
+        with _in_flight_lock:
+            _in_flight.pop(cache_key, None)
+        _my_event.set()
 
     start = RESULTS_PER_PAGE * (page - 1)
     page_results = results[start : start + RESULTS_PER_PAGE]
@@ -3693,6 +3729,27 @@ def api_user_history_add():
     except Exception:
         pass
     return jsonify({"ok": True})
+
+
+@app.after_request
+def _set_cache_headers(response):
+    """Set appropriate cache headers based on response type and path."""
+    path = request.path
+    # Static assets — long-lived immutable cache
+    if path.startswith("/static/") and any(
+        path.endswith(ext) for ext in (".css", ".js", ".woff2", ".woff", ".ttf", ".png", ".ico", ".svg", ".webp")
+    ):
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        return response
+    # Trends / autocomplete API — short public cache
+    if path in ("/api/trends", "/api/autocomplete", "/api/suggestions"):
+        response.headers["Cache-Control"] = "public, max-age=60, s-maxage=60"
+        return response
+    # Search page and HTML — never cache
+    if path == "/search" or (response.content_type and "text/html" in response.content_type):
+        response.headers["Cache-Control"] = "no-store"
+        return response
+    return response
 
 
 if __name__ == "__main__":
