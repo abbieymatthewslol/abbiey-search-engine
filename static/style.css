@@ -1879,129 +1879,115 @@ article.result.code-result { font-size: .9rem; }
 .lightbox-source { font-size: .8125rem; color: var(--accent); }
 
 /* ===== 16. AUTH PAGES ===== */
-.auth-page {
-  flex: 1;
+/* Layout: mirrors homepage no-results centered state */
+.auth-main {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 2rem 1rem;
+  flex: 1;
+  min-height: calc(100vh - 52px);
+  padding: 0 1.5rem 4rem;
+  animation: pageIn 150ms var(--ease-out) both;
 }
 
-.auth-card {
+.auth-container {
   width: 100%;
-  max-width: 400px;
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: 2.5rem 2rem;
-  box-shadow: var(--shadow-lg);
-  animation: pageIn 200ms var(--ease-out) both;
+  max-width: 420px;
+  animation: heroIn .5s .1s var(--ease-spring) both;
 }
 
-.auth-card-header {
+.auth-heading {
   text-align: center;
   margin-bottom: 2rem;
 }
 
-.auth-logo-mark {
-  font-size: 2rem;
-  margin-bottom: .75rem;
-}
-
 .auth-title {
-  font-size: 1.375rem;
-  font-weight: 700;
-  letter-spacing: -.02em;
+  font-size: clamp(1.5rem, 4vw, 2rem);
+  font-weight: 800;
+  letter-spacing: -.03em;
   color: var(--text);
   margin-bottom: .375rem;
 }
 
 .auth-subtitle {
-  font-size: .875rem;
+  font-size: .9375rem;
   color: var(--text-dim);
 }
 
+/* Error banner */
 .auth-errors {
-  list-style: none;
-  background: color-mix(in srgb, #ef4444 12%, transparent);
-  border: 1px solid color-mix(in srgb, #ef4444 35%, transparent);
-  border-radius: var(--radius);
-  padding: .75rem 1rem;
+  background: color-mix(in srgb, #ef4444 10%, transparent);
+  border: 1px solid color-mix(in srgb, #ef4444 30%, transparent);
+  border-radius: var(--radius-full);
+  padding: .7rem 1.25rem;
   margin-bottom: 1.25rem;
   font-size: .875rem;
   color: #f87171;
   display: flex;
   flex-direction: column;
-  gap: .25rem;
+  gap: .2rem;
 }
 
-.auth-error-single {
-  background: color-mix(in srgb, #ef4444 12%, transparent);
-  border: 1px solid color-mix(in srgb, #ef4444 35%, transparent);
-  border-radius: var(--radius);
-  padding: .75rem 1rem;
-  margin-bottom: 1.25rem;
-  font-size: .875rem;
-  color: #f87171;
-}
-
+/* Form layout */
 .auth-form {
   display: flex;
   flex-direction: column;
-  gap: 1.125rem;
+  gap: .75rem;
 }
 
-.form-group {
+.auth-field {
   display: flex;
   flex-direction: column;
-  gap: .375rem;
+  gap: .35rem;
 }
 
-.form-group label {
-  font-size: .8125rem;
-  font-weight: 500;
-  color: var(--text-dim);
-  letter-spacing: .01em;
-}
-
-.form-group input {
-  width: 100%;
-  background: var(--bg-surface-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: .625rem .875rem;
-  font-size: .9375rem;
-  color: var(--text);
-  transition: border-color var(--dur-fast) var(--ease-out),
-              box-shadow var(--dur-fast) var(--ease-out),
-              background var(--dur-fast) var(--ease-out);
-  outline: none;
-}
-
-.form-group input::placeholder { color: var(--text-muted); }
-.form-group input:hover { border-color: var(--border-subtle); background: var(--bg-hover); }
-.form-group input:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
-  background: var(--bg-surface-2);
-}
-
-.form-hint {
-  font-size: .75rem;
-  color: var(--text-muted);
-}
-
-.password-wrap {
-  position: relative;
+/* Pill input — mirrors .search-box */
+.auth-input-pill {
   display: flex;
   align-items: center;
+  gap: .5rem;
+  background: var(--bg-surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-full);
+  padding: 0 1rem;
+  box-shadow: 0 2px 12px rgba(0,0,0,.06);
+  transition: border-color 250ms var(--ease-out), box-shadow 250ms var(--ease-out);
+}
+[data-theme="dark"] .auth-input-pill { box-shadow: 0 2px 18px rgba(0,0,0,.32); }
+
+.auth-input-pill:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent), 0 4px 24px rgba(0,0,0,.1);
+}
+[data-theme="dark"] .auth-input-pill:focus-within {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent), 0 4px 32px rgba(0,0,0,.4);
 }
 
-.password-wrap input { padding-right: 2.5rem; }
+.auth-input-icon {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  transition: color 250ms var(--ease-out);
+}
+.auth-input-pill:focus-within .auth-input-icon { color: var(--accent); }
 
-.pw-toggle {
-  position: absolute;
-  right: .625rem;
+.auth-input-pill input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text);
+  font-size: .9375rem;
+  font-weight: 400;
+  padding: .875rem 0;
+  min-width: 0;
+}
+.auth-input-pill input::placeholder { color: var(--text-dim); opacity: .6; }
+.auth-input-pill input:focus::placeholder { opacity: .35; }
+
+/* Password toggle — reuses existing .pw-toggle positioning inside pill */
+.auth-input-pill .pw-toggle {
+  flex-shrink: 0;
   color: var(--text-muted);
   display: flex;
   align-items: center;
@@ -2009,27 +1995,22 @@ article.result.code-result { font-size: .9rem; }
   border-radius: var(--radius-sm);
   transition: color var(--dur-fast) var(--ease-out);
 }
-.pw-toggle:hover { color: var(--text); }
+.auth-input-pill .pw-toggle:hover { color: var(--text); }
 
-.auth-submit-btn {
+/* Submit — extend .search-btn to be full-width */
+.auth-submit {
   width: 100%;
   margin-top: .375rem;
-  padding: .7rem 1rem;
-  background: var(--accent);
-  color: #0a0a0a;
   font-size: .9375rem;
-  font-weight: 600;
-  border-radius: var(--radius);
-  letter-spacing: -.01em;
-  transition: background var(--dur-fast) var(--ease-out),
-              transform var(--dur-fast) var(--ease-out),
-              box-shadow var(--dur-fast) var(--ease-out);
+  padding: .75rem 1.125rem;
+  justify-content: center;
 }
-.auth-submit-btn:hover {
-  background: var(--accent-dim);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
+
+.form-hint {
+  font-size: .75rem;
+  color: var(--text-muted);
+  padding-left: 1rem;
 }
-.auth-submit-btn:active { transform: scale(0.98); }
 
 .auth-switch {
   text-align: center;
