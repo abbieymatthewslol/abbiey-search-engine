@@ -3440,7 +3440,7 @@ def signup():
 
     session.permanent = True
     session["user_id"] = uid
-    return redirect(url_for("profile"))
+    return redirect(url_for("index"))
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -3467,7 +3467,7 @@ def login():
 
     session.permanent = True
     session["user_id"] = user["id"]
-    return redirect(next_url or url_for("profile"))
+    return redirect(next_url or url_for("index"))
 
 
 @app.route("/logout")

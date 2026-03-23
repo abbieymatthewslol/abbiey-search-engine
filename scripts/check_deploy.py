@@ -26,8 +26,8 @@ REPO_ROOT  = subprocess.check_output(
 # CSS class names that ONLY exist in the current (new) templates.
 # If these are absent from the live page, old templates are still deployed.
 TEMPLATE_FINGERPRINTS = {
-    "/signup": ["auth-main", "auth-container", "auth-field"],
-    "/login":  ["auth-main", "auth-container", "auth-field"],
+    "/signup":  ["auth-main", "auth-container", "auth-field"],
+    "/login":   ["auth-main", "auth-container", "auth-field"],
 }
 
 GREEN  = "\033[92m"
