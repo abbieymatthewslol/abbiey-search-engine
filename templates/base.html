@@ -8,8 +8,27 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔍</text></svg>">
+    <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png">
+    <link rel="shortcut icon" href="/favicon.ico">
     <meta name="deploy-hash" content="{{ deploy_hash }}">
+    <!-- SEO & PWA -->
+    <meta name="description" content="{% block meta_description %}abbiey.search — Private, fast, no-tracking search engine.{% endblock %}">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="abbiey.search">
+    <meta property="og:title" content="{% block og_title %}abbiey.search{% endblock %}">
+    <meta property="og:description" content="{% block og_description %}Private search engine. No tracking. No profiling.{% endblock %}">
+    <meta property="og:image" content="https://www.abbieysearch.com/static/og-image.png">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="{% block tw_title %}abbiey.search{% endblock %}">
+    <meta name="twitter:description" content="{% block tw_description %}Private search engine. No tracking. No profiling.{% endblock %}">
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#34d399">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="abbiey.search">
+    <link rel="apple-touch-icon" href="/static/icon-192.png">
+    <link rel="search" type="application/opensearchdescription+xml" title="abbiey.search" href="/opensearch.xml">
     {# Apply saved theme + accent immediately to avoid flash #}
     <script>
         (function() {

@@ -2499,3 +2499,69 @@ footer {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ===== Install Banner ===== */
+.install-banner {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: .75rem 1.5rem;
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-surface));
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
+  font-size: .875rem;
+  animation: slideDown 300ms var(--ease-spring) both;
+}
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-100%); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.install-banner-icon { font-size: 1.25rem; flex-shrink: 0; }
+.install-banner-text { flex: 1; }
+.install-banner-text strong { display: block; color: var(--text); font-weight: 600; }
+.install-banner-text span { color: var(--text-dim); }
+.install-banner-btn {
+  padding: .35rem .875rem;
+  background: var(--accent);
+  color: #fff;
+  border-radius: var(--radius-full);
+  font-size: .8125rem;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-spring);
+}
+.install-banner-btn:hover { background: var(--accent-dim); transform: translateY(-1px); }
+.install-banner-close {
+  width: 28px; height: 28px;
+  border-radius: var(--radius-full);
+  color: var(--text-muted);
+  font-size: 1.2rem;
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+.install-banner-close:hover { background: var(--bg-hover); color: var(--text); }
+
+/* ===== Share Search Button ===== */
+.share-search-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: .375rem;
+  padding: .3rem .75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  font-size: .8rem;
+  color: var(--text-dim);
+  font-weight: 500;
+  background: transparent;
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease-out);
+  margin-top: .5rem;
+}
+.share-search-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+  border-color: var(--border-strong);
+}

@@ -8,8 +8,64 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔍</text></svg>">
     <meta name="deploy-hash" content="{{ deploy_hash }}">
+    <!-- SEO meta tags -->
+    {% if query %}
+    <meta name="description" content="Private search results for {{ query }} — no tracking, no profiling.">
+    <meta property="og:title" content="{{ query }} — abbiey.search">
+    <meta property="og:description" content="Private search results for: {{ query }}">
+    <meta property="og:url" content="https://www.abbieysearch.com/search?q={{ query|urlencode }}">
+    {% else %}
+    <meta name="description" content="abbiey.search — A private, fast search engine. No tracking, no data collection, no judgement.">
+    <meta property="og:title" content="abbiey.search — Private Search Engine">
+    <meta property="og:description" content="Search the web without being tracked. No logs. No profiling. No judgment.">
+    <meta property="og:url" content="https://www.abbieysearch.com/">
+    {% endif %}
+    <meta name="keywords" content="private search engine, no tracking search, privacy search, anonymous search">
+    <meta name="author" content="abbiey.search">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="abbiey.search">
+    <meta property="og:image" content="https://www.abbieysearch.com/static/og-image.png">
+    <meta name="twitter:card" content="summary_large_image">
+    {% if query %}
+    <meta name="twitter:title" content="{{ query }} — abbiey.search">
+    <meta name="twitter:description" content="Private search results for: {{ query }}">
+    {% else %}
+    <meta name="twitter:title" content="abbiey.search — Private Search Engine">
+    <meta name="twitter:description" content="Search the web without being tracked. No logs. No profiling. No judgment.">
+    {% endif %}
+    <meta name="twitter:image" content="https://www.abbieysearch.com/static/og-image.png">
+    {% if not query %}<link rel="canonical" href="https://www.abbieysearch.com/">{% endif %}
+    <!-- PWA -->
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#34d399">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="abbiey.search">
+    <link rel="apple-touch-icon" href="/static/icon-192.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png">
+    <link rel="shortcut icon" href="/favicon.ico">
+    <!-- OpenSearch -->
+    <link rel="search" type="application/opensearchdescription+xml" title="abbiey.search" href="/opensearch.xml">
+    <!-- JSON-LD -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "name": "abbiey.search",
+      "url": "https://www.abbieysearch.com",
+      "description": "Private search engine. No tracking. No profiling. No judgment.",
+      "potentialAction": {
+        "@type": "SearchAction",
+        "target": {
+          "@type": "EntryPoint",
+          "urlTemplate": "https://www.abbieysearch.com/search?q={search_term_string}"
+        },
+        "query-input": "required name=search_term_string"
+      }
+    }
+    </script>
 <body class="{% if query %}has-results{% endif %}">
 
     <header>
@@ -81,6 +137,16 @@
             {% endif %}
         </div>
     </header>
+    <!-- Install banner -->
+    <div id="install-banner" class="install-banner" style="display:none">
+      <span class="install-banner-icon">🔍</span>
+      <div class="install-banner-text">
+        <strong>Set as default search engine</strong>
+        <span>Click the address bar → manage search engines → add abbiey.search</span>
+      </div>
+      <a href="/opensearch.xml" class="install-banner-btn" target="_blank">Add to browser</a>
+      <button class="install-banner-close" id="install-banner-close" aria-label="Dismiss">×</button>
+    </div>
     <div class="settings-overlay" id="settings-overlay" hidden>
         <div class="settings-modal" id="settings-modal" role="dialog" aria-label="Settings">
             <div class="settings-modal-header">
@@ -325,6 +391,12 @@
                 <a href="/search?q={{ query|urlencode }}&type=onion{% if region %}&region={{ region }}{% endif %}" class="tab {% if search_type == 'onion' %}active{% endif %}">Deep Web</a>
                 <a href="/search?q={{ query|urlencode }}&type=saved" class="tab {% if search_type == 'saved' %}active{% endif %}">Saved <span class="bookmark-count-badge" id="bookmark-count-badge"></span></a>
             </nav>
+            {% if query %}
+            <button class="share-search-btn" id="share-search-btn" title="Share this search" aria-label="Share search">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+              Share
+            </button>
+            {% endif %}
 
             {# ===== QUICK FILTERS BAR ===== #}
             <div class="filter-bar" id="filter-bar">
@@ -1000,5 +1072,39 @@
     {% if query and search_type == 'onion' %}
     <script src="{{ url_for('static', filename='onion-rewriter.js') }}"></script>
     {% endif %}
+    <script>
+    // Install banner
+    (function() {
+      if (window.location.search) return;
+      if (localStorage.getItem('abbiey_banner_dismissed')) return;
+      setTimeout(() => {
+        const banner = document.getElementById('install-banner');
+        if (banner) banner.style.display = 'flex';
+      }, 3000);
+      const closeBtn = document.getElementById('install-banner-close');
+      if (closeBtn) {
+        closeBtn.addEventListener('click', () => {
+          document.getElementById('install-banner').style.display = 'none';
+          localStorage.setItem('abbiey_banner_dismissed', '1');
+        });
+      }
+    })();
+    // Share button
+    const shareBtn = document.getElementById('share-search-btn');
+    if (shareBtn) {
+      shareBtn.addEventListener('click', async () => {
+        const url = window.location.href;
+        const title = document.title;
+        if (navigator.share) {
+          try { await navigator.share({ title, url }); return; } catch(e) {}
+        }
+        try {
+          await navigator.clipboard.writeText(url);
+          shareBtn.textContent = '✓ Copied!';
+          setTimeout(() => { shareBtn.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg> Share'; }, 2000);
+        } catch(e) {}
+      });
+    }
+    </script>
 </body>
 </html>

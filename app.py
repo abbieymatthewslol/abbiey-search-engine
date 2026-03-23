@@ -21,7 +21,7 @@ import httpx
 import stripe
 from cachetools import TTLCache
 from ddgs import DDGS
-from flask import Flask, render_template, request, jsonify, redirect, session, url_for, flash
+from flask import Flask, render_template, request, jsonify, redirect, session, url_for, flash, Response
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -3732,6 +3732,91 @@ def api_user_history_add():
     except Exception:
         pass
     return jsonify({"ok": True})
+
+
+@app.route("/opensearch.xml")
+def opensearch():
+    xml = '''<?xml version="1.0" encoding="UTF-8"?>
+<OpenSearchDescription xmlns="http://a9.com/-/spec/opensearch/1.1/">
+  <ShortName>abbiey.search</ShortName>
+  <Description>Private, fast, no-tracking search engine</Description>
+  <Tags>privacy search private</Tags>
+  <Contact>hello@abbieysearch.com</Contact>
+  <Url type="text/html" template="https://www.abbieysearch.com/search?q={searchTerms}"/>
+  <Url type="application/opensearchdescription+xml" rel="self"
+       template="https://www.abbieysearch.com/opensearch.xml"/>
+  <Image height="16" width="16" type="image/x-icon">https://www.abbieysearch.com/static/favicon.ico</Image>
+  <InputEncoding>UTF-8</InputEncoding>
+  <OutputEncoding>UTF-8</OutputEncoding>
+</OpenSearchDescription>'''
+    return Response(xml, mimetype="application/opensearchdescription+xml")
+
+
+@app.route("/manifest.json")
+def manifest():
+    return jsonify({
+        "name": "abbiey.search",
+        "short_name": "abbiey",
+        "description": "Private, fast, no-tracking search engine",
+        "start_url": "/",
+        "display": "standalone",
+        "background_color": "#0d0d10",
+        "theme_color": "#34d399",
+        "orientation": "portrait-primary",
+        "icons": [
+            {"src": "/static/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+            {"src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
+        ],
+        "categories": ["search", "productivity", "utilities"],
+        "shortcuts": [
+            {"name": "Web Search", "url": "/?type=text", "description": "Search the web privately"},
+            {"name": "Image Search", "url": "/?type=images", "description": "Search images privately"},
+            {"name": "News Search", "url": "/?type=news", "description": "Search news privately"}
+        ]
+    })
+
+
+@app.route("/robots.txt")
+def robots():
+    txt = """User-agent: *
+Allow: /
+Allow: /search
+Disallow: /api/
+Disallow: /profile
+Disallow: /profile/update
+Disallow: /logout
+
+Sitemap: https://www.abbieysearch.com/sitemap.xml
+"""
+    return Response(txt, mimetype="text/plain")
+
+
+@app.route("/sitemap.xml")
+def sitemap():
+    xml = '''<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://www.abbieysearch.com/</loc>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://www.abbieysearch.com/login</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://www.abbieysearch.com/signup</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+</urlset>'''
+    return Response(xml, mimetype="application/xml")
+
+
+@app.route("/favicon.ico")
+def favicon_ico():
+    return redirect("/static/icon-192.png", code=301)
 
 
 @app.after_request
