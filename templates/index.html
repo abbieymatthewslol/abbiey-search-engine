@@ -76,6 +76,7 @@
                 <span class="user-avatar-name">{{ current_user.display_name or current_user.username }}</span>
             </a>
             {% else %}
+            <a href="/signup" class="header-auth-btn header-signup-btn" aria-label="Create account">Sign up</a>
             <a href="/login" class="header-auth-btn" aria-label="Sign in">Sign in</a>
             {% endif %}
         </div>

@@ -87,6 +87,8 @@
                 <span class="user-avatar-initials">{{ (current_user.display_name or current_user.username)[0] | upper }}</span>
                 <span class="user-avatar-name">{{ current_user.display_name or current_user.username }}</span>
             </a>
+            {% elif request.endpoint == 'login' %}
+            <a href="/signup" class="header-auth-btn" aria-label="Create account">Create account</a>
             {% else %}
             <a href="/login" class="header-auth-btn" aria-label="Sign in">Sign in</a>
             {% endif %}
