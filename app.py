@@ -10,6 +10,7 @@ import sqlite3
 import subprocess
 import threading
 import time
+import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed, wait as _futures_wait
 from dataclasses import asdict
 from urllib.parse import parse_qs, quote_plus, unquote, urlparse
@@ -161,6 +162,18 @@ def _init_users_db():
 
 
 _init_users_db()
+
+# Add avatar column if it doesn't exist yet (safe migration)
+try:
+    with sqlite3.connect(_USERS_DB) as _con:
+        _con.execute("ALTER TABLE users ADD COLUMN avatar TEXT")
+except Exception:
+    pass  # Column already exists
+
+# Ensure avatars upload directory exists (not on Vercel)
+_AVATARS_DIR = os.path.join(os.path.dirname(__file__), "static", "avatars")
+if not os.environ.get("VERCEL"):
+    os.makedirs(_AVATARS_DIR, exist_ok=True)
 
 
 def _get_user_by_id(uid: int) -> "dict | None":
@@ -3440,7 +3453,8 @@ def signup():
 
     session.permanent = True
     session["user_id"] = uid
-    return redirect(url_for("index"))
+    flash("welcome", "welcome")
+    return redirect(url_for("index") + "?welcome=1")
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -3526,6 +3540,38 @@ def profile_update():
     return redirect(url_for("profile"))
 
 
+# ---- Avatar upload ----------------------------------------------------------
+
+@app.route("/profile/avatar", methods=["POST"])
+def profile_avatar():
+    redir = _require_login()
+    if redir:
+        return redir
+
+    uid = session["user_id"]
+    f = request.files.get("avatar")
+    if not f or not f.content_type or not f.content_type.startswith("image/"):
+        return redirect(url_for("profile"))
+
+    ext_map = {"image/jpeg": "jpg", "image/png": "png", "image/gif": "gif", "image/webp": "webp"}
+    ext = ext_map.get(f.content_type, "jpg")
+
+    if os.environ.get("VERCEL"):
+        # On Vercel filesystem is read-only — skip saving
+        return redirect(url_for("profile"))
+
+    save_dir = os.path.join(os.path.dirname(__file__), "static", "avatars")
+    os.makedirs(save_dir, exist_ok=True)
+    filename = f"{uid}.{ext}"
+    f.save(os.path.join(save_dir, filename))
+
+    avatar_path = f"avatars/{filename}"
+    with sqlite3.connect(_USERS_DB) as con:
+        con.execute("UPDATE users SET avatar=? WHERE id=?", (avatar_path, uid))
+
+    return redirect(url_for("profile"))
+
+
 # ---- Bookmarks API (server-side, requires login) ----------------------------
 
 @app.route("/api/user/bookmarks", methods=["GET"])
@@ -3541,6 +3587,27 @@ def api_user_bookmarks_get():
             (uid,)
         ).fetchall()
     return jsonify({"bookmarks": [dict(r) for r in rows]})
+
+
+@app.route("/api/user/recent-searches", methods=["GET"])
+def api_user_recent_searches():
+    if not session.get("user_id"):
+        return jsonify([]), 401
+    uid = session["user_id"]
+    with sqlite3.connect(_USERS_DB) as con:
+        con.row_factory = sqlite3.Row
+        rows = con.execute(
+            "SELECT query, search_type FROM user_search_history"
+            " WHERE user_id=? ORDER BY searched_at DESC LIMIT 5",
+            (uid,)
+        ).fetchall()
+    seen = set()
+    unique = []
+    for r in rows:
+        if r["query"] not in seen:
+            seen.add(r["query"])
+            unique.append({"query": r["query"], "type": r["search_type"] or "text"})
+    return jsonify(unique)
 
 
 @app.route("/api/user/bookmarks", methods=["POST"])

@@ -296,7 +296,10 @@
 
             {% if not query %}
             {# ===== TRENDING (homepage only) ===== #}
+            <p class="home-tagline">Private search. No tracking.</p>
+            <p class="home-section-label">Trending</p>
             <div id="trending-home" class="trending-home"></div>
+            <div id="recent-searches-home" class="recent-searches-home"></div>
             {% endif %}
 
             {% if query %}
@@ -933,6 +936,67 @@
         });
     </script>
     {% endif %}
+    {# ===== WELCOME TOAST (after signup) ===== #}
+    {% with messages = get_flashed_messages(category_filter=["welcome"]) %}
+    {% if messages %}
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            const toast = document.createElement("div");
+            toast.style.cssText = "position:fixed;top:1.5rem;left:50%;transform:translateX(-50%);background:var(--accent,#6ee7b7);color:#0a0a0a;padding:.75rem 1.5rem;border-radius:8px;font-weight:700;z-index:10000;animation:paywall-fade-in .3s ease";
+            toast.textContent = "Welcome to abbiey.search, @{{ current_user.username if current_user else '' }}! 🎉";
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 6000);
+        });
+    </script>
+    {% endif %}
+    {% endwith %}
+
+    {# ===== ONBOARDING MODAL (shown after signup via ?welcome=1) ===== #}
+    {% if request.args.get('welcome') == '1' %}
+    <div id="welcome-overlay" class="settings-overlay" role="dialog" aria-modal="true" aria-label="Welcome">
+        <div class="settings-modal welcome-modal">
+            <div class="settings-modal-header">
+                <span class="settings-modal-title">Welcome! What are you looking for?</span>
+                <button class="settings-modal-close" id="welcome-close" aria-label="Skip">✕</button>
+            </div>
+            <div class="settings-modal-body">
+                <p style="margin:0 0 1rem;color:var(--text-dim);font-size:.9rem">Pick a category to get started, or just type in the search box.</p>
+                <div class="welcome-chips">
+                    <button class="welcome-chip" data-type="text">🔍 Web</button>
+                    <button class="welcome-chip" data-type="news">📰 News</button>
+                    <button class="welcome-chip" data-type="images">🖼️ Images</button>
+                    <button class="welcome-chip" data-type="code">💻 Code</button>
+                    <button class="welcome-chip" data-type="videos">🎬 Videos</button>
+                    <button class="welcome-chip" data-type="onion">🌐 Tor/Onion</button>
+                </div>
+                <p style="margin:1rem 0 0;text-align:center"><a href="/" class="welcome-skip">Skip</a></p>
+            </div>
+        </div>
+    </div>
+    <script>
+        (function() {
+            var overlay = document.getElementById("welcome-overlay");
+            var closeBtn = document.getElementById("welcome-close");
+            function closeModal() { overlay.classList.add("closing"); setTimeout(function(){ overlay.hidden = true; }, 150); }
+            closeBtn.addEventListener("click", closeModal);
+            overlay.addEventListener("click", function(e){ if (e.target === overlay) closeModal(); });
+            document.querySelectorAll(".welcome-chip").forEach(function(chip) {
+                chip.addEventListener("click", function() {
+                    var type = chip.dataset.type;
+                    var typeInput = document.getElementById("type-input") || document.querySelector("input[name='type']");
+                    if (typeInput) typeInput.value = type;
+                    var form = document.querySelector(".search-form") || document.querySelector("form[action]");
+                    closeModal();
+                    if (form) {
+                        var q = document.querySelector("input[name='q']");
+                        if (q) q.focus();
+                    }
+                });
+            });
+        })();
+    </script>
+    {% endif %}
+
     <script src="{{ url_for('static', filename='script.js') }}"></script>
     {% if query and search_type == 'onion' %}
     <script src="{{ url_for('static', filename='onion-rewriter.js') }}"></script>

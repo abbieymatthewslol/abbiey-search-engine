@@ -994,6 +994,99 @@ article.result.code-result { font-size: .9rem; }
   justify-content: center;
 }
 
+/* Homepage tagline & section label */
+.home-tagline {
+  text-align: center;
+  color: var(--text-dim);
+  font-size: .8125rem;
+  margin: 1.25rem 0 .25rem;
+  opacity: .7;
+}
+.home-section-label {
+  text-align: center;
+  font-size: .6875rem;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin: .5rem 0 .25rem;
+  opacity: .55;
+}
+
+/* Recent search history chips (homepage) */
+.recent-searches-home {
+  margin-top: 1rem;
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: .375rem;
+  justify-content: center;
+}
+.recent-search-chip {
+  padding: .3rem .75rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  font-size: .8125rem;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+  font-family: inherit;
+}
+.recent-search-chip:hover { background: var(--bg-hover); color: var(--accent); border-color: var(--accent); }
+
+/* Profile avatar upload */
+.profile-avatar-wrap {
+  position: relative;
+  display: inline-block;
+}
+.profile-avatar-upload-btn {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 1.75rem;
+  height: 1.75rem;
+  background: var(--accent);
+  border: 2px solid var(--bg);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #0a0a0a;
+  font-size: .8rem;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.profile-avatar-upload-btn:hover { background: var(--accent-hover, var(--accent)); filter: brightness(1.1); }
+.profile-avatar-img {
+  width: 4rem;
+  height: 4rem;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+/* Welcome onboarding modal */
+.welcome-modal { max-width: 420px; }
+.welcome-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem;
+}
+.welcome-chip {
+  padding: .45rem 1rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  font-size: .875rem;
+  color: var(--text);
+  cursor: pointer;
+  font-family: inherit;
+  transition: background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+}
+.welcome-chip:hover { background: var(--bg-hover); border-color: var(--accent); color: var(--accent); }
+.welcome-skip { color: var(--text-dim); font-size: .85rem; text-decoration: none; }
+.welcome-skip:hover { color: var(--text); }
+
 /* ===== 10. ANSWER CARDS ===== */
 .ai-summary-card,
 .calculator-card,

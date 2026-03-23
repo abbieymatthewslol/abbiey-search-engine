@@ -6,8 +6,20 @@
 
     {# ── Profile header ── #}
     <section class="profile-hero">
-        <div class="profile-avatar" aria-hidden="true">
-            {{ (user.display_name or user.username)[0] | upper }}
+        <div class="profile-avatar-wrap">
+            {% if user.avatar %}
+            <img class="profile-avatar profile-avatar-img" src="{{ url_for('static', filename=user.avatar) }}" alt="{{ user.display_name or user.username }}">
+            {% else %}
+            <div class="profile-avatar" aria-hidden="true">
+                {{ (user.display_name or user.username)[0] | upper }}
+            </div>
+            {% endif %}
+            <form method="POST" action="/profile/avatar" enctype="multipart/form-data" style="display:inline">
+                <label class="profile-avatar-upload-btn" title="Upload photo" aria-label="Upload avatar">
+                    📷
+                    <input type="file" name="avatar" accept="image/*" style="display:none" onchange="this.form.submit()">
+                </label>
+            </form>
         </div>
         <div class="profile-hero-info">
             <h1 class="profile-display-name">{{ user.display_name or user.username }}</h1>
