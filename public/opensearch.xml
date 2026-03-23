@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<OpenSearchDescription xmlns="http://a9.com/-/spec/opensearch/1.1/">
+  <ShortName>abbiey.search</ShortName>
+  <Description>Private, fast, no-tracking search engine</Description>
+  <Tags>privacy search private</Tags>
+  <Contact>hello@abbieysearch.com</Contact>
+  <Url type="text/html" template="https://www.abbieysearch.com/search?q={searchTerms}"/>
+  <Url type="application/opensearchdescription+xml" rel="self"
+       template="https://www.abbieysearch.com/opensearch.xml"/>
+  <Image height="16" width="16" type="image/x-icon">https://www.abbieysearch.com/static/icon-192.png</Image>
+  <InputEncoding>UTF-8</InputEncoding>
+  <OutputEncoding>UTF-8</OutputEncoding>
+</OpenSearchDescription>
