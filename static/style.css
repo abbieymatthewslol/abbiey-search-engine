@@ -1965,6 +1965,13 @@ article.result.code-result { font-size: .9rem; }
   gap: .35rem;
 }
 
+.auth-field > label {
+  font-size: .8125rem;
+  font-weight: 500;
+  color: var(--text-dim);
+  padding-left: .25rem;
+}
+
 /* Pill input — mirrors .search-box */
 .auth-input-pill {
   display: flex;
