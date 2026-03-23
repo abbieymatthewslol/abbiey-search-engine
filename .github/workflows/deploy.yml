@@ -6,7 +6,7 @@ on:
       - master
 
 env:
-  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_ORG_ID: ynmEwQEoP5I6GjvWlRkxa34I
   VERCEL_PROJECT_ID: prj_NNB1SRC35VzeuKs5odeDOdS0amTe
 
 jobs:
