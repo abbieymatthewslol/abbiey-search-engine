@@ -7,6 +7,7 @@ import logging
 import os
 import re
 import sqlite3
+import subprocess
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed, wait as _futures_wait
@@ -28,6 +29,24 @@ from entity_parser import detect_entities, build_search_queries, primary_entity
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", os.urandom(24).hex())
 app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0  # no caching for static files
+
+def _get_deploy_hash() -> str:
+    """Return the current git commit hash baked into the running process."""
+    # Prefer an env var set at build/deploy time (Render, Vercel, etc.)
+    for env_var in ("RENDER_GIT_COMMIT", "VERCEL_GIT_COMMIT_SHA", "GIT_COMMIT"):
+        val = os.environ.get(env_var, "")
+        if val:
+            return val[:7]
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            stderr=subprocess.DEVNULL,
+            cwd=os.path.dirname(__file__),
+        ).decode().strip()
+    except Exception:
+        return "unknown"
+
+DEPLOY_HASH = _get_deploy_hash()
 
 # ---------------------------------------------------------------------------
 # Stripe configuration
@@ -164,6 +183,7 @@ def _get_user_by_login(identifier: str) -> "dict | None":
 @app.context_processor
 def _inject_current_user():
     uid = session.get("user_id")
+    ctx = {"deploy_hash": DEPLOY_HASH}
     if uid:
         user = _get_user_by_id(uid)
         if user:
@@ -174,8 +194,8 @@ def _inject_current_user():
                     )
             except Exception:
                 pass
-            return {"current_user": user}
-    return {"current_user": None}
+            return {**ctx, "current_user": user}
+    return {**ctx, "current_user": None}
 
 
 _init_analytics_db()
