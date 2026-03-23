@@ -12,6 +12,7 @@ import threading
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed, wait as _futures_wait
+from itertools import zip_longest
 from dataclasses import asdict
 from urllib.parse import parse_qs, quote_plus, unquote, urlparse
 
@@ -3260,6 +3261,32 @@ def _fetch_results(query, page, search_type, region=None, lang=None, operators=N
         if not results:
             logger.info("Ahmia empty, trying DDG onion fallback")
             results = _try_onion_ddg(effective_query)
+    elif search_type == "code":
+        # Code — dedicated path: fetch GitHub, StackOverflow, GitLab, npm in parallel.
+        # Never use generic DDG — it returns unrelated web pages styled in code font.
+        logger.info("Code search: fetching GitHub/SO/GitLab/npm in parallel")
+        with ThreadPoolExecutor(max_workers=4) as _code_pool:
+            _gh_fut  = _code_pool.submit(_try_github_search,   effective_query, max_results)
+            _so_fut  = _code_pool.submit(_try_stackoverflow,   effective_query, max_results)
+            _gl_fut  = _code_pool.submit(_try_gitlab,          effective_query, max_results)
+            _npm_fut = _code_pool.submit(_try_npm,             effective_query, max_results)
+            gh_res  = _gh_fut.result(timeout=8)  or []
+            so_res  = _so_fut.result(timeout=8)  or []
+            gl_res  = _gl_fut.result(timeout=8)  or []
+            npm_res = _npm_fut.result(timeout=8) or []
+
+        # Interleave sources so results aren't all from one platform
+        seen_urls = set()
+        for batch in zip_longest(gh_res, so_res, gl_res, npm_res):
+            for r in batch:
+                if r and r.get("url") not in seen_urls:
+                    seen_urls.add(r.get("url"))
+                    results.append(r)
+
+        # Fallback: DDG with code-site filter if all APIs failed
+        if not results:
+            logger.info("Code APIs all failed, falling back to DDG code-focused")
+            results = _try_code_ddg(effective_query, max_results)
     else:
         # Layer 1: DDG multi-backend (with timeout guard)
         try:
@@ -3363,30 +3390,6 @@ def _fetch_results(query, page, search_type, region=None, lang=None, operators=N
                     except Exception:
                         pass
 
-        # Code-specific fallbacks
-        if search_type == "code":
-            if not results:
-                logger.info("Code search: trying GitHub")
-                results = _try_github_search(effective_query, max_results)
-            if not results:
-                logger.info("Code search: trying StackOverflow")
-                results = _try_stackoverflow(effective_query, max_results)
-            if not results:
-                logger.info("Code search: trying GitLab")
-                results = _try_gitlab(effective_query, max_results)
-            if not results:
-                logger.info("Code search: trying DDG code-focused")
-                results = _try_code_ddg(effective_query, max_results)
-            # For code, merge extra sources for variety
-            if results and len(results) < max_results // 2:
-                try:
-                    so = _try_stackoverflow(effective_query, 10)
-                    gh = _try_github_search(effective_query, 10)
-                    gl = _try_gitlab(effective_query, 10)
-                    npm = _try_npm(effective_query, 10)
-                    results = results + so + gh + gl + npm
-                except Exception:
-                    pass
 
     # Text-only deep fallbacks
     if not results and search_type == "text":
