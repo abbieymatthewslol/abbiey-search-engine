@@ -273,10 +273,14 @@ button{background:none;border:none;cursor:pointer;font:inherit;color:inherit}
           <div class="section-head"><span class="section-title">Persistence Status</span></div>
           <div class="section-body" style="font-size:.82rem;color:var(--text-dim);line-height:1.8">
             <div id="storage-info-users" style="margin-bottom:.8rem"></div>
-            To enable persistent analytics (survives Vercel cold starts), set these env vars in Vercel:<br>
-            <code style="background:var(--bg-hov);padding:.2em .4em;border-radius:4px;font-size:.78rem;display:block;margin:.5rem 0">LIBSQL_URL=https://your-db.turso.io<br>LIBSQL_AUTH_TOKEN=your-token</code>
-            <a href="https://turso.tech" target="_blank" style="color:var(--accent)">Create a free Turso DB →</a><br><br>
-            Ask AbbeyBot to walk you through the Turso migration step by step →
+            To enable persistent analytics, set ONE of these in Vercel env vars:<br><br>
+            <strong style="color:var(--blue)">Option A — Supabase (PostgreSQL)</strong><br>
+            <code style="background:var(--bg-hov);padding:.2em .4em;border-radius:4px;font-size:.78rem;display:block;margin:.4rem 0">SUPABASE_DB_URL=postgresql://postgres:[password]@[host]:6543/postgres</code>
+            <a href="https://supabase.com/dashboard" target="_blank" style="color:var(--blue)">Get URL from Supabase → Project Settings → Database → Connection Pooling →</a><br><br>
+            <strong style="color:var(--accent)">Option B — Turso (SQLite-compatible)</strong><br>
+            <code style="background:var(--bg-hov);padding:.2em .4em;border-radius:4px;font-size:.78rem;display:block;margin:.4rem 0">LIBSQL_URL=https://your-db.turso.io<br>LIBSQL_AUTH_TOKEN=your-token</code>
+            <a href="https://turso.tech" target="_blank" style="color:var(--accent)">Create free Turso DB →</a><br><br>
+            Ask AbbeyBot to walk you through either setup →
           </div>
         </div>
       </div>
@@ -358,7 +362,10 @@ async function loadData() {
     const sb = document.getElementById('storage-badge');
     if (_data.storage) {
       sb.style.display = '';
-      if (_data.storage === 'turso') {
+      if (_data.storage === 'supabase') {
+        sb.style.color = 'var(--blue)';
+        sb.textContent = '⬡ Supabase PostgreSQL';
+      } else if (_data.storage === 'turso') {
         sb.style.color = 'var(--accent)';
         sb.textContent = '✦ Turso (persistent)';
       } else {
@@ -410,10 +417,12 @@ function renderStats() {
   // Storage info in Users view
   const siEl = document.getElementById('storage-info-users');
   if (siEl) {
-    if (s.storage === 'turso') {
+    if (s.storage === 'supabase') {
+      siEl.innerHTML = '<span style="color:var(--blue)">⬡ Supabase PostgreSQL active — data persists permanently ✓</span>';
+    } else if (s.storage === 'turso') {
       siEl.innerHTML = '<span style="color:var(--accent)">✦ Turso persistent DB active — data survives cold starts ✓</span>';
     } else {
-      siEl.innerHTML = '<span style="color:var(--yellow)">⚠ Running on SQLite /tmp — data resets on cold starts. Set up Turso below to fix.</span>';
+      siEl.innerHTML = '<span style="color:var(--yellow)">⚠ Running on SQLite /tmp — data resets on cold starts. Connect Supabase or Turso below.</span>';
     }
   }
 }

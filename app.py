@@ -124,8 +124,99 @@ def _turso_execute(sql: str, args: list = None, db: str = "analytics") -> list:
     return rows
 
 
+# ---------------------------------------------------------------------------
+# Supabase / PostgreSQL persistent backend (alternative to Turso)
+# Set SUPABASE_DB_URL=postgresql://postgres:[password]@[host]:6543/postgres
+# (use the pooler URL from Supabase Project Settings → Database → Connection Pooling)
+# ---------------------------------------------------------------------------
+_SUPABASE_DB_URL = os.environ.get("SUPABASE_DB_URL", "") or os.environ.get("DATABASE_URL", "")
+_pg_conn_lock = threading.Lock()
+
+
+def _adapt_sql_pg(sql: str) -> str:
+    """Translate SQLite date/time functions to PostgreSQL equivalents."""
+    import re as _re
+    # datetime('now', '-N days/hours/minutes') → NOW() - INTERVAL 'N unit'
+    sql = _re.sub(r"datetime\('now',\s*'-(\d+) (days?|hours?|minutes?)'\)",
+                  r"NOW() - INTERVAL '\1 \2'", sql)
+    # datetime('now') → NOW()
+    sql = _re.sub(r"datetime\('now'\)", "NOW()", sql)
+    # date('now') → CURRENT_DATE
+    sql = _re.sub(r"date\('now'\)", "CURRENT_DATE", sql)
+    # date(col) → DATE(col)  — same, but make sure it's upper
+    sql = _re.sub(r"\bdate\((\w+)\)", r"DATE(\1)", sql)
+    # strftime('%H:%M', col) → TO_CHAR(col, 'HH24:MI')
+    sql = _re.sub(r"strftime\('%H:%M',\s*(\w+)\)", r"TO_CHAR(\1, 'HH24:MI')", sql)
+    # strftime('%Y-%m-%d', col) → TO_CHAR(col, 'YYYY-MM-DD')
+    sql = _re.sub(r"strftime\('%Y-%m-%d',\s*(\w+)\)", r"TO_CHAR(\1, 'YYYY-MM-DD')", sql)
+    # ROUND(AVG(...)) — same in PostgreSQL
+    # INTEGER PRIMARY KEY → SERIAL PRIMARY KEY (handled in init)
+    return sql
+
+
+def _pg_execute(sql: str, args: list = None) -> list:
+    """Execute SQL against PostgreSQL (Supabase). Returns list of row dicts."""
+    import psycopg2
+    import psycopg2.extras
+    pg_sql = _adapt_sql_pg(sql)
+    # Use %s placeholders for psycopg2 (SQLite uses ?)
+    pg_sql = pg_sql.replace("?", "%s")
+    conn = psycopg2.connect(_SUPABASE_DB_URL, connect_timeout=8,
+                            options="-c statement_timeout=10000")
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(pg_sql, args or [])
+            conn.commit()
+            if cur.description:
+                return [dict(row) for row in cur.fetchall()]
+        return []
+    finally:
+        conn.close()
+
+
+def _init_pg_tables():
+    """Create analytics tables in PostgreSQL if they don't exist."""
+    ddl = """
+        CREATE TABLE IF NOT EXISTS search_logs (
+            id          SERIAL PRIMARY KEY,
+            query       TEXT NOT NULL,
+            search_type TEXT DEFAULT 'text',
+            region      TEXT DEFAULT '',
+            result_count INTEGER DEFAULT 0,
+            latency_ms  INTEGER DEFAULT 0,
+            hour        INTEGER DEFAULT 0,
+            day_of_week INTEGER DEFAULT 0,
+            created_at  TIMESTAMPTZ DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_sl_created ON search_logs(created_at);
+        CREATE INDEX IF NOT EXISTS idx_sl_query   ON search_logs(query);
+        CREATE TABLE IF NOT EXISTS error_logs (
+            id         SERIAL PRIMARY KEY,
+            route      TEXT DEFAULT '',
+            level      TEXT DEFAULT 'error',
+            message    TEXT NOT NULL,
+            created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_el_created ON error_logs(created_at);
+    """
+    try:
+        _pg_execute(ddl)
+    except Exception as exc:
+        logger.warning("PG table init failed: %s", exc)
+
+
+if _SUPABASE_DB_URL:
+    try:
+        _init_pg_tables()
+        logger.info("Supabase/PostgreSQL analytics backend active")
+    except Exception as _pg_init_err:
+        logger.warning("Supabase init failed: %s", _pg_init_err)
+
+
 def _analytics_execute(sql: str, args: list = None):
-    """Run SQL against analytics storage (Turso if configured, else SQLite)."""
+    """Route SQL to the active analytics backend: Supabase → Turso → SQLite."""
+    if _SUPABASE_DB_URL:
+        return _pg_execute(sql, args or [])
     if _LIBSQL_URL and _LIBSQL_TOKEN:
         return _turso_execute(sql, args or [], db="analytics")
     with sqlite3.connect(_ANALYTICS_DB) as con:
@@ -135,6 +226,14 @@ def _analytics_execute(sql: str, args: list = None):
             cols = [d[0] for d in cur.description]
             return [dict(zip(cols, row)) for row in cur.fetchall()]
         return []
+
+
+def _active_storage() -> str:
+    if _SUPABASE_DB_URL:
+        return "supabase"
+    if _LIBSQL_URL and _LIBSQL_TOKEN:
+        return "turso"
+    return "sqlite_tmp"
 
 
 # ---------------------------------------------------------------------------
@@ -326,21 +425,12 @@ def _log_search(query: str, search_type: str, region: str, result_count: int, la
     now = _dt.datetime.now(_dt.timezone.utc)
     ts = now.strftime("%Y-%m-%dT%H:%M:%SZ")
     try:
-        if _LIBSQL_URL and _LIBSQL_TOKEN:
-            _turso_execute(
-                "INSERT INTO search_logs (query, search_type, region, result_count, latency_ms, hour, day_of_week)"
-                " VALUES (?,?,?,?,?,?,?)",
-                [query[:500], search_type, region or "", result_count, latency_ms,
-                 now.hour, now.weekday()],
-            )
-        else:
-            with sqlite3.connect(_ANALYTICS_DB) as con:
-                con.execute(
-                    "INSERT INTO search_logs (query, search_type, region, result_count, latency_ms, hour, day_of_week)"
-                    " VALUES (?,?,?,?,?,?,?)",
-                    (query[:500], search_type, region or "", result_count, latency_ms,
-                     now.hour, now.weekday()),
-                )
+        _analytics_execute(
+            "INSERT INTO search_logs (query, search_type, region, result_count, latency_ms, hour, day_of_week)"
+            " VALUES (?,?,?,?,?,?,?)",
+            [query[:500], search_type, region or "", result_count, latency_ms,
+             now.hour, now.weekday()],
+        )
     except Exception as exc:
         logger.debug("Analytics log failed: %s", exc)
     # Broadcast to live SSE clients (non-blocking)
@@ -360,17 +450,10 @@ def _log_search(query: str, search_type: str, region: str, result_count: int, la
 def _log_error(route: str, message: str, level: str = "error"):
     """Log an error event to analytics DB — never raises."""
     try:
-        if _LIBSQL_URL and _LIBSQL_TOKEN:
-            _turso_execute(
-                "INSERT INTO error_logs (route, level, message) VALUES (?,?,?)",
-                [route[:200], level, str(message)[:1000]],
-            )
-        else:
-            with sqlite3.connect(_ANALYTICS_DB) as con:
-                con.execute(
-                    "INSERT INTO error_logs (route, level, message) VALUES (?,?,?)",
-                    (route[:200], level, str(message)[:1000]),
-                )
+        _analytics_execute(
+            "INSERT INTO error_logs (route, level, message) VALUES (?,?,?)",
+            [route[:200], level, str(message)[:1000]],
+        )
     except Exception:
         pass
 
@@ -2164,7 +2247,7 @@ def admin_api_stats():
     if err:
         return err
     import datetime as _dt
-    data = {"storage": "turso" if (_LIBSQL_URL and _LIBSQL_TOKEN) else "sqlite_tmp"}
+    data = {"storage": _active_storage()}
     try:
         def _scalar(sql, args=None):
             rows = _analytics_execute(sql, args or [])
@@ -2319,7 +2402,7 @@ def admin_api_health():
     health: dict = {
         "status": "ok",
         "server_time": _dt.datetime.utcnow().isoformat() + "Z",
-        "storage": "turso" if (_LIBSQL_URL and _LIBSQL_TOKEN) else "sqlite_tmp",
+        "storage": _active_storage(),
         "live_sse_clients": len(_SSE_CLIENTS),
     }
     # Test analytics DB
@@ -2356,18 +2439,23 @@ _ABBIEY_SYSTEM_PROMPT = """You are AbbeyBot, the private internal AI assistant b
 You are an expert in every aspect of this project. You are direct, insightful, and genuinely helpful. You think like a senior full-stack engineer and product strategist who built this system from scratch.
 
 == ARCHITECTURE ==
-- Backend: Python Flask (~4000 lines, app.py) served as a Vercel serverless function via api/index.py
+- Backend: Python Flask (~4200+ lines, app.py) served as a Vercel serverless function via api/index.py
 - Host: Vercel (abbieysearch.com → prj_NNB1SRC35VzeuKs5odeDOdS0amTe). Deploy with: vercel deploy --prod --token <token>
-- Database: SQLite (3 files in /tmp on Vercel, local dir otherwise):
-  - analytics.db: search_logs (query, type, region, results, latency_ms, hour, day_of_week), error_logs
-  - users.db: users (id, email, password_hash, created_at, avatar)
-  - payments.db: payments (session_id, email, amount_total, currency, created_at)
+- Database (priority order — _analytics_execute() routes automatically):
+  1. Supabase/PostgreSQL — set SUPABASE_DB_URL env var (pooler URL port 6543). Auto-creates tables. SQL translated via _adapt_sql_pg().
+  2. Turso/libSQL — set LIBSQL_URL + LIBSQL_AUTH_TOKEN env vars. SQLite-compatible HTTP API.
+  3. SQLite /tmp — fallback. Ephemeral on Vercel (wiped on cold start). Fine for dev/testing.
+  - analytics.db / search_logs table: query, type, region, result_count, latency_ms, hour, day_of_week, created_at
+  - analytics.db / error_logs table: route, level, message, created_at
+  - users.db: users, user_bookmarks, user_search_history
+  - payments.db: payments
 - Caching: TTLCache (1000 entries, 300s TTL) + threading.Lock; _in_flight dict deduplicates concurrent identical queries
 - HTTP client: httpx connection pool (100 max, 20 keepalive); singleton via _get_http()
 - Compression: flask-compress (Brotli preferred, gzip fallback), min_size=500 bytes
 - Rate limiting: flask-limiter (30 searches/min, 5 breach-checks/min)
 - Auth: Werkzeug password hashing (pbkdf2), Flask sessions
 - Payments: Stripe Checkout + webhook
+- Live dashboard: SSE /admin/api/stream pushes search events in real-time; _sse_broadcast() called from _log_search()
 
 == SEARCH FLOW ==
 1. GET /search?q=&type=&region=&lang=&df=&page=
