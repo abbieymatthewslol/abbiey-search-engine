@@ -3,8 +3,10 @@ abbiey.search - A privacy-respecting, non-judgmental search engine.
 No tracking. No filtering. No logs. Just results.
 """
 
+import json
 import logging
 import os
+import queue
 import re
 import sqlite3
 import subprocess
@@ -76,6 +78,84 @@ _ADMIN_TOKEN  = os.environ.get("ADMIN_TOKEN", "")
 
 OLLAMA_MODEL    = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+
+# ---------------------------------------------------------------------------
+# Turso / libSQL persistent DB (optional upgrade — survives Vercel cold starts)
+# Set LIBSQL_URL=https://xxx.turso.io and LIBSQL_AUTH_TOKEN=<token> in Vercel
+# env vars to enable.  Falls back to local SQLite automatically.
+# ---------------------------------------------------------------------------
+_LIBSQL_URL   = os.environ.get("LIBSQL_URL", "").rstrip("/")
+_LIBSQL_TOKEN = os.environ.get("LIBSQL_AUTH_TOKEN", "")
+
+
+def _turso_execute(sql: str, args: list = None, db: str = "analytics") -> list:
+    """Execute a SQL statement against Turso/libSQL HTTP API.
+    Returns list of row dicts on SELECT, empty list on write.
+    Raises on error.
+    """
+    url = f"{_LIBSQL_URL}/v2/pipeline"
+    if db == "users" and os.environ.get("LIBSQL_USERS_URL"):
+        url = os.environ.get("LIBSQL_USERS_URL", "").rstrip("/") + "/v2/pipeline"
+    stmt: dict = {"sql": sql}
+    if args:
+        stmt["args"] = [
+            {"type": "text", "value": str(a)} if isinstance(a, str)
+            else {"type": "integer", "value": int(a)} if isinstance(a, int)
+            else {"type": "null"} if a is None
+            else {"type": "text", "value": str(a)}
+            for a in args
+        ]
+    payload = {"requests": [{"type": "execute", "stmt": stmt}, {"type": "close"}]}
+    import httpx as _hx
+    resp = _hx.post(url, json=payload,
+                    headers={"Authorization": f"Bearer {_LIBSQL_TOKEN}"},
+                    timeout=8)
+    resp.raise_for_status()
+    data = resp.json()
+    result = data["results"][0]
+    if result.get("type") == "error":
+        raise RuntimeError(result["error"]["message"])
+    rows_data = result.get("response", {}).get("result", {})
+    cols = [c["name"] for c in rows_data.get("cols", [])]
+    rows = []
+    for raw_row in rows_data.get("rows", []):
+        rows.append({cols[i]: (v.get("value") if v.get("type") != "null" else None)
+                     for i, v in enumerate(raw_row)})
+    return rows
+
+
+def _analytics_execute(sql: str, args: list = None):
+    """Run SQL against analytics storage (Turso if configured, else SQLite)."""
+    if _LIBSQL_URL and _LIBSQL_TOKEN:
+        return _turso_execute(sql, args or [], db="analytics")
+    with sqlite3.connect(_ANALYTICS_DB) as con:
+        con.row_factory = sqlite3.Row
+        cur = con.execute(sql, args or [])
+        if cur.description:
+            cols = [d[0] for d in cur.description]
+            return [dict(zip(cols, row)) for row in cur.fetchall()]
+        return []
+
+
+# ---------------------------------------------------------------------------
+# SSE live broadcast queue — receives events from _log_search
+# ---------------------------------------------------------------------------
+_SSE_CLIENTS: list = []  # list of queue.Queue objects, one per connected admin
+_SSE_LOCK = threading.Lock()
+
+
+def _sse_broadcast(event: dict):
+    """Push a JSON event to all connected SSE clients."""
+    data = json.dumps(event)
+    with _SSE_LOCK:
+        dead = []
+        for q in _SSE_CLIENTS:
+            try:
+                q.put_nowait(data)
+            except Exception:
+                dead.append(q)
+        for q in dead:
+            _SSE_CLIENTS.remove(q)
 
 
 def _init_waitlist_db():
@@ -241,29 +321,56 @@ _init_analytics_db()
 
 
 def _log_search(query: str, search_type: str, region: str, result_count: int, latency_ms: int = 0):
-    """Fire-and-forget analytics log — never raises."""
+    """Fire-and-forget analytics log — never raises. Also pushes live SSE event."""
     import datetime as _dt
     now = _dt.datetime.now(_dt.timezone.utc)
+    ts = now.strftime("%Y-%m-%dT%H:%M:%SZ")
     try:
-        with sqlite3.connect(_ANALYTICS_DB) as con:
-            con.execute(
+        if _LIBSQL_URL and _LIBSQL_TOKEN:
+            _turso_execute(
                 "INSERT INTO search_logs (query, search_type, region, result_count, latency_ms, hour, day_of_week)"
                 " VALUES (?,?,?,?,?,?,?)",
-                (query[:500], search_type, region or "", result_count, latency_ms,
-                 now.hour, now.weekday()),
+                [query[:500], search_type, region or "", result_count, latency_ms,
+                 now.hour, now.weekday()],
             )
+        else:
+            with sqlite3.connect(_ANALYTICS_DB) as con:
+                con.execute(
+                    "INSERT INTO search_logs (query, search_type, region, result_count, latency_ms, hour, day_of_week)"
+                    " VALUES (?,?,?,?,?,?,?)",
+                    (query[:500], search_type, region or "", result_count, latency_ms,
+                     now.hour, now.weekday()),
+                )
     except Exception as exc:
         logger.debug("Analytics log failed: %s", exc)
+    # Broadcast to live SSE clients (non-blocking)
+    try:
+        _sse_broadcast({
+            "type": "search",
+            "query": query[:120],
+            "search_type": search_type,
+            "results": result_count,
+            "latency_ms": latency_ms,
+            "ts": ts,
+        })
+    except Exception:
+        pass
 
 
 def _log_error(route: str, message: str, level: str = "error"):
     """Log an error event to analytics DB — never raises."""
     try:
-        with sqlite3.connect(_ANALYTICS_DB) as con:
-            con.execute(
+        if _LIBSQL_URL and _LIBSQL_TOKEN:
+            _turso_execute(
                 "INSERT INTO error_logs (route, level, message) VALUES (?,?,?)",
-                (route[:200], level, str(message)[:1000]),
+                [route[:200], level, str(message)[:1000]],
             )
+        else:
+            with sqlite3.connect(_ANALYTICS_DB) as con:
+                con.execute(
+                    "INSERT INTO error_logs (route, level, message) VALUES (?,?,?)",
+                    (route[:200], level, str(message)[:1000]),
+                )
     except Exception:
         pass
 
@@ -2052,86 +2159,192 @@ def admin_dashboard():
 
 @app.route("/admin/api/stats")
 def admin_api_stats():
-    """JSON stats endpoint for the admin dashboard."""
+    """JSON stats endpoint for the admin dashboard — real data, Turso or SQLite."""
     err = _admin_check()
     if err:
         return err
     import datetime as _dt
-    data = {}
+    data = {"storage": "turso" if (_LIBSQL_URL and _LIBSQL_TOKEN) else "sqlite_tmp"}
     try:
-        with sqlite3.connect(_ANALYTICS_DB) as con:
-            data["searches_today"] = con.execute(
-                "SELECT COUNT(*) FROM search_logs WHERE created_at >= date('now')").fetchone()[0]
-            data["searches_week"] = con.execute(
-                "SELECT COUNT(*) FROM search_logs WHERE created_at >= datetime('now','-7 days')").fetchone()[0]
-            data["searches_total"] = con.execute(
-                "SELECT COUNT(*) FROM search_logs").fetchone()[0]
-            data["avg_latency_ms"] = con.execute(
-                "SELECT ROUND(AVG(latency_ms)) FROM search_logs WHERE latency_ms > 0 AND created_at >= datetime('now','-7 days')").fetchone()[0] or 0
-            data["errors_today"] = con.execute(
-                "SELECT COUNT(*) FROM error_logs WHERE created_at >= date('now')").fetchone()[0]
-            data["errors_week"] = con.execute(
-                "SELECT COUNT(*) FROM error_logs WHERE created_at >= datetime('now','-7 days')").fetchone()[0]
-            # Top queries
-            data["top_queries"] = [
-                {"query": r[0], "count": r[1]}
-                for r in con.execute(
-                    "SELECT query, COUNT(*) as c FROM search_logs"
-                    " WHERE created_at >= datetime('now','-7 days') AND length(query) BETWEEN 2 AND 80"
-                    " GROUP BY lower(query) ORDER BY c DESC LIMIT 15").fetchall()
-            ]
-            # Type breakdown
-            data["by_type"] = [
-                {"type": r[0], "count": r[1]}
-                for r in con.execute(
-                    "SELECT search_type, COUNT(*) as c FROM search_logs"
-                    " WHERE created_at >= datetime('now','-7 days')"
-                    " GROUP BY search_type ORDER BY c DESC").fetchall()
-            ]
-            # Daily chart (30 days)
-            today = _dt.date.today()
-            daily_map = {r[0]: r[1] for r in con.execute(
-                "SELECT date(created_at) as d, COUNT(*) as c FROM search_logs"
-                " WHERE created_at >= datetime('now','-30 days')"
-                " GROUP BY d ORDER BY d").fetchall()}
-            data["daily"] = [
-                {"date": (today - _dt.timedelta(days=29 - i)).isoformat(),
-                 "count": daily_map.get((today - _dt.timedelta(days=29 - i)).isoformat(), 0)}
-                for i in range(30)
-            ]
-            # Hourly heatmap
-            hour_map = {r[0]: r[1] for r in con.execute(
-                "SELECT hour, COUNT(*) FROM search_logs"
-                " WHERE created_at >= datetime('now','-7 days')"
-                " GROUP BY hour").fetchall()}
-            data["hourly"] = [{"hour": h, "count": hour_map.get(h, 0)} for h in range(24)]
-            # Recent searches
-            data["recent_searches"] = [
-                {"query": r[0], "type": r[1], "results": r[2], "latency_ms": r[3], "ts": r[4]}
-                for r in con.execute(
-                    "SELECT query, search_type, result_count, latency_ms, created_at"
-                    " FROM search_logs ORDER BY id DESC LIMIT 50").fetchall()
-            ]
-        # User count
+        def _scalar(sql, args=None):
+            rows = _analytics_execute(sql, args or [])
+            if rows:
+                v = list(rows[0].values())[0]
+                return v
+            return 0
+
+        data["searches_today"] = _scalar(
+            "SELECT COUNT(*) as c FROM search_logs WHERE created_at >= date('now')")
+        data["searches_week"] = _scalar(
+            "SELECT COUNT(*) as c FROM search_logs WHERE created_at >= datetime('now','-7 days')")
+        data["searches_total"] = _scalar(
+            "SELECT COUNT(*) as c FROM search_logs")
+        data["searches_last_hour"] = _scalar(
+            "SELECT COUNT(*) as c FROM search_logs WHERE created_at >= datetime('now','-1 hour')")
+        data["searches_last_5min"] = _scalar(
+            "SELECT COUNT(*) as c FROM search_logs WHERE created_at >= datetime('now','-5 minutes')")
+        data["avg_latency_ms"] = _scalar(
+            "SELECT ROUND(AVG(latency_ms)) as c FROM search_logs"
+            " WHERE latency_ms > 0 AND created_at >= datetime('now','-7 days')") or 0
+        data["p95_latency_ms"] = _scalar(
+            "SELECT latency_ms as c FROM search_logs WHERE latency_ms > 0"
+            " AND created_at >= datetime('now','-7 days')"
+            " ORDER BY latency_ms LIMIT 1 OFFSET MAX(0,"
+            "(SELECT COUNT(*)*95/100 FROM search_logs WHERE latency_ms > 0"
+            " AND created_at >= datetime('now','-7 days'))-1)") or 0
+        data["errors_today"] = _scalar(
+            "SELECT COUNT(*) as c FROM error_logs WHERE created_at >= date('now')")
+        data["errors_week"] = _scalar(
+            "SELECT COUNT(*) as c FROM error_logs WHERE created_at >= datetime('now','-7 days')")
+
+        # Top queries (7 days)
+        data["top_queries"] = _analytics_execute(
+            "SELECT query, COUNT(*) as count FROM search_logs"
+            " WHERE created_at >= datetime('now','-7 days') AND length(query) BETWEEN 2 AND 80"
+            " GROUP BY lower(query) ORDER BY count DESC LIMIT 15")
+
+        # Type breakdown (7 days)
+        data["by_type"] = _analytics_execute(
+            "SELECT search_type as type, COUNT(*) as count FROM search_logs"
+            " WHERE created_at >= datetime('now','-7 days')"
+            " GROUP BY search_type ORDER BY count DESC")
+
+        # Daily chart (30 days) — fill zeros for missing days
+        today = _dt.date.today()
+        raw_daily = _analytics_execute(
+            "SELECT date(created_at) as d, COUNT(*) as count FROM search_logs"
+            " WHERE created_at >= datetime('now','-30 days') GROUP BY d ORDER BY d")
+        daily_map = {r["d"]: int(r["count"]) for r in raw_daily}
+        data["daily"] = [
+            {"date": (today - _dt.timedelta(days=29 - i)).isoformat(),
+             "count": daily_map.get((today - _dt.timedelta(days=29 - i)).isoformat(), 0)}
+            for i in range(30)
+        ]
+
+        # Hourly heatmap (7 days)
+        raw_hourly = _analytics_execute(
+            "SELECT hour, COUNT(*) as count FROM search_logs"
+            " WHERE created_at >= datetime('now','-7 days') GROUP BY hour")
+        hour_map = {int(r["hour"]): int(r["count"]) for r in raw_hourly}
+        data["hourly"] = [{"hour": h, "count": hour_map.get(h, 0)} for h in range(24)]
+
+        # Recent searches (50)
+        data["recent_searches"] = _analytics_execute(
+            "SELECT query, search_type as type, result_count as results,"
+            " latency_ms, created_at as ts"
+            " FROM search_logs ORDER BY id DESC LIMIT 50")
+
+        # User stats
         try:
             with sqlite3.connect(_USERS_DB) as ucon:
                 data["total_users"] = ucon.execute("SELECT COUNT(*) FROM users").fetchone()[0]
                 data["users_today"] = ucon.execute(
                     "SELECT COUNT(*) FROM users WHERE created_at >= date('now')").fetchone()[0]
+                data["users_week"] = ucon.execute(
+                    "SELECT COUNT(*) FROM users WHERE created_at >= datetime('now','-7 days')").fetchone()[0]
         except Exception:
             data["total_users"] = 0
             data["users_today"] = 0
-        # Error logs
-        with sqlite3.connect(_ANALYTICS_DB) as con:
-            data["error_logs"] = [
-                {"route": r[0], "level": r[1], "message": r[2], "ts": r[3]}
-                for r in con.execute(
-                    "SELECT route, level, message, created_at FROM error_logs"
-                    " ORDER BY id DESC LIMIT 100").fetchall()
-            ]
+            data["users_week"] = 0
+
+        # Error logs (100 most recent)
+        data["error_logs"] = _analytics_execute(
+            "SELECT route, level, message, created_at as ts FROM error_logs"
+            " ORDER BY id DESC LIMIT 100")
+
+        # Searches per minute over last 10 minutes (per-minute breakdown)
+        raw_min = _analytics_execute(
+            "SELECT strftime('%H:%M', created_at) as minute, COUNT(*) as count"
+            " FROM search_logs WHERE created_at >= datetime('now','-10 minutes')"
+            " GROUP BY minute ORDER BY minute")
+        data["per_minute"] = raw_min
+
+        data["live_clients"] = len(_SSE_CLIENTS)
+        data["server_time"] = _dt.datetime.utcnow().isoformat() + "Z"
+
     except Exception as exc:
         data["error"] = str(exc)
     return jsonify(data)
+
+
+@app.route("/admin/api/stream")
+def admin_api_stream():
+    """Server-Sent Events endpoint — pushes live search events to admin dashboard."""
+    err = _admin_check()
+    if err:
+        return err
+
+    client_q: queue.Queue = queue.Queue(maxsize=200)
+    with _SSE_LOCK:
+        _SSE_CLIENTS.append(client_q)
+
+    def generate():
+        # Send a heartbeat immediately so browser knows connection is open
+        yield "event: connected\ndata: {\"status\":\"ok\"}\n\n"
+        try:
+            while True:
+                try:
+                    data = client_q.get(timeout=25)
+                    yield f"data: {data}\n\n"
+                except queue.Empty:
+                    # Send heartbeat every 25s to keep connection alive
+                    yield ": heartbeat\n\n"
+        except GeneratorExit:
+            pass
+        finally:
+            with _SSE_LOCK:
+                try:
+                    _SSE_CLIENTS.remove(client_q)
+                except ValueError:
+                    pass
+
+    return Response(
+        generate(),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
+
+
+@app.route("/admin/api/health")
+def admin_api_health():
+    """Health check — shows DB connectivity, cache state, live clients."""
+    err = _admin_check()
+    if err:
+        return err
+    import datetime as _dt
+    health: dict = {
+        "status": "ok",
+        "server_time": _dt.datetime.utcnow().isoformat() + "Z",
+        "storage": "turso" if (_LIBSQL_URL and _LIBSQL_TOKEN) else "sqlite_tmp",
+        "live_sse_clients": len(_SSE_CLIENTS),
+    }
+    # Test analytics DB
+    try:
+        _analytics_execute("SELECT 1 as ok")
+        health["analytics_db"] = "ok"
+    except Exception as e:
+        health["analytics_db"] = f"error: {e}"
+        health["status"] = "degraded"
+    # Test users DB
+    try:
+        with sqlite3.connect(_USERS_DB) as c:
+            c.execute("SELECT 1")
+        health["users_db"] = "ok"
+    except Exception as e:
+        health["users_db"] = f"error: {e}"
+        health["status"] = "degraded"
+    # Cache stats
+    try:
+        from cachetools import TTLCache as _TC
+        health["cache_size"] = len(_result_cache)
+        health["cache_maxsize"] = _result_cache.maxsize
+    except Exception:
+        pass
+    return jsonify(health)
 
 
 # ---------------------------------------------------------------------------

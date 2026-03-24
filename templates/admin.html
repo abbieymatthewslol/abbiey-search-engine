@@ -177,6 +177,8 @@ button{background:none;border:none;cursor:pointer;font:inherit;color:inherit}
     <div class="topbar">
       <div class="page-title" id="view-title">Overview</div>
       <div style="display:flex;gap:.6rem;align-items:center">
+        <span id="storage-badge" style="font-size:.68rem;padding:.15rem .5rem;border-radius:var(--r-full);background:var(--bg-hov);color:var(--text-muted);display:none"></span>
+        <span id="sse-badge" style="font-size:.68rem;padding:.15rem .5rem;border-radius:var(--r-full);background:var(--bg-hov);color:var(--text-muted)">● offline</span>
         <span style="font-size:.72rem;color:var(--text-muted)" id="last-updated"></span>
         <button class="refresh-btn" id="refresh-btn" onclick="loadData()">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
@@ -190,12 +192,24 @@ button{background:none;border:none;cursor:pointer;font:inherit;color:inherit}
       <!-- ── Overview ──────────────────────────────────────────────────── -->
       <div id="view-overview">
         <div class="stats-grid" id="stats-grid">
-          <div class="stat-card"><div class="stat-val skeleton" id="s-today" style="height:36px;width:60px">&nbsp;</div><div class="stat-label">Searches Today</div></div>
+          <div class="stat-card"><div class="stat-val skeleton" id="s-today" style="height:36px;width:60px">&nbsp;</div><div class="stat-label">Searches Today</div><div class="stat-sub" id="s-lasthr"></div></div>
           <div class="stat-card"><div class="stat-val skeleton" id="s-week" style="height:36px;width:60px">&nbsp;</div><div class="stat-label">This Week</div></div>
           <div class="stat-card"><div class="stat-val skeleton" id="s-total" style="height:36px;width:60px">&nbsp;</div><div class="stat-label">All Time</div></div>
+          <div class="stat-card" style="--accent-color:var(--accent)"><div class="stat-val skeleton" id="s-5min" style="height:36px;width:60px">&nbsp;</div><div class="stat-label">Last 5 min</div><div class="stat-sub" id="s-5min-rate"></div></div>
           <div class="stat-card" style="--accent-color:var(--blue)"><div class="stat-val skeleton" id="s-users" style="height:36px;width:60px">&nbsp;</div><div class="stat-label">Total Users</div><div class="stat-sub" id="s-users-today"></div></div>
           <div class="stat-card" style="--accent-color:var(--yellow)"><div class="stat-val skeleton" id="s-latency" style="height:36px;width:60px">&nbsp;</div><div class="stat-label">Avg Latency</div><div class="stat-sub">7-day (ms)</div></div>
           <div class="stat-card" style="--accent-color:var(--red)"><div class="stat-val skeleton" id="s-errors" style="height:36px;width:60px">&nbsp;</div><div class="stat-label">Errors Today</div><div class="stat-sub" id="s-errors-week"></div></div>
+        </div>
+
+        <!-- Live Feed -->
+        <div class="section" style="margin-bottom:1.5rem">
+          <div class="section-head">
+            <span class="section-title">⚡ Live Feed</span>
+            <span id="live-status" style="font-size:.72rem;padding:.2rem .6rem;border-radius:var(--r-full);background:var(--bg-hov);color:var(--text-muted)">connecting…</span>
+          </div>
+          <div id="live-feed" style="display:flex;flex-direction:column;gap:.3rem;max-height:160px;overflow-y:auto;padding:.5rem .75rem">
+            <div data-placeholder style="color:var(--text-muted);font-size:.78rem;text-align:center;padding:.5rem">Waiting for searches…</div>
+          </div>
         </div>
 
         <div class="section">
@@ -256,11 +270,13 @@ button{background:none;border:none;cursor:pointer;font:inherit;color:inherit}
           <div class="stat-card" style="--accent-color:var(--accent)"><div class="stat-val" id="u-today">—</div><div class="stat-label">Joined Today</div></div>
         </div>
         <div class="section">
-          <div class="section-head"><span class="section-title">User Notes</span></div>
-          <div class="section-body" style="font-size:.82rem;color:var(--text-dim);line-height:1.7">
-            ⚠️ SQLite databases live in <code style="background:var(--bg-hov);padding:.1em .3em;border-radius:4px">/tmp</code> on Vercel and are <strong style="color:var(--yellow)">ephemeral</strong> — data is wiped on cold starts.<br><br>
-            For persistent user storage, migrate to <strong>Turso</strong> (SQLite-compatible, free tier) or <strong>Supabase</strong>.<br><br>
-            AbbeyBot can help you plan the migration — ask in the chat →
+          <div class="section-head"><span class="section-title">Persistence Status</span></div>
+          <div class="section-body" style="font-size:.82rem;color:var(--text-dim);line-height:1.8">
+            <div id="storage-info-users" style="margin-bottom:.8rem"></div>
+            To enable persistent analytics (survives Vercel cold starts), set these env vars in Vercel:<br>
+            <code style="background:var(--bg-hov);padding:.2em .4em;border-radius:4px;font-size:.78rem;display:block;margin:.5rem 0">LIBSQL_URL=https://your-db.turso.io<br>LIBSQL_AUTH_TOKEN=your-token</code>
+            <a href="https://turso.tech" target="_blank" style="color:var(--accent)">Create a free Turso DB →</a><br><br>
+            Ask AbbeyBot to walk you through the Turso migration step by step →
           </div>
         </div>
       </div>
@@ -338,6 +354,18 @@ async function loadData() {
     _data = await r.json();
     renderAll();
     document.getElementById('last-updated').textContent = 'Updated ' + new Date().toLocaleTimeString();
+    // Show storage badge
+    const sb = document.getElementById('storage-badge');
+    if (_data.storage) {
+      sb.style.display = '';
+      if (_data.storage === 'turso') {
+        sb.style.color = 'var(--accent)';
+        sb.textContent = '✦ Turso (persistent)';
+      } else {
+        sb.style.color = 'var(--yellow)';
+        sb.textContent = '⚠ SQLite /tmp (ephemeral)';
+      }
+    }
   } catch(e) {
     console.error('Stats load error', e);
   } finally {
@@ -366,15 +394,28 @@ function renderStats() {
   set('s-today',   s.searches_today);
   set('s-week',    s.searches_week);
   set('s-total',   s.searches_total);
+  set('s-5min',    s.searches_last_5min);
   set('s-users',   s.total_users);
   set('s-latency', s.avg_latency_ms);
   set('s-errors',  s.errors_today);
-  setTxt('s-users-today',  s.users_today ? `+${s.users_today} today` : 'none today');
-  setTxt('s-errors-week',  s.errors_week + ' this week');
+  setTxt('s-lasthr', s.searches_last_hour != null ? `${s.searches_last_hour} last hour` : '');
+  const rate = s.searches_last_5min != null ? ((s.searches_last_5min / 5).toFixed(1) + '/min') : '';
+  setTxt('s-5min-rate', rate);
+  setTxt('s-users-today', s.users_today ? `+${s.users_today} today` : 'none today');
+  setTxt('s-errors-week', s.errors_week + ' this week');
   setTxt('u-total',  fmt(s.total_users));
   setTxt('u-today',  fmt(s.users_today));
   setTxt('e-today',  fmt(s.errors_today));
   setTxt('e-week',   fmt(s.errors_week));
+  // Storage info in Users view
+  const siEl = document.getElementById('storage-info-users');
+  if (siEl) {
+    if (s.storage === 'turso') {
+      siEl.innerHTML = '<span style="color:var(--accent)">✦ Turso persistent DB active — data survives cold starts ✓</span>';
+    } else {
+      siEl.innerHTML = '<span style="color:var(--yellow)">⚠ Running on SQLite /tmp — data resets on cold starts. Set up Turso below to fix.</span>';
+    }
+  }
 }
 
 function fmt(n) { if (n == null) return '—'; if (n >= 1e6) return (n/1e6).toFixed(1)+'M'; if (n >= 1e3) return (n/1e3).toFixed(1)+'K'; return n; }
@@ -388,10 +429,8 @@ function renderDailyChart() {
   const lbl  = document.getElementById('daily-labels');
   wrap.innerHTML = days.map(d => {
     const pct = Math.max(2, Math.round(d.count / max * 100));
-    const short = d.date.slice(5);
     return `<div class="chart-bar" style="height:${pct}%" data-tip="${d.date}: ${d.count}"></div>`;
   }).join('');
-  // Show first, middle, last label
   const f = days[0]?.date?.slice(5) || '';
   const m = days[14]?.date?.slice(5) || '';
   const l = days[29]?.date?.slice(5) || '';
@@ -497,6 +536,78 @@ function showView(name, btn) {
   document.getElementById('view-title').textContent = VIEWS[name] || name;
 }
 
+// ── Live Feed (SSE) ──────────────────────────────────────────────────────
+let _sseSource = null;
+let _liveCount = 0;
+const MAX_LIVE = 40;
+
+function initSSE() {
+  if (_sseSource) _sseSource.close();
+  const badge = document.getElementById('sse-badge');
+  const statusEl = document.getElementById('live-status');
+  try {
+    _sseSource = new EventSource(`/admin/api/stream${BASE}`);
+
+    _sseSource.addEventListener('connected', () => {
+      badge.textContent = '● live';
+      badge.style.color = 'var(--accent)';
+      if (statusEl) { statusEl.textContent = '● live'; statusEl.style.color = 'var(--accent)'; }
+    });
+
+    _sseSource.onmessage = (e) => {
+      try {
+        const ev = JSON.parse(e.data);
+        if (ev.type === 'search') pushLiveRow(ev);
+      } catch {}
+    };
+
+    _sseSource.onerror = () => {
+      badge.textContent = '● reconnecting…';
+      badge.style.color = 'var(--yellow)';
+      if (statusEl) { statusEl.textContent = '● reconnecting…'; statusEl.style.color = 'var(--yellow)'; }
+      // Browser auto-reconnects EventSource; update badge when it does
+      setTimeout(initSSE, 5000);
+    };
+  } catch (err) {
+    badge.textContent = '● offline';
+    badge.style.color = 'var(--red)';
+  }
+}
+
+function pushLiveRow(ev) {
+  const feed = document.getElementById('live-feed');
+  // Remove placeholder
+  const placeholder = feed.querySelector('[data-placeholder]');
+  if (placeholder) placeholder.remove();
+
+  const latCls = ev.latency_ms > 2000 ? 'very-slow' : ev.latency_ms > 800 ? 'slow' : 'fast';
+  const lat = ev.latency_ms ? `<span class="latency ${latCls}" style="font-size:.7rem">${ev.latency_ms}ms</span>` : '';
+  const typeC = {'text':'var(--accent)','images':'var(--blue)','videos':'var(--yellow)',
+                 'code':'#a78bfa','news':'var(--text-dim)'}[ev.search_type] || 'var(--text-muted)';
+  const now = new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex;align-items:center;gap:.5rem;font-size:.78rem;padding:.25rem .3rem;border-radius:6px;animation:msgIn .15s ease both;background:var(--bg-hov)';
+  row.innerHTML = `
+    <span style="color:var(--text-muted);font-size:.68rem;white-space:nowrap;flex-shrink:0">${now}</span>
+    <span style="color:${typeC};font-size:.68rem;flex-shrink:0">${esc(ev.search_type||'text')}</span>
+    <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1" title="${esc(ev.query)}">${esc(ev.query)}</span>
+    ${lat}
+    <span style="color:var(--text-muted);font-size:.68rem;flex-shrink:0">${ev.results} results</span>
+  `;
+  feed.insertBefore(row, feed.firstChild);
+
+  // Also bump s-5min counter live
+  _liveCount++;
+  const el = document.getElementById('s-5min');
+  if (el && el.textContent !== '—') {
+    const v = parseInt(el.textContent) || 0;
+    el.textContent = v + 1;
+  }
+
+  // Trim to max
+  while (feed.children.length > MAX_LIVE) feed.removeChild(feed.lastChild);
+}
+
 // ── Chat ─────────────────────────────────────────────────────────────────
 function openChat() {
   document.getElementById('chat-panel').classList.remove('hidden');
@@ -522,7 +633,6 @@ async function sendChat() {
   addMsg('user', msg);
   _history.push({role:'user', content:msg});
 
-  // Hide suggestions after first message
   document.getElementById('chat-suggestions').style.display = 'none';
 
   const thinkEl = addThinking();
@@ -535,11 +645,17 @@ async function sendChat() {
       searches_today: _data.searches_today,
       searches_week: _data.searches_week,
       searches_total: _data.searches_total,
+      searches_last_hour: _data.searches_last_hour,
+      searches_last_5min: _data.searches_last_5min,
       avg_latency_ms: _data.avg_latency_ms,
       errors_today: _data.errors_today,
       total_users: _data.total_users,
+      users_today: _data.users_today,
+      storage: _data.storage,
+      live_clients: _data.live_clients,
       top_queries: (_data.top_queries||[]).slice(0,5),
       by_type: _data.by_type,
+      server_time: _data.server_time,
     });
   }
 
@@ -570,7 +686,6 @@ function addMsg(role, content) {
   const div = document.createElement('div');
   div.className = `msg ${role}`;
 
-  // Render markdown-ish: bold, code blocks, inline code
   let html = esc(content)
     .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
     .replace(/`([^`]+)`/g, '<code>$1</code>')
@@ -597,9 +712,10 @@ function esc(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-// ── Auto-refresh every 60s ───────────────────────────────────────────────
+// ── Boot ─────────────────────────────────────────────────────────────────
 loadData();
-setInterval(loadData, 60000);
+initSSE();
+setInterval(loadData, 15000);  // Poll every 15s for stats
 </script>
 </body>
 </html>
