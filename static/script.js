@@ -203,7 +203,7 @@ document.addEventListener("DOMContentLoaded", () => {
     document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !settingsOverlay.hasAttribute("hidden")) closeSettings(); });
   }
 
-  // ===== Header overflow dropdown =====
+  // ===== Header overflow dropdown (kept for compat; elements removed from DOM) =====
   const overflowBtn = document.getElementById("header-overflow-btn");
   const overflowMenu = document.getElementById("header-overflow-menu");
   if (overflowBtn && overflowMenu) {
@@ -224,6 +224,44 @@ document.addEventListener("DOMContentLoaded", () => {
       if (e.key === "Escape") overflowMenu.setAttribute("hidden", "");
     });
   }
+
+  // ===== Tab More dropdown =====
+  (function initTabMore() {
+    const btn = document.getElementById("tab-more-btn");
+    const menu = document.getElementById("tab-more-menu");
+    if (!btn || !menu) return;
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const open = !menu.hasAttribute("hidden");
+      menu[open ? "setAttribute" : "removeAttribute"]("hidden", "");
+      btn.setAttribute("aria-expanded", String(!open));
+    });
+    document.addEventListener("click", (e) => {
+      if (!menu.hasAttribute("hidden") && !menu.contains(e.target) && e.target !== btn) {
+        menu.setAttribute("hidden", "");
+        btn.setAttribute("aria-expanded", "false");
+      }
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") { menu.setAttribute("hidden", ""); btn.setAttribute("aria-expanded", "false"); }
+    });
+  })();
+
+  // ===== Filters toggle =====
+  (function initFilterMore() {
+    const btn = document.getElementById("filter-more-btn");
+    const extras = document.getElementById("filter-extras");
+    if (!btn || !extras) return;
+    btn.addEventListener("click", () => {
+      const open = extras.hasAttribute("hidden");
+      extras[open ? "removeAttribute" : "setAttribute"]("hidden", "");
+      btn.setAttribute("aria-expanded", String(open));
+      if (open) {
+        const firstInput = extras.querySelector("input, button");
+        if (firstInput) firstInput.focus();
+      }
+    });
+  })();
 
   // ===== Sync UI to current values =====
   function syncBtnGroup(id, activeVal) {
@@ -378,23 +416,33 @@ document.addEventListener("DOMContentLoaded", () => {
   // ===== Region selector =====
   const regionSelect = document.getElementById("region-select");
   const regionInput = document.getElementById("region-input");
+  function applyRegion(val) {
+    if (regionInput) regionInput.value = val;
+    if (regionSelect) regionSelect.value = val;
+    const langInput = document.getElementById("lang-input");
+    if (langInput) {
+      const parts = val.split("-");
+      langInput.value = parts.length > 1 ? parts[1] : "";
+    }
+    if (gs("persistRegion") === "true") {
+      localStorage.setItem("abbiey_region", val);
+    }
+  }
   if (regionSelect && regionInput) {
     regionSelect.addEventListener("change", () => {
-      regionInput.value = regionSelect.value;
-      const langInput = document.getElementById("lang-input");
-      if (langInput) {
-        const parts = regionSelect.value.split("-");
-        langInput.value = parts.length > 1 ? parts[1] : "";
-      }
-      // Persist if enabled
-      if (gs("persistRegion") === "true") {
-        localStorage.setItem("abbiey_region", regionSelect.value);
-      }
-      // Auto-submit if there's already a query
+      applyRegion(regionSelect.value);
       const q = document.getElementById("search-input");
-      if (q && q.value.trim()) {
-        document.getElementById("search-form").submit();
-      }
+      if (q && q.value.trim()) document.getElementById("search-form").submit();
+    });
+  }
+  // Sync settings modal region select
+  const regionSelectModal = document.getElementById("region-select-modal");
+  if (regionSelectModal) {
+    if (regionInput) regionSelectModal.value = regionInput.value || "";
+    regionSelectModal.addEventListener("change", () => {
+      applyRegion(regionSelectModal.value);
+      const q = document.getElementById("search-input");
+      if (q && q.value.trim()) document.getElementById("search-form").submit();
     });
   }
 
@@ -615,37 +663,18 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function renderHistory() {
       const items = getHistory();
-      // Quick shortcuts always shown at bottom when no input
-      const shortcuts = [
-        { icon: "⚡", label: "!w", desc: "Wikipedia" },
-        { icon: "▶", label: "!yt", desc: "YouTube" },
-        { icon: "🐙", label: "!gh", desc: "GitHub" },
-        { icon: "💬", label: "!r", desc: "Reddit" },
-      ];
       let h = "";
       if (items.length) {
         h += `<div class="ac-header"><span class="ac-header-label">Recent</span><button class="ac-clear-btn" id="ac-clear-all" type="button">Clear</button></div>`;
         h += items.slice(0, 5).map((text, i) =>
-          `<div class="ac-item" data-idx="${i}" data-history="1"><span class="ac-item-icon">🕐</span><span class="ac-item-text">${esc(text)}</span><button class="ac-delete-btn" data-del-idx="${i}" type="button" title="Remove">&times;</button></div>`
+          `<div class="ac-item" data-idx="${i}" data-history="1"><span class="ac-item-icon ac-item-icon-clock"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span><span class="ac-item-text">${esc(text)}</span><button class="ac-delete-btn" data-del-idx="${i}" type="button" title="Remove">&times;</button></div>`
         ).join("");
       }
-      h += `<div class="ac-section-divider"><span>Quick shortcuts</span></div>`;
-      h += shortcuts.map((s, i) =>
-        `<div class="ac-item ac-shortcut" data-bang="${esc(s.label)}"><span class="ac-item-icon">${s.icon}</span><span class="ac-item-text"><span class="ac-bang-label">${esc(s.label)}</span> <span class="ac-item-desc">${esc(s.desc)}</span></span></div>`
-      ).join("");
       dropdown.innerHTML = h;
       activeIdx = -1;
       showDropdown();
       const clearBtn = document.getElementById("ac-clear-all");
       if (clearBtn) clearBtn.addEventListener("click", (e) => { e.stopPropagation(); clearHistory(); hideDropdown(); });
-      dropdown.querySelectorAll(".ac-shortcut").forEach(el => {
-        el.addEventListener("mousedown", (e) => {
-          e.preventDefault();
-          input.value = el.dataset.bang + " ";
-          hideDropdown();
-          input.focus();
-        });
-      });
     }
 
     function getItems() { return dropdown.querySelectorAll(".ac-item"); }
@@ -690,7 +719,7 @@ document.addEventListener("DOMContentLoaded", () => {
     dropdown.addEventListener("mousedown", (e) => {
       const delBtn = e.target.closest(".ac-delete-btn");
       if (delBtn) { e.preventDefault(); e.stopPropagation(); const idx = parseInt(delBtn.getAttribute("data-del-idx")); const items = getHistory(); if (idx >= 0 && idx < items.length) removeHistory(items[idx]); renderHistory(); return; }
-      const item = e.target.closest(".ac-item:not(.ac-shortcut)");
+      const item = e.target.closest(".ac-item");
       if (item) { e.preventDefault(); selectItem(item.querySelector(".ac-item-text").textContent); }
     });
 

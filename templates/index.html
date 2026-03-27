@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔍</text></svg>">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='44' cy='44' r='28' fill='none' stroke='%2300e5a0' stroke-width='10'/><line x1='64' y1='64' x2='90' y2='90' stroke='%2300e5a0' stroke-width='10' stroke-linecap='round'/></svg>">
 </head>
 <body class="{% if query %}has-results{% endif %}">
 
@@ -16,55 +16,21 @@
         <a href="/" class="logo">abbiey.<span>search</span></a>
         <div class="header-controls">
 
-            {# ··· overflow dropdown — contains less-used controls #}
-            <div class="header-overflow" id="header-overflow">
-                <button class="header-btn" id="header-overflow-btn" aria-label="More options" title="More options">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/><circle cx="5" cy="12" r="1.2"/></svg>
-                </button>
-                <div class="header-overflow-menu" id="header-overflow-menu" hidden>
-                    <div class="overflow-menu-row">
-                        <span class="overflow-menu-label">Privacy</span>
-                        <button class="privacy-badge" id="privacy-badge" aria-label="Privacy stats" title="Privacy stats">
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                            <span>0 trackers</span>
-                        </button>
-                    </div>
-                    <div class="overflow-menu-row">
-                        <span class="overflow-menu-label">Region</span>
-                        <div class="region-selector">
-                            <select id="region-select" aria-label="Search region">
-                                <option value="">All Regions</option>
-                                <option value="us-en" {% if region == 'us-en' %}selected{% endif %}>US</option>
-                                <option value="uk-en" {% if region == 'uk-en' %}selected{% endif %}>UK</option>
-                                <option value="ca-en" {% if region == 'ca-en' %}selected{% endif %}>Canada</option>
-                                <option value="au-en" {% if region == 'au-en' %}selected{% endif %}>Australia</option>
-                                <option value="de-de" {% if region == 'de-de' %}selected{% endif %}>Germany</option>
-                                <option value="fr-fr" {% if region == 'fr-fr' %}selected{% endif %}>France</option>
-                                <option value="es-es" {% if region == 'es-es' %}selected{% endif %}>Spain</option>
-                                <option value="it-it" {% if region == 'it-it' %}selected{% endif %}>Italy</option>
-                                <option value="jp-jp" {% if region == 'jp-jp' %}selected{% endif %}>Japan</option>
-                                <option value="in-en" {% if region == 'in-en' %}selected{% endif %}>India</option>
-                                <option value="br-pt" {% if region == 'br-pt' %}selected{% endif %}>Brazil</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="overflow-menu-row">
-                        <span class="overflow-menu-label">Density</span>
-                        <button id="density-toggle" class="header-btn overflow-icon-btn" aria-label="Toggle density" title="Layout density">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
-                        </button>
-                    </div>
-                    <div class="overflow-menu-row">
-                        <span class="overflow-menu-label">Theme</span>
-                        <button id="theme-toggle" class="header-btn overflow-icon-btn" aria-label="Toggle theme">
-                            <svg class="icon-sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
-                            <svg class="icon-moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            {# Always-visible: Settings + Sign in #}
+            {# region-select hidden input — synced to settings modal; keeps the JS region binding working #}
+            <select id="region-select" aria-label="Search region" style="display:none">
+                <option value="">All Regions</option>
+                <option value="us-en" {% if region == 'us-en' %}selected{% endif %}>US</option>
+                <option value="uk-en" {% if region == 'uk-en' %}selected{% endif %}>UK</option>
+                <option value="ca-en" {% if region == 'ca-en' %}selected{% endif %}>Canada</option>
+                <option value="au-en" {% if region == 'au-en' %}selected{% endif %}>Australia</option>
+                <option value="de-de" {% if region == 'de-de' %}selected{% endif %}>Germany</option>
+                <option value="fr-fr" {% if region == 'fr-fr' %}selected{% endif %}>France</option>
+                <option value="es-es" {% if region == 'es-es' %}selected{% endif %}>Spain</option>
+                <option value="it-it" {% if region == 'it-it' %}selected{% endif %}>Italy</option>
+                <option value="jp-jp" {% if region == 'jp-jp' %}selected{% endif %}>Japan</option>
+                <option value="in-en" {% if region == 'in-en' %}selected{% endif %}>India</option>
+                <option value="br-pt" {% if region == 'br-pt' %}selected{% endif %}>Brazil</option>
+            </select>
             <button id="theme-settings-btn" class="header-btn" aria-label="Theme settings" title="Customize theme">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
             </button>
@@ -144,6 +110,25 @@
                 {# ===== SEARCH ===== #}
                 <section class="settings-section">
                     <h3 class="settings-section-title">Search</h3>
+                    <div class="settings-row">
+                        <span class="settings-row-label">Region</span>
+                        <div class="region-selector settings-region">
+                            <select id="region-select-modal" aria-label="Search region">
+                                <option value="">All Regions</option>
+                                <option value="us-en">US</option>
+                                <option value="uk-en">UK</option>
+                                <option value="ca-en">Canada</option>
+                                <option value="au-en">Australia</option>
+                                <option value="de-de">Germany</option>
+                                <option value="fr-fr">France</option>
+                                <option value="es-es">Spain</option>
+                                <option value="it-it">Italy</option>
+                                <option value="jp-jp">Japan</option>
+                                <option value="in-en">India</option>
+                                <option value="br-pt">Brazil</option>
+                            </select>
+                        </div>
+                    </div>
                     <div class="settings-row">
                         <span class="settings-row-label">Safe search</span>
                         <div class="settings-btn-group" id="safesearch-group">
@@ -272,6 +257,14 @@
     <div class="app-layout {% if query %}has-chat{% endif %}">
     <main>
         <div class="search-container">
+            {% if not query %}
+            {# ===== HOME HERO ===== #}
+            <div class="home-hero">
+                <div class="home-logo">abbiey.<span>search</span></div>
+                <p class="home-tagline">Private by design.</p>
+            </div>
+            {% endif %}
+
             <form action="/search" method="GET" id="search-form">
                 <div class="search-box-wrapper">
                     <div class="search-box">
@@ -281,7 +274,15 @@
                             <svg class="voice-icon-mic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2M12 19v4M8 23h8"/></svg>
                             <svg class="voice-icon-stop" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="display:none"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
                         </button>
-                        <button type="submit" class="search-btn">Search</button>
+                        {% if not query %}
+                        <button type="submit" class="search-btn search-btn-icon" aria-label="Search">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                        </button>
+                        {% else %}
+                        <button type="submit" class="search-btn search-btn-icon" aria-label="Search">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                        </button>
+                        {% endif %}
                     </div>
                     <div class="ac-dropdown" id="ac-dropdown"></div>
                 </div>
@@ -290,13 +291,12 @@
                 <input type="hidden" name="lang" id="lang-input" value="{{ lang or '' }}">
                 <input type="hidden" name="df" id="df-input" value="{{ time_filter or '' }}">
                 <input type="hidden" name="safesearch" id="safesearch-input" value="off">
-                <p class="bang-hint" aria-hidden="true" style="display:none">Try: <span>!w</span> Wikipedia &middot; <span>!yt</span> YouTube &middot; <span>!gh</span> GitHub &middot; <span class="bang-hint-extra">press <kbd>/</kbd> to focus</span></p>
+
             </form>
 
+
             {% if not query %}
-            {# ===== TRENDING (homepage only) ===== #}
-            <div id="trending-home" class="trending-home"></div>
-            {% endif %}
+            
 
             {% if query %}
             {# Active operator chips #}
@@ -319,8 +319,16 @@
                 <a href="/search?q={{ query|urlencode }}&type=news{% if region %}&region={{ region }}{% endif %}" class="tab {% if search_type == 'news' %}active{% endif %}">News</a>
                 <a href="/search?q={{ query|urlencode }}&type=videos{% if region %}&region={{ region }}{% endif %}" class="tab {% if search_type == 'videos' %}active{% endif %}">Videos</a>
                 <a href="/search?q={{ query|urlencode }}&type=code{% if region %}&region={{ region }}{% endif %}" class="tab {% if search_type == 'code' %}active{% endif %}">Code</a>
-                <a href="/search?q={{ query|urlencode }}&type=onion{% if region %}&region={{ region }}{% endif %}" class="tab {% if search_type == 'onion' %}active{% endif %}">Deep Web</a>
-                <a href="/search?q={{ query|urlencode }}&type=saved" class="tab {% if search_type == 'saved' %}active{% endif %}">Saved <span class="bookmark-count-badge" id="bookmark-count-badge"></span></a>
+                <div class="tab-more-wrap {% if search_type in ('onion', 'saved') %}has-active{% endif %}" id="tab-more-wrap">
+                    <button class="tab tab-more-btn {% if search_type in ('onion', 'saved') %}active{% endif %}" id="tab-more-btn" aria-haspopup="true" aria-expanded="false">
+                        {% if search_type == 'onion' %}Deep Web{% elif search_type == 'saved' %}Saved{% else %}More{% endif %}
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+                    </button>
+                    <div class="tab-more-menu" id="tab-more-menu" hidden>
+                        <a href="/search?q={{ query|urlencode }}&type=onion{% if region %}&region={{ region }}{% endif %}" class="tab-more-item {% if search_type == 'onion' %}active{% endif %}">Deep Web</a>
+                        <a href="/search?q={{ query|urlencode }}&type=saved" class="tab-more-item {% if search_type == 'saved' %}active{% endif %}">Saved <span class="bookmark-count-badge" id="bookmark-count-badge"></span></a>
+                    </div>
+                </div>
             </nav>
 
             {# ===== QUICK FILTERS BAR ===== #}
@@ -332,14 +340,10 @@
                     <option value="m" {% if time_filter == 'm' %}selected{% endif %}>Past month</option>
                     <option value="y" {% if time_filter == 'y' %}selected{% endif %}>Past year</option>
                 </select>
-                <div class="filter-pills" id="filter-pills">
-                    <button class="filter-pill{% if operators and 'filetype' in operators and 'pdf' in operators.filetype %} active{% endif %}" data-ft="pdf">PDF</button>
-                    <button class="filter-pill{% if operators and 'filetype' in operators and 'doc' in operators.filetype %} active{% endif %}" data-ft="doc">DOC</button>
-                    <button class="filter-pill{% if operators and 'filetype' in operators and 'ppt' in operators.filetype %} active{% endif %}" data-ft="ppt">PPT</button>
-                    <button class="filter-pill{% if operators and 'filetype' in operators and 'xls' in operators.filetype %} active{% endif %}" data-ft="xls">XLS</button>
-                    <button class="filter-pill{% if operators and 'filetype' in operators and 'csv' in operators.filetype %} active{% endif %}" data-ft="csv">CSV</button>
-                </div>
-                <input type="text" class="filter-site-input" id="filter-site" placeholder="site:" value="{% if operators and 'site' in operators %}{{ operators.site[0] }}{% endif %}" aria-label="Filter by site">
+                <button class="filter-more-btn {% if operators and ('filetype' in operators or 'site' in operators) %}active{% endif %}" id="filter-more-btn" aria-expanded="false" aria-label="More filters">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
+                    Filters{% if operators and ('filetype' in operators or 'site' in operators) %} &middot;{% endif %}
+                </button>
                 {# ===== VIEW MODE SWITCHER ===== #}
                 <div class="view-mode-switcher" id="view-mode-switcher" role="group" aria-label="View mode">
                     <button class="view-mode-btn active" data-view="list" title="List view" aria-label="List view">
@@ -353,27 +357,25 @@
                     </button>
                 </div>
             </div>
-
-            {# ===== QUERY EXPANSION NOTICE ===== #}
-            {% if expansion_terms %}
-            <div class="expansion-notice" id="expansion-notice">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-                Also searching for:
-                {% for term in expansion_terms %}
-                <span class="expansion-term">{{ term }}</span>{% if not loop.last %},{% endif %}
-                {% endfor %}
+            {# Filter extras — shown when Filters button is toggled #}
+            <div class="filter-extras" id="filter-extras" {% if not (operators and ('filetype' in operators or 'site' in operators)) %}hidden{% endif %}>
+                <div class="filter-pills" id="filter-pills">
+                    <button class="filter-pill{% if operators and 'filetype' in operators and 'pdf' in operators.filetype %} active{% endif %}" data-ft="pdf">PDF</button>
+                    <button class="filter-pill{% if operators and 'filetype' in operators and 'doc' in operators.filetype %} active{% endif %}" data-ft="doc">DOC</button>
+                    <button class="filter-pill{% if operators and 'filetype' in operators and 'ppt' in operators.filetype %} active{% endif %}" data-ft="ppt">PPT</button>
+                    <button class="filter-pill{% if operators and 'filetype' in operators and 'xls' in operators.filetype %} active{% endif %}" data-ft="xls">XLS</button>
+                    <button class="filter-pill{% if operators and 'filetype' in operators and 'csv' in operators.filetype %} active{% endif %}" data-ft="csv">CSV</button>
+                </div>
+                <input type="text" class="filter-site-input" id="filter-site" placeholder="site:" value="{% if operators and 'site' in operators %}{{ operators.site[0] }}{% endif %}" aria-label="Filter by site">
+                {% if results and search_type not in ('images', 'saved') %}
+                <div class="results-filter-bar" id="results-filter-bar">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                    <input type="text" id="results-filter-input" class="results-filter-input" placeholder="Filter these results…" autocomplete="off" aria-label="Filter results">
+                    <span class="results-filter-count" id="results-filter-count"></span>
+                    <button class="results-filter-clear" id="results-filter-clear" aria-label="Clear filter" style="display:none">&times;</button>
+                </div>
+                {% endif %}
             </div>
-            {% endif %}
-
-            {# ===== IN-RESULTS FILTER BAR ===== #}
-            {% if results and search_type not in ('images', 'saved') %}
-            <div class="results-filter-bar" id="results-filter-bar">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-                <input type="text" id="results-filter-input" class="results-filter-input" placeholder="Filter these results…" autocomplete="off" aria-label="Filter results">
-                <span class="results-filter-count" id="results-filter-count"></span>
-                <button class="results-filter-clear" id="results-filter-clear" aria-label="Clear filter" style="display:none">&times;</button>
-            </div>
-            {% endif %}
             {% endif %}
         </div>
 
@@ -455,13 +457,12 @@
             <div class="weather-main">
                 <div class="weather-location">{{ weather.location }}</div>
                 <div class="weather-current">
-                    <span class="weather-emoji">{{ weather.emoji }}</span>
                     <span class="weather-temp">{{ weather.temp }}°C</span>
                 </div>
                 <div class="weather-condition">{{ weather.condition }}</div>
                 <div class="weather-stats">
-                    <span class="weather-stat">💧 {{ weather.humidity }}%</span>
-                    <span class="weather-stat">💨 {{ weather.wind }} km/h</span>
+                    <span class="weather-stat">H {{ weather.humidity }}%</span>
+                    <span class="weather-stat">W {{ weather.wind }} km/h</span>
                 </div>
             </div>
             {% if weather.forecast %}
@@ -469,7 +470,6 @@
                 {% for day in weather.forecast %}
                 <div class="weather-forecast-day">
                     <span class="forecast-day-name">{{ day.day }}</span>
-                    <span class="forecast-emoji">{{ day.emoji }}</span>
                     <span class="forecast-temps">{{ day.high }}° / {{ day.low }}°</span>
                 </div>
                 {% endfor %}
@@ -535,27 +535,27 @@
         <div class="entity-card">
             <div class="entity-header">
                 {% if primary_entity.type == 'phone' %}
-                    <span class="entity-icon">📞</span>
+                    <span class="entity-icon entity-icon-text">TEL</span>
                 {% elif primary_entity.type == 'email' %}
-                    <span class="entity-icon">📧</span>
+                    <span class="entity-icon entity-icon-text">@</span>
                 {% elif primary_entity.type == 'username' %}
-                    <span class="entity-icon">👤</span>
+                    <span class="entity-icon entity-icon-text">@</span>
                 {% elif primary_entity.type == 'person' %}
-                    <span class="entity-icon">🧑</span>
+                    <span class="entity-icon entity-icon-text">ID</span>
                 {% elif primary_entity.type == 'domain' %}
-                    <span class="entity-icon">🌐</span>
+                    <span class="entity-icon entity-icon-text">URL</span>
                 {% elif primary_entity.type == 'ip' %}
-                    <span class="entity-icon">🖥️</span>
+                    <span class="entity-icon entity-icon-text">IP</span>
                 {% elif primary_entity.type == 'crypto' %}
-                    <span class="entity-icon">🪙</span>
+                    <span class="entity-icon entity-icon-text">₿</span>
                 {% elif primary_entity.type == 'mac' %}
-                    <span class="entity-icon">🔌</span>
+                    <span class="entity-icon entity-icon-text">MAC</span>
                 {% elif primary_entity.type == 'coordinates' %}
-                    <span class="entity-icon">📍</span>
+                    <span class="entity-icon entity-icon-text">GEO</span>
                 {% elif primary_entity.type == 'hashtag' %}
-                    <span class="entity-icon">#️⃣</span>
+                    <span class="entity-icon entity-icon-text">#</span>
                 {% elif primary_entity.type == 'address' %}
-                    <span class="entity-icon">🏠</span>
+                    <span class="entity-icon entity-icon-text">ADR</span>
                 {% endif %}
                 <div class="entity-info">
                     <span class="entity-type-badge">{{ primary_entity.type|upper }}</span>
@@ -830,7 +830,6 @@
         </div>
         <div class="preview-body" id="preview-body">
             <div class="preview-empty" id="preview-empty">
-                <p>Hover over a result or press <kbd>j</kbd>/<kbd>k</kbd> to navigate</p>
             </div>
             <div class="preview-content" id="preview-content" style="display:none">
                 <img class="preview-image" id="preview-image" src="" alt="" style="display:none">
@@ -898,8 +897,7 @@
     </div>
 
     <footer>
-        <p>abbiey.search &mdash; No tracking. No profiling. No judgment.</p>
-        <p class="footer-sub">We don't log your searches. Your data stays yours.</p>
+        <p>abbiey.search &mdash; Private by design.</p>
     </footer>
 
     {% if query %}
