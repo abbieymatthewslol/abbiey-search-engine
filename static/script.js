@@ -93,7 +93,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // ===== Settings Modal =====
   const _S = {
     theme:         { key: "theme",                 def: "dark"   },
-    accent:        { key: "accent-color",          def: "#22d3ee"},
+    accent:        { key: "accent-color",          def: "#2563eb"},
     density:       { key: "density",               def: "default"},
     fontSize:      { key: "abbiey_font_size",      def: "medium" },
     fontFamily:    { key: "abbiey_font_family",    def: "system" },
@@ -519,7 +519,7 @@ document.addEventListener("DOMContentLoaded", () => {
       .then(r => r.json())
       .then(data => {
         if (data.error === "rate_limited") {
-          aiBody.innerHTML = `<div class="ai-summary-text ai-unavailable">AI summary temporarily unavailable &mdash; too many requests. Results shown below.</div>`;
+          aiBody.innerHTML = `<div class="ai-summary-text ai-unavailable">Summary temporarily unavailable &mdash; too many requests. Results are shown below.</div>`;
           return;
         }
         if (data.error) { aiCard.classList.add("ai-hidden"); return; }

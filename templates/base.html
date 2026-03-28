@@ -4,9 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}abbiey.search{% endblock %}</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png">
     <link rel="shortcut icon" href="/favicon.ico">
@@ -22,7 +19,7 @@
     <meta name="twitter:title" content="{% block tw_title %}abbiey.search{% endblock %}">
     <meta name="twitter:description" content="{% block tw_description %}Private search engine. No tracking. No profiling.{% endblock %}">
     <link rel="manifest" href="/manifest.json">
-    <meta name="theme-color" content="#22d3ee">
+    <meta name="theme-color" content="#2563eb">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -35,8 +32,8 @@
             var t = localStorage.getItem('theme') || 'dark';
             var d = localStorage.getItem('density') || 'default';
             var a = localStorage.getItem('accent-color') || localStorage.getItem('accentColor');
-            var fs = localStorage.getItem('fontSize');
-            var ff = localStorage.getItem('fontFamily');
+            var fs = localStorage.getItem('abbiey_font_size');
+            var ff = localStorage.getItem('abbiey_font_family');
             document.documentElement.setAttribute('data-theme', t);
             document.documentElement.setAttribute('data-density', d);
             if (a) document.documentElement.style.setProperty('--accent', a);
@@ -135,16 +132,16 @@
                         <span class="settings-row-label">Accent color</span>
                         <div class="settings-accent-row">
                             <div class="theme-color-presets" id="color-presets">
-                                <button class="color-swatch" data-color="#22d3ee" style="background:#22d3ee" title="Aurora cyan"></button>
-                                <button class="color-swatch" data-color="#38bdf8" style="background:#38bdf8" title="Sky"></button>
-                                <button class="color-swatch" data-color="#a78bfa" style="background:#a78bfa" title="Violet"></button>
-                                <button class="color-swatch" data-color="#c084fc" style="background:#c084fc" title="Lilac"></button>
-                                <button class="color-swatch" data-color="#f472b6" style="background:#f472b6" title="Rose"></button>
-                                <button class="color-swatch" data-color="#fb923c" style="background:#fb923c" title="Amber"></button>
-                                <button class="color-swatch" data-color="#4ade80" style="background:#4ade80" title="Mint"></button>
-                                <button class="color-swatch" data-color="#facc15" style="background:#facc15" title="Gold"></button>
+                                <button class="color-swatch" data-color="#2563eb" style="background:#2563eb" title="Blue"></button>
+                                <button class="color-swatch" data-color="#1e40af" style="background:#1e40af" title="Navy"></button>
+                                <button class="color-swatch" data-color="#0f766e" style="background:#0f766e" title="Teal"></button>
+                                <button class="color-swatch" data-color="#15803d" style="background:#15803d" title="Green"></button>
+                                <button class="color-swatch" data-color="#b45309" style="background:#b45309" title="Amber"></button>
+                                <button class="color-swatch" data-color="#7c3aed" style="background:#7c3aed" title="Violet"></button>
+                                <button class="color-swatch" data-color="#be123c" style="background:#be123c" title="Red"></button>
+                                <button class="color-swatch" data-color="#475569" style="background:#475569" title="Slate"></button>
                             </div>
-                            <input type="color" id="custom-color" value="#22d3ee" title="Custom color" class="settings-color-picker">
+                            <input type="color" id="custom-color" value="#2563eb" title="Custom color" class="settings-color-picker">
                         </div>
                     </div>
                     <div class="settings-row">

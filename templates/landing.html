@@ -5,32 +5,27 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>abbiey.search — Private Search Engine. No Tracking. No Logs.</title>
     <meta name="description" content="A privacy-respecting search engine that never tracks you, never logs your queries, and never filters results. One-time $10, unlimited forever.">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#128269;</text></svg>">
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
         :root {
-            --bg: #06080f;
-            --surface: #0c1019;
-            --border: #1e293b;
-            --accent: #22d3ee;
-            --accent2: #a78bfa;
-            --text: #e8eaef;
-            --muted: #8b93a8;
-            --radius: 14px;
+            --bg: #0f1115;
+            --surface: #181b21;
+            --border: #2d333b;
+            --accent: #2563eb;
+            --accent2: #1d4ed8;
+            --text: #e7eaee;
+            --muted: #9ca3af;
+            --radius: 6px;
         }
 
         html { scroll-behavior: smooth; }
 
         body {
-            background: radial-gradient(80vw 50vh at 10% -10%, rgba(34,211,238,.07), transparent 50%),
-                        radial-gradient(70vw 45vh at 95% 0%, rgba(167,139,250,.06), transparent 45%),
-                        var(--bg);
+            background: var(--bg);
             color: var(--text);
-            font-family: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             line-height: 1.6;
             overflow-x: hidden;
         }
@@ -40,8 +35,7 @@
             position: sticky;
             top: 0;
             z-index: 100;
-            background: rgba(10,10,15,0.85);
-            backdrop-filter: blur(12px);
+            background: var(--surface);
             border-bottom: 1px solid var(--border);
             padding: 0 2rem;
             display: flex;
@@ -55,7 +49,7 @@
             color: var(--text);
             text-decoration: none;
         }
-        .nav-logo span { color: var(--accent); }
+        .nav-logo span { color: var(--text); font-weight: 600; }
         .nav-links { display: flex; align-items: center; gap: 1rem; }
         .nav-link {
             color: var(--muted);
@@ -66,10 +60,10 @@
         .nav-link:hover { color: var(--text); }
         .nav-cta {
             background: var(--accent);
-            color: #0a0a0f;
-            padding: .4rem 1.1rem;
-            border-radius: 6px;
-            font-weight: 700;
+            color: #fff;
+            padding: .4rem 1rem;
+            border-radius: var(--radius);
+            font-weight: 600;
             font-size: .85rem;
             text-decoration: none;
             transition: opacity .2s;
@@ -86,13 +80,6 @@
             text-align: center;
             padding: 4rem 1.5rem 2rem;
             position: relative;
-        }
-        .hero::before {
-            content: '';
-            position: absolute;
-            inset: 0;
-            background: radial-gradient(ellipse 80% 50% at 50% 0%, rgba(110,231,183,.07) 0%, transparent 70%);
-            pointer-events: none;
         }
         .hero-badge {
             display: inline-flex;

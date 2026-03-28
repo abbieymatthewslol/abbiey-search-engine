@@ -18,9 +18,6 @@
             if (ff) document.documentElement.setAttribute('data-font', ff);
         })();
     </script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <meta name="deploy-hash" content="{{ deploy_hash }}">
     <!-- SEO meta tags -->
@@ -52,7 +49,7 @@
     {% if not query %}<link rel="canonical" href="https://www.abbieysearch.com/">{% endif %}
     <!-- PWA -->
     <link rel="manifest" href="/manifest.json">
-    <meta name="theme-color" content="#22d3ee">
+    <meta name="theme-color" content="#2563eb">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -153,16 +150,16 @@
                         <span class="settings-row-label">Accent color</span>
                         <div class="settings-accent-row">
                             <div class="theme-color-presets" id="color-presets">
-                                <button class="color-swatch" data-color="#22d3ee" style="background:#22d3ee" title="Aurora cyan"></button>
-                                <button class="color-swatch" data-color="#38bdf8" style="background:#38bdf8" title="Sky"></button>
-                                <button class="color-swatch" data-color="#a78bfa" style="background:#a78bfa" title="Violet"></button>
-                                <button class="color-swatch" data-color="#c084fc" style="background:#c084fc" title="Lilac"></button>
-                                <button class="color-swatch" data-color="#f472b6" style="background:#f472b6" title="Rose"></button>
-                                <button class="color-swatch" data-color="#fb923c" style="background:#fb923c" title="Amber"></button>
-                                <button class="color-swatch" data-color="#4ade80" style="background:#4ade80" title="Mint"></button>
-                                <button class="color-swatch" data-color="#facc15" style="background:#facc15" title="Gold"></button>
+                                <button class="color-swatch" data-color="#2563eb" style="background:#2563eb" title="Blue"></button>
+                                <button class="color-swatch" data-color="#1e40af" style="background:#1e40af" title="Navy"></button>
+                                <button class="color-swatch" data-color="#0f766e" style="background:#0f766e" title="Teal"></button>
+                                <button class="color-swatch" data-color="#15803d" style="background:#15803d" title="Green"></button>
+                                <button class="color-swatch" data-color="#b45309" style="background:#b45309" title="Amber"></button>
+                                <button class="color-swatch" data-color="#7c3aed" style="background:#7c3aed" title="Violet"></button>
+                                <button class="color-swatch" data-color="#be123c" style="background:#be123c" title="Red"></button>
+                                <button class="color-swatch" data-color="#475569" style="background:#475569" title="Slate"></button>
                             </div>
-                            <input type="color" id="custom-color" value="#22d3ee" title="Custom color" class="settings-color-picker">
+                            <input type="color" id="custom-color" value="#2563eb" title="Custom color" class="settings-color-picker">
                         </div>
                     </div>
                     <div class="settings-row">
@@ -240,7 +237,7 @@
                         </div>
                     </div>
                     <div class="settings-row">
-                        <span class="settings-row-label">AI Summary</span>
+                        <span class="settings-row-label">Answer summary</span>
                         <label class="settings-toggle">
                             <input type="checkbox" id="ai-summary-toggle" checked>
                             <span class="settings-toggle-track"></span>
@@ -498,7 +495,7 @@
         <div class="ai-summary-card" id="ai-summary-card">
             <div class="ai-summary-header">
                 <svg class="ai-sparkle" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.09 6.26L20 10l-5.91 1.74L12 18l-2.09-6.26L4 10l5.91-1.74L12 2z"/></svg>
-                <span class="ai-summary-label">AI Summary</span>
+                <span class="ai-summary-label">Summary</span>
             </div>
             <div class="ai-summary-body" id="ai-summary-body">
                 <div class="ai-skeleton">
@@ -1024,7 +1021,7 @@
     <script>
         document.addEventListener("DOMContentLoaded", () => {
             const toast = document.createElement("div");
-            toast.style.cssText = "position:fixed;top:1.5rem;left:50%;transform:translateX(-50%);background:var(--accent,#22d3ee);color:#0a0a0a;padding:.75rem 1.5rem;border-radius:8px;font-weight:700;z-index:10000;animation:paywall-fade-in .3s ease";
+            toast.style.cssText = "position:fixed;top:1.5rem;left:50%;transform:translateX(-50%);background:var(--accent,#2563eb);color:#fff;padding:.75rem 1.5rem;border-radius:8px;font-weight:700;z-index:10000;animation:paywall-fade-in .3s ease";
             toast.textContent = "Payment successful! Unlimited searches unlocked.";
             document.body.appendChild(toast);
             setTimeout(() => toast.remove(), 5000);
@@ -1048,7 +1045,7 @@
     <script>
         document.addEventListener("DOMContentLoaded", () => {
             const toast = document.createElement("div");
-            toast.style.cssText = "position:fixed;top:1.5rem;left:50%;transform:translateX(-50%);background:var(--accent,#22d3ee);color:#0a0a0a;padding:.75rem 1.5rem;border-radius:8px;font-weight:700;z-index:10000;animation:paywall-fade-in .3s ease";
+            toast.style.cssText = "position:fixed;top:1.5rem;left:50%;transform:translateX(-50%);background:var(--accent,#2563eb);color:#fff;padding:.75rem 1.5rem;border-radius:8px;font-weight:700;z-index:10000;animation:paywall-fade-in .3s ease";
             toast.textContent = "Welcome to abbiey.search, @{{ current_user.username if current_user else '' }}! 🎉";
             document.body.appendChild(toast);
             setTimeout(() => toast.remove(), 6000);
