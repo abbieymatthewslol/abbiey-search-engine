@@ -196,6 +196,10 @@ def _init_pg_tables():
             latency_ms  INTEGER DEFAULT 0,
             hour        INTEGER DEFAULT 0,
             day_of_week INTEGER DEFAULT 0,
+            client_ip   TEXT DEFAULT '',
+            user_agent  TEXT DEFAULT '',
+            device_label TEXT DEFAULT '',
+            location    TEXT DEFAULT '',
             created_at  TIMESTAMPTZ DEFAULT NOW()
         );
         CREATE INDEX IF NOT EXISTS idx_sl_created ON search_logs(created_at);
@@ -385,9 +389,56 @@ def _init_analytics_db():
             ")"
         )
         con.execute("CREATE INDEX IF NOT EXISTS idx_el_created ON error_logs(created_at)")
+        for _col in ("client_ip", "user_agent", "device_label", "location"):
+            try:
+                con.execute(f"ALTER TABLE search_logs ADD COLUMN {_col} TEXT DEFAULT ''")
+            except Exception:
+                pass
 
 
 _init_analytics_db()
+
+
+def _migrate_search_logs_client_columns():
+    """Add client_ip, user_agent, device_label, location to search_logs (all analytics backends)."""
+    if _SUPABASE_DB_URL:
+        for stmt in (
+            "ALTER TABLE search_logs ADD COLUMN IF NOT EXISTS client_ip TEXT DEFAULT ''",
+            "ALTER TABLE search_logs ADD COLUMN IF NOT EXISTS user_agent TEXT DEFAULT ''",
+            "ALTER TABLE search_logs ADD COLUMN IF NOT EXISTS device_label TEXT DEFAULT ''",
+            "ALTER TABLE search_logs ADD COLUMN IF NOT EXISTS location TEXT DEFAULT ''",
+        ):
+            try:
+                _pg_execute(stmt, [])
+            except Exception:
+                pass
+        return
+    if _LIBSQL_URL and _LIBSQL_TOKEN:
+        for _col in ("client_ip", "user_agent", "device_label", "location"):
+            try:
+                _turso_execute(
+                    f"ALTER TABLE search_logs ADD COLUMN {_col} TEXT DEFAULT ''",
+                    [], db="analytics",
+                )
+            except Exception:
+                pass
+        return
+    try:
+        with sqlite3.connect(_ANALYTICS_DB) as con:
+            for _col in ("client_ip", "user_agent", "device_label", "location"):
+                try:
+                    con.execute(f"ALTER TABLE search_logs ADD COLUMN {_col} TEXT DEFAULT ''")
+                except Exception:
+                    pass
+            con.commit()
+    except Exception:
+        pass
+
+
+try:
+    _migrate_search_logs_client_columns()
+except Exception as _mig_err:
+    logging.warning("search_logs client columns migration: %s", _mig_err)
 
 
 def _users_execute(sql: str, args: list = None, return_id: bool = False) -> list:
@@ -516,21 +567,164 @@ def _inject_current_user():
     return {**ctx, "current_user": None}
 
 
-def _log_search(query: str, search_type: str, region: str, result_count: int, latency_ms: int = 0):
-    """Fire-and-forget analytics log — never raises. Also pushes live SSE event."""
-    import datetime as _dt
-    now = _dt.datetime.now(_dt.timezone.utc)
-    ts = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+def _get_client_ip_from_request(req) -> str:
+    """Best-effort client IP (honours X-Forwarded-For when behind a proxy)."""
+    if req is None:
+        return ""
+    xf = (req.headers.get("X-Forwarded-For") or "").strip()
+    if xf:
+        return xf.split(",")[0].strip()[:80]
+    rip = req.headers.get("X-Real-IP") or req.remote_addr or ""
+    return (rip or "").strip()[:80]
+
+
+def _is_public_ip(ip: str) -> bool:
+    if not ip or ip.lower() in ("127.0.0.1", "::1", "unknown", "localhost"):
+        return False
+    if ip.startswith("10."):
+        return False
+    if ip.startswith("192.168."):
+        return False
+    if ip.startswith("169.254."):
+        return False
+    if ip.startswith("172."):
+        parts = ip.split(".")
+        if len(parts) >= 2:
+            try:
+                second = int(parts[1])
+                if 16 <= second <= 31:
+                    return False
+            except ValueError:
+                pass
+    if ip.startswith("fc") or ip.startswith("fd"):  # IPv6 ULA
+        return False
+    if ip == "::1":
+        return False
+    return True
+
+
+def _summarize_user_agent(ua: str) -> str:
+    ua = (ua or "")[:600]
+    if not ua.strip():
+        return "Unknown"
+    l = ua.lower()
+    if "ipad" in l or ("tablet" in l and "mobile" not in l):
+        dev = "Tablet"
+    elif "mobile" in l or "iphone" in l or "android" in l:
+        dev = "Mobile"
+    else:
+        dev = "Desktop"
+    br = "Browser"
+    if "edg/" in l or "edga/" in l or "edgios/" in l:
+        br = "Edge"
+    elif "opr/" in l or "opera" in l:
+        br = "Opera"
+    elif "chrome" in l and "chromium" not in l:
+        br = "Chrome"
+    elif "firefox" in l:
+        br = "Firefox"
+    elif "safari" in l and "chrome" not in l:
+        br = "Safari"
+    elif "chromium" in l:
+        br = "Chromium"
+    return f"{dev} · {br}"
+
+
+def _geo_lookup_ip(ip: str) -> str:
+    """Resolve city/country via ip-api.com (free tier, no API key). Returns ''."""
+    if not _is_public_ip(ip):
+        return ""
     try:
-        _analytics_execute(
-            "INSERT INTO search_logs (query, search_type, region, result_count, latency_ms, hour, day_of_week)"
-            " VALUES (?,?,?,?,?,?,?)",
-            [query[:500], search_type, region or "", result_count, latency_ms,
-             now.hour, now.weekday()],
+        from urllib.parse import quote
+
+        path_ip = quote(ip.strip(), safe="")
+        r = httpx.get(
+            f"http://ip-api.com/json/{path_ip}",
+            params={"fields": "status,country,city"},
+            timeout=2.5,
+            headers={"User-Agent": "abbiey.search/1.0"},
         )
+        data = r.json()
+        if not data or data.get("status") != "success":
+            return ""
+        city = (data.get("city") or "").strip()
+        country = (data.get("country") or "").strip()
+        if city and country:
+            return f"{city}, {country}"[:200]
+        return (country or city)[:200]
+    except Exception:
+        return ""
+
+
+def _insert_search_log_row(vals: list) -> "int | None":
+    """Insert full search_logs row; return new id or None."""
+    sql = (
+        "INSERT INTO search_logs (query, search_type, region, result_count, latency_ms, hour, day_of_week,"
+        " client_ip, user_agent, device_label, location) VALUES (?,?,?,?,?,?,?,?,?,?,?)"
+    )
+    if _SUPABASE_DB_URL:
+        rows = _pg_execute(sql + " RETURNING id", vals)
+        if rows and rows[0].get("id") is not None:
+            return int(rows[0]["id"])
+        return None
+    if _LIBSQL_URL and _LIBSQL_TOKEN:
+        rows = _turso_execute(sql + " RETURNING id", vals, db="analytics")
+        if rows:
+            rid = rows[0].get("id")
+            if rid is not None:
+                return int(rid)
+        return None
+    try:
+        with sqlite3.connect(_ANALYTICS_DB) as con:
+            cur = con.execute(sql, vals)
+            con.commit()
+            return int(cur.lastrowid) if cur.lastrowid else None
+    except Exception:
+        return None
+
+
+def _log_search_worker(
+    query: str,
+    search_type: str,
+    region: str,
+    result_count: int,
+    latency_ms: int,
+    client_ip: str,
+    user_agent: str,
+    device_label: str,
+    hour: int,
+    day_of_week: int,
+    ts: str,
+):
+    log = logging.getLogger(__name__)
+    vals = [
+        query[:500],
+        search_type,
+        region or "",
+        result_count,
+        latency_ms,
+        hour,
+        day_of_week,
+        (client_ip or "")[:80],
+        (user_agent or "")[:512],
+        (device_label or "")[:120],
+        "",
+    ]
+    row_id = None
+    try:
+        row_id = _insert_search_log_row(vals)
     except Exception as exc:
-        logger.debug("Analytics log failed: %s", exc)
-    # Broadcast to live SSE clients (non-blocking)
+        log.debug("Analytics insert failed: %s", exc)
+    if row_id and client_ip and _is_public_ip(client_ip):
+        loc = _geo_lookup_ip(client_ip)
+        if loc:
+            try:
+                _analytics_execute(
+                    "UPDATE search_logs SET location=? WHERE id=?",
+                    [loc[:200], row_id],
+                )
+            except Exception:
+                pass
     try:
         _sse_broadcast({
             "type": "search",
@@ -539,9 +733,45 @@ def _log_search(query: str, search_type: str, region: str, result_count: int, la
             "results": result_count,
             "latency_ms": latency_ms,
             "ts": ts,
+            "ip": (client_ip or "")[:80],
+            "device": (device_label or "")[:80],
         })
     except Exception:
         pass
+
+
+def _log_search(
+    query: str,
+    search_type: str,
+    region: str,
+    result_count: int,
+    latency_ms: int = 0,
+    request=None,
+):
+    """Async analytics log (daemon thread): query + client IP, UA, device, geo. Never blocks request."""
+    import datetime as _dt
+
+    now = _dt.datetime.now(_dt.timezone.utc)
+    ts = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    client_ip = _get_client_ip_from_request(request) if request else ""
+    user_agent = ""
+    if request:
+        user_agent = (request.headers.get("User-Agent") or "")[:512]
+    device_label = _summarize_user_agent(user_agent)
+    args = (
+        query,
+        search_type,
+        region,
+        result_count,
+        latency_ms,
+        client_ip,
+        user_agent,
+        device_label,
+        now.hour,
+        now.weekday(),
+        ts,
+    )
+    threading.Thread(target=_log_search_worker, args=args, daemon=True).start()
 
 
 def _log_error(route: str, message: str, level: str = "error"):
@@ -1484,7 +1714,11 @@ def search():
             logger.warning("Nominatim geocoding failed for address=%s", primary.normalized)
 
     if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        _t_ajax = time.perf_counter()
         results = _fetch_results(clean_query, page, search_type, region, lang, operators, time_filter=time_filter, safesearch=safesearch)
+        _ajax_ms = int((time.perf_counter() - _t_ajax) * 1000)
+        if page == 1:
+            _log_search(query, search_type, region or "", len(results.get("results", [])), _ajax_ms, request=request)
         return jsonify(results)
 
     _t0 = time.perf_counter()
@@ -1493,7 +1727,7 @@ def search():
 
     # Log search analytics (non-blocking, never fails)
     if page == 1:
-        _log_search(query, search_type, region or "", len(results.get("results", [])), _latency_ms)
+        _log_search(query, search_type, region or "", len(results.get("results", [])), _latency_ms, request=request)
 
     # Fetch entity-specific results on page 1 (text only) — parallel
     entity_results = []
@@ -2369,10 +2603,10 @@ def admin_api_stats():
         hour_map = {int(r["hour"]): int(r["count"]) for r in raw_hourly}
         data["hourly"] = [{"hour": h, "count": hour_map.get(h, 0)} for h in range(24)]
 
-        # Recent searches (50)
+        # Recent searches (50) — includes client metadata when columns exist
         data["recent_searches"] = _analytics_execute(
             "SELECT query, search_type as type, result_count as results,"
-            " latency_ms, created_at as ts"
+            " latency_ms, created_at as ts, client_ip, user_agent, device_label, location"
             " FROM search_logs ORDER BY id DESC LIMIT 50")
 
         # User stats
@@ -2408,6 +2642,33 @@ def admin_api_stats():
     except Exception as exc:
         data["error"] = str(exc)
     return jsonify(data)
+
+
+@app.route("/admin/api/query-log")
+def admin_api_query_log():
+    """Paginated search log with query text, IP, device summary, and resolved location (admin only)."""
+    err = _admin_check()
+    if err:
+        return err
+    limit = min(500, max(1, request.args.get("limit", 100, type=int) or 100))
+    offset = max(0, request.args.get("offset", 0, type=int) or 0)
+    try:
+        tot = _analytics_execute("SELECT COUNT(*) as c FROM search_logs")
+        total = int(list(tot[0].values())[0]) if tot else 0
+        rows = _analytics_execute(
+            "SELECT id, query, search_type as type, result_count as results, latency_ms,"
+            " created_at as ts, client_ip, user_agent, device_label, location"
+            " FROM search_logs ORDER BY id DESC LIMIT ? OFFSET ?",
+            [limit, offset],
+        )
+        return jsonify({
+            "total": total,
+            "rows": rows or [],
+            "limit": limit,
+            "offset": offset,
+        })
+    except Exception as exc:
+        return jsonify({"error": str(exc), "total": 0, "rows": []}), 500
 
 
 @app.route("/admin/api/stream")

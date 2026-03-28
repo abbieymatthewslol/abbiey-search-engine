@@ -793,3 +793,21 @@ class TestFeatureCardLogic:
     def test_ai_summary_on_text_tab(self, client, mock_ddg):
         resp = client.get("/search?q=test&type=text")
         assert b"ai-summary-card" in resp.data
+
+
+class TestAdminQueryLog:
+    """Admin query log API (IP / device / location columns)."""
+
+    def test_query_log_forbidden_wrong_token(self, client):
+        with patch("app._ADMIN_TOKEN", "secret"):
+            r = client.get("/admin/api/query-log?token=wrong")
+            assert r.status_code == 403
+
+    def test_query_log_ok_with_token(self, client):
+        with patch("app._ADMIN_TOKEN", "secret"):
+            r = client.get("/admin/api/query-log?token=secret")
+            assert r.status_code == 200
+            data = r.get_json()
+            assert "rows" in data
+            assert "total" in data
+            assert isinstance(data["rows"], list)

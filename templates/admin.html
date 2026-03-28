@@ -155,8 +155,8 @@ button{background:none;border:none;cursor:pointer;font:inherit;color:inherit}
     <button class="nav-item active" data-view="overview" onclick="showView('overview',this)">
       <span class="nav-icon">📊</span><span>Overview</span>
     </button>
-    <button class="nav-item" data-view="searches" onclick="showView('searches',this)">
-      <span class="nav-icon">🔍</span><span>Searches</span>
+    <button class="nav-item" data-view="query-log" onclick="showView('query-log',this)">
+      <span class="nav-icon">📋</span><span>Query log</span>
     </button>
     <button class="nav-item" data-view="users" onclick="showView('users',this)">
       <span class="nav-icon">👤</span><span>Users</span>
@@ -247,18 +247,29 @@ button{background:none;border:none;cursor:pointer;font:inherit;color:inherit}
         </div>
       </div>
 
-      <!-- ── Searches ──────────────────────────────────────────────────── -->
-      <div id="view-searches" style="display:none">
+      <!-- ── Query log (every search + IP, device, location) ───────────── -->
+      <div id="view-query-log" style="display:none">
+        <p style="font-size:.78rem;color:var(--text-muted);margin-bottom:1rem;line-height:1.5;max-width:52rem">
+          Each row is one search request. <strong style="color:var(--text-dim)">Device</strong> is inferred from the browser user-agent.
+          <strong style="color:var(--text-dim)">Location</strong> is estimated from the client IP via ip-api.com (public IPs only; no API key).
+          Behind a reverse proxy, set <code style="background:var(--bg-hov);padding:.1em .35em;border-radius:4px;font-size:.72rem">X-Forwarded-For</code> so the real visitor IP is stored.
+        </p>
         <div class="section">
           <div class="section-head">
-            <span class="section-title">Recent Searches</span>
-            <input id="search-filter" placeholder="Filter..." style="background:var(--bg-hov);border:1px solid var(--border);border-radius:var(--r-full);padding:.3rem .8rem;font-size:.78rem;color:var(--text);outline:none;width:180px" oninput="filterSearches(this.value)">
+            <span class="section-title">All logged queries</span>
+            <div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap">
+              <span id="query-log-meta" style="font-size:.72rem;color:var(--text-muted)"></span>
+              <input id="query-log-filter" placeholder="Filter loaded rows…" style="background:var(--bg-hov);border:1px solid var(--border);border-radius:var(--r-full);padding:.3rem .8rem;font-size:.78rem;color:var(--text);outline:none;width:200px" oninput="filterQueryLog(this.value)">
+            </div>
           </div>
           <div style="overflow-x:auto">
-            <table class="tbl" id="searches-tbl">
-              <thead><tr><th>Query</th><th>Type</th><th>Results</th><th>Latency</th><th>Time</th></tr></thead>
-              <tbody id="searches-body"></tbody>
+            <table class="tbl" id="query-log-tbl">
+              <thead><tr><th>Query</th><th>Type</th><th>Device</th><th>IP</th><th>Location</th><th>Results</th><th>Latency</th><th>Time</th></tr></thead>
+              <tbody id="query-log-body"></tbody>
             </table>
+          </div>
+          <div class="section-body" style="padding-top:0">
+            <button type="button" id="query-log-more" class="refresh-btn" style="display:none;margin-top:.5rem" onclick="loadQueryLog(true)">Load more</button>
           </div>
         </div>
       </div>
@@ -387,8 +398,10 @@ function renderAll() {
   renderTopQueries();
   renderTypes();
   renderHourly();
-  renderSearches();
   renderErrors();
+  if (document.getElementById('view-query-log') && document.getElementById('view-query-log').style.display !== 'none') {
+    loadQueryLog(false);
+  }
 }
 
 // ── Stats cards ──────────────────────────────────────────────────────────
@@ -489,30 +502,85 @@ function renderHourly() {
     `<div class="hour-lbl">${h.hour}</div>`).join('');
 }
 
-// ── Recent searches table ────────────────────────────────────────────────
-let _allSearches = [];
-function renderSearches() {
-  _allSearches = _data.recent_searches || [];
-  drawSearches(_allSearches);
+// ── Query log (paginated, IP / device / location) ─────────────────────────
+let _queryLogRows = [];
+let _queryLogTotal = 0;
+let _queryLogOffset = 0;
+const QUERY_LOG_PAGE = 100;
+
+function _queryLogConn() {
+  return BASE ? '&' : '?';
 }
-function drawSearches(rows) {
-  document.getElementById('searches-body').innerHTML = rows.map(r => {
+
+async function loadQueryLog(append) {
+  const tbody = document.getElementById('query-log-body');
+  const meta = document.getElementById('query-log-meta');
+  const moreBtn = document.getElementById('query-log-more');
+  if (!tbody) return;
+  if (!append) {
+    _queryLogOffset = 0;
+    _queryLogRows = [];
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:1.5rem">Loading…</td></tr>';
+  }
+  try {
+    const r = await fetch(`/admin/api/query-log${BASE}${_queryLogConn()}limit=${QUERY_LOG_PAGE}&offset=${_queryLogOffset}`);
+    if (!r.ok) throw new Error(r.status);
+    const data = await r.json();
+    _queryLogTotal = data.total || 0;
+    const chunk = data.rows || [];
+    if (append) _queryLogRows = _queryLogRows.concat(chunk);
+    else _queryLogRows = chunk;
+    _queryLogOffset += chunk.length;
+    if (meta) meta.textContent = `Showing ${_queryLogRows.length} of ${_queryLogTotal} logged searches`;
+    if (moreBtn) moreBtn.style.display = _queryLogOffset < _queryLogTotal ? 'inline-flex' : 'none';
+    const f = document.getElementById('query-log-filter');
+    const fv = f && f.value.trim();
+    drawQueryLogTable(fv ? filterQueryLogRows(fv) : _queryLogRows);
+  } catch (e) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--red);padding:1.5rem">Failed to load query log</td></tr>';
+    console.error(e);
+  }
+}
+
+function filterQueryLogRows(q) {
+  const t = (q || '').trim().toLowerCase();
+  if (!t) return _queryLogRows;
+  return _queryLogRows.filter(r =>
+    (r.query || '').toLowerCase().includes(t) ||
+    String(r.client_ip || '').toLowerCase().includes(t) ||
+    String(r.device_label || '').toLowerCase().includes(t) ||
+    String(r.location || '').toLowerCase().includes(t) ||
+    String(r.user_agent || '').toLowerCase().includes(t)
+  );
+}
+
+function drawQueryLogTable(rows) {
+  const tbody = document.getElementById('query-log-body');
+  if (!tbody) return;
+  tbody.innerHTML = (rows || []).map(r => {
     const latCls = r.latency_ms > 2000 ? 'very-slow' : r.latency_ms > 800 ? 'slow' : 'fast';
     const lat = r.latency_ms ? `<span class="latency ${latCls}">${r.latency_ms}ms</span>` : '—';
-    const ts = r.ts ? r.ts.slice(0,16).replace('T',' ') : '';
-    const typeBadge = `<span class="badge badge-${r.type}">${r.type||'text'}</span>`;
+    const ts = r.ts ? r.ts.slice(0, 19).replace('T', ' ') : '';
+    const typeBadge = `<span class="badge badge-${r.type}">${esc(r.type || 'text')}</span>`;
+    const dev = esc(r.device_label || '—');
+    const ip = esc(r.client_ip || '—');
+    const loc = esc(r.location || '—');
+    const uaTitle = r.user_agent ? esc(r.user_agent) : '';
     return `<tr>
-      <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.query)}">${esc(r.query)}</td>
+      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.query)}">${esc(r.query)}</td>
       <td>${typeBadge}</td>
-      <td style="color:var(--text-dim)">${r.results}</td>
+      <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.78rem;color:var(--text-dim)" title="${uaTitle}">${dev}</td>
+      <td style="font-size:.75rem;color:var(--text-dim);white-space:nowrap;font-family:ui-monospace,monospace">${ip}</td>
+      <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.78rem;color:var(--text-dim)" title="${loc}">${loc}</td>
+      <td style="color:var(--text-dim)">${r.results != null ? r.results : '—'}</td>
       <td>${lat}</td>
-      <td style="color:var(--text-muted);white-space:nowrap">${ts}</td>
+      <td style="color:var(--text-muted);white-space:nowrap;font-size:.75rem">${ts}</td>
     </tr>`;
-  }).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:1.5rem">No searches yet</td></tr>';
+  }).join('') || '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:1.5rem">No searches logged yet</td></tr>';
 }
-function filterSearches(q) {
-  if (!q) { drawSearches(_allSearches); return; }
-  drawSearches(_allSearches.filter(r => r.query.toLowerCase().includes(q.toLowerCase())));
+
+function filterQueryLog(q) {
+  drawQueryLogTable(filterQueryLogRows(q));
 }
 
 // ── Error log ────────────────────────────────────────────────────────────
@@ -532,17 +600,19 @@ function renderErrors() {
 // ── View switcher ────────────────────────────────────────────────────────
 const VIEWS = {
   overview: 'Overview',
-  searches: 'Recent Searches',
+  'query-log': 'Query log',
   users:    'Users',
   errors:   'Error Log',
 };
 function showView(name, btn) {
   Object.keys(VIEWS).forEach(v => {
-    document.getElementById(`view-${v}`).style.display = v === name ? '' : 'none';
+    const el = document.getElementById(`view-${v}`);
+    if (el) el.style.display = v === name ? '' : 'none';
   });
   document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
   if(btn) btn.classList.add('active');
   document.getElementById('view-title').textContent = VIEWS[name] || name;
+  if (name === 'query-log') loadQueryLog(false);
 }
 
 // ── Live Feed (SSE) ──────────────────────────────────────────────────────
@@ -596,10 +666,12 @@ function pushLiveRow(ev) {
   const now = new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
   const row = document.createElement('div');
   row.style.cssText = 'display:flex;align-items:center;gap:.5rem;font-size:.78rem;padding:.25rem .3rem;border-radius:6px;animation:msgIn .15s ease both;background:var(--bg-hov)';
+  const who = [ev.device, ev.ip].filter(Boolean).join(' · ');
   row.innerHTML = `
     <span style="color:var(--text-muted);font-size:.68rem;white-space:nowrap;flex-shrink:0">${now}</span>
     <span style="color:${typeC};font-size:.68rem;flex-shrink:0">${esc(ev.search_type||'text')}</span>
     <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1" title="${esc(ev.query)}">${esc(ev.query)}</span>
+    ${who ? `<span style="color:var(--text-muted);font-size:.65rem;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(who)}">${esc(who)}</span>` : ''}
     ${lat}
     <span style="color:var(--text-muted);font-size:.68rem;flex-shrink:0">${ev.results} results</span>
   `;
