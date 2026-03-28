@@ -4,9 +4,23 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% if query %}{{ query }} - abbiey.search{% else %}abbiey.search{% endif %}</title>
+    <script>
+        (function() {
+            var t = localStorage.getItem('theme') || 'dark';
+            var d = localStorage.getItem('density') || 'default';
+            var a = localStorage.getItem('accent-color') || localStorage.getItem('accentColor');
+            var fs = localStorage.getItem('abbiey_font_size');
+            var ff = localStorage.getItem('abbiey_font_family');
+            document.documentElement.setAttribute('data-theme', t);
+            document.documentElement.setAttribute('data-density', d);
+            if (a) document.documentElement.style.setProperty('--accent', a);
+            if (fs) document.documentElement.setAttribute('data-font-size', fs);
+            if (ff) document.documentElement.setAttribute('data-font', ff);
+        })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <meta name="deploy-hash" content="{{ deploy_hash }}">
     <!-- SEO meta tags -->
@@ -38,7 +52,7 @@
     {% if not query %}<link rel="canonical" href="https://www.abbieysearch.com/">{% endif %}
     <!-- PWA -->
     <link rel="manifest" href="/manifest.json">
-    <meta name="theme-color" content="#34d399">
+    <meta name="theme-color" content="#22d3ee">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -139,16 +153,16 @@
                         <span class="settings-row-label">Accent color</span>
                         <div class="settings-accent-row">
                             <div class="theme-color-presets" id="color-presets">
-                                <button class="color-swatch" data-color="#6ee7b7" style="background:#6ee7b7" title="Emerald"></button>
-                                <button class="color-swatch" data-color="#60a5fa" style="background:#60a5fa" title="Blue"></button>
-                                <button class="color-swatch" data-color="#f472b6" style="background:#f472b6" title="Pink"></button>
-                                <button class="color-swatch" data-color="#fb923c" style="background:#fb923c" title="Orange"></button>
-                                <button class="color-swatch" data-color="#a78bfa" style="background:#a78bfa" title="Purple"></button>
-                                <button class="color-swatch" data-color="#facc15" style="background:#facc15" title="Yellow"></button>
-                                <button class="color-swatch" data-color="#f87171" style="background:#f87171" title="Red"></button>
-                                <button class="color-swatch" data-color="#2dd4bf" style="background:#2dd4bf" title="Teal"></button>
+                                <button class="color-swatch" data-color="#22d3ee" style="background:#22d3ee" title="Aurora cyan"></button>
+                                <button class="color-swatch" data-color="#38bdf8" style="background:#38bdf8" title="Sky"></button>
+                                <button class="color-swatch" data-color="#a78bfa" style="background:#a78bfa" title="Violet"></button>
+                                <button class="color-swatch" data-color="#c084fc" style="background:#c084fc" title="Lilac"></button>
+                                <button class="color-swatch" data-color="#f472b6" style="background:#f472b6" title="Rose"></button>
+                                <button class="color-swatch" data-color="#fb923c" style="background:#fb923c" title="Amber"></button>
+                                <button class="color-swatch" data-color="#4ade80" style="background:#4ade80" title="Mint"></button>
+                                <button class="color-swatch" data-color="#facc15" style="background:#facc15" title="Gold"></button>
                             </div>
-                            <input type="color" id="custom-color" value="#6ee7b7" title="Custom color" class="settings-color-picker">
+                            <input type="color" id="custom-color" value="#22d3ee" title="Custom color" class="settings-color-picker">
                         </div>
                     </div>
                     <div class="settings-row">
@@ -332,7 +346,7 @@
             {# ===== HOME HERO ===== #}
             <div class="home-hero">
                 <div class="home-logo">abbiey.<span>search</span></div>
-                <p class="home-tagline">Private by design.</p>
+                <p class="home-tagline">Fast answers. No profiling. Your queries stay yours.</p>
             </div>
             {% endif %}
 
@@ -367,24 +381,26 @@
 
             {% if not query %}
             {# ===== TRENDING (homepage only) ===== #}
-            <p class="home-tagline">Private search. No tracking.</p>
-            <p class="home-section-label">Trending</p>
-            <div id="trending-home" class="trending-home"></div>
-            <div id="recent-searches-home" class="recent-searches-home"></div>
-            <p class="home-section-label">Bang commands</p>
-            <div class="bang-hints">
-                <span class="bang-chip" title="Wikipedia">!w</span>
-                <span class="bang-chip" title="YouTube">!yt</span>
-                <span class="bang-chip" title="GitHub">!gh</span>
-                <span class="bang-chip" title="Stack Overflow">!so</span>
-                <span class="bang-chip" title="Reddit">!r</span>
-                <span class="bang-chip" title="Amazon">!a</span>
-                <span class="bang-chip" title="Google">!g</span>
-                <span class="bang-chip" title="Twitter/X">!tw</span>
-                <span class="bang-chip" title="npm">!npm</span>
-                <span class="bang-chip" title="PyPI">!pypi</span>
-                <span class="bang-chip" title="MDN">!mdn</span>
-                <span class="bang-chip" title="Maps">!maps</span>
+            <div class="home-discover">
+                <p class="home-section-label">Trending</p>
+                <div id="trending-home" class="trending-home"></div>
+                <div id="recent-searches-home" class="recent-searches-home"></div>
+                <p class="home-section-label">Bang commands</p>
+                <p class="home-bang-hint">Prefix a query to jump straight to the right site.</p>
+                <div class="bang-hints">
+                    <span class="bang-chip" title="Wikipedia">!w</span>
+                    <span class="bang-chip" title="YouTube">!yt</span>
+                    <span class="bang-chip" title="GitHub">!gh</span>
+                    <span class="bang-chip" title="Stack Overflow">!so</span>
+                    <span class="bang-chip" title="Reddit">!r</span>
+                    <span class="bang-chip" title="Amazon">!a</span>
+                    <span class="bang-chip" title="Google">!g</span>
+                    <span class="bang-chip" title="Twitter/X">!tw</span>
+                    <span class="bang-chip" title="npm">!npm</span>
+                    <span class="bang-chip" title="PyPI">!pypi</span>
+                    <span class="bang-chip" title="MDN">!mdn</span>
+                    <span class="bang-chip" title="Maps">!maps</span>
+                </div>
             </div>
             {% endif %}
 
@@ -993,7 +1009,7 @@
     </div>
 
     <footer>
-        <p>abbiey.search &mdash; Private by design.</p>
+        <p>abbiey.search &mdash; Search with clarity.</p>
     </footer>
 
     {% if query %}
@@ -1008,7 +1024,7 @@
     <script>
         document.addEventListener("DOMContentLoaded", () => {
             const toast = document.createElement("div");
-            toast.style.cssText = "position:fixed;top:1.5rem;left:50%;transform:translateX(-50%);background:var(--accent,#6ee7b7);color:#0a0a0a;padding:.75rem 1.5rem;border-radius:8px;font-weight:700;z-index:10000;animation:paywall-fade-in .3s ease";
+            toast.style.cssText = "position:fixed;top:1.5rem;left:50%;transform:translateX(-50%);background:var(--accent,#22d3ee);color:#0a0a0a;padding:.75rem 1.5rem;border-radius:8px;font-weight:700;z-index:10000;animation:paywall-fade-in .3s ease";
             toast.textContent = "Payment successful! Unlimited searches unlocked.";
             document.body.appendChild(toast);
             setTimeout(() => toast.remove(), 5000);
@@ -1032,7 +1048,7 @@
     <script>
         document.addEventListener("DOMContentLoaded", () => {
             const toast = document.createElement("div");
-            toast.style.cssText = "position:fixed;top:1.5rem;left:50%;transform:translateX(-50%);background:var(--accent,#6ee7b7);color:#0a0a0a;padding:.75rem 1.5rem;border-radius:8px;font-weight:700;z-index:10000;animation:paywall-fade-in .3s ease";
+            toast.style.cssText = "position:fixed;top:1.5rem;left:50%;transform:translateX(-50%);background:var(--accent,#22d3ee);color:#0a0a0a;padding:.75rem 1.5rem;border-radius:8px;font-weight:700;z-index:10000;animation:paywall-fade-in .3s ease";
             toast.textContent = "Welcome to abbiey.search, @{{ current_user.username if current_user else '' }}! 🎉";
             document.body.appendChild(toast);
             setTimeout(() => toast.remove(), 6000);

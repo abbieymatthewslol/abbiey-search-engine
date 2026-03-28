@@ -5,27 +5,32 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>abbiey.search — Private Search Engine. No Tracking. No Logs.</title>
     <meta name="description" content="A privacy-respecting search engine that never tracks you, never logs your queries, and never filters results. One-time $10, unlimited forever.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#128269;</text></svg>">
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
         :root {
-            --bg: #0a0a0f;
-            --surface: #13131a;
-            --border: #1e1e2e;
-            --accent: #6ee7b7;
-            --accent2: #818cf8;
-            --text: #e2e8f0;
-            --muted: #64748b;
-            --radius: 12px;
+            --bg: #06080f;
+            --surface: #0c1019;
+            --border: #1e293b;
+            --accent: #22d3ee;
+            --accent2: #a78bfa;
+            --text: #e8eaef;
+            --muted: #8b93a8;
+            --radius: 14px;
         }
 
         html { scroll-behavior: smooth; }
 
         body {
-            background: var(--bg);
+            background: radial-gradient(80vw 50vh at 10% -10%, rgba(34,211,238,.07), transparent 50%),
+                        radial-gradient(70vw 45vh at 95% 0%, rgba(167,139,250,.06), transparent 45%),
+                        var(--bg);
             color: var(--text);
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            font-family: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
             line-height: 1.6;
             overflow-x: hidden;
         }

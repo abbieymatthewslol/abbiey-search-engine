@@ -3,6 +3,8 @@ abbiey.search - A privacy-respecting, non-judgmental search engine.
 No tracking. No filtering. No logs. Just results.
 """
 
+import hashlib
+import hmac
 import json
 import logging
 import os
@@ -23,7 +25,7 @@ import httpx
 import stripe
 from cachetools import TTLCache
 from ddgs import DDGS
-from flask import Flask, render_template, request, jsonify, redirect, session, url_for, flash, Response
+from flask import Flask, render_template, request, jsonify, redirect, session, url_for, flash, Response, make_response
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -4756,8 +4758,8 @@ def manifest():
         "description": "Private, fast, no-tracking search engine",
         "start_url": "/",
         "display": "standalone",
-        "background_color": "#0d0d10",
-        "theme_color": "#34d399",
+        "background_color": "#06080f",
+        "theme_color": "#22d3ee",
         "orientation": "portrait-primary",
         "icons": [
             {"src": "/static/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
