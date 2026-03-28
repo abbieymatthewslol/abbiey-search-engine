@@ -134,7 +134,7 @@ _pg_conn_lock = threading.Lock()
 
 
 def _adapt_sql_pg(sql: str) -> str:
-    """Translate SQLite date/time functions to PostgreSQL equivalents."""
+    """Translate SQLite-specific SQL to PostgreSQL equivalents."""
     import re as _re
     # datetime('now', '-N days/hours/minutes') → NOW() - INTERVAL 'N unit'
     sql = _re.sub(r"datetime\('now',\s*'-(\d+) (days?|hours?|minutes?)'\)",
@@ -143,14 +143,22 @@ def _adapt_sql_pg(sql: str) -> str:
     sql = _re.sub(r"datetime\('now'\)", "NOW()", sql)
     # date('now') → CURRENT_DATE
     sql = _re.sub(r"date\('now'\)", "CURRENT_DATE", sql)
-    # date(col) → DATE(col)  — same, but make sure it's upper
+    # date(col) → DATE(col)
     sql = _re.sub(r"\bdate\((\w+)\)", r"DATE(\1)", sql)
     # strftime('%H:%M', col) → TO_CHAR(col, 'HH24:MI')
     sql = _re.sub(r"strftime\('%H:%M',\s*(\w+)\)", r"TO_CHAR(\1, 'HH24:MI')", sql)
     # strftime('%Y-%m-%d', col) → TO_CHAR(col, 'YYYY-MM-DD')
     sql = _re.sub(r"strftime\('%Y-%m-%d',\s*(\w+)\)", r"TO_CHAR(\1, 'YYYY-MM-DD')", sql)
-    # ROUND(AVG(...)) — same in PostgreSQL
-    # INTEGER PRIMARY KEY → SERIAL PRIMARY KEY (handled in init)
+    # INSERT OR IGNORE → INSERT … ON CONFLICT DO NOTHING
+    _was_or_ignore = bool(_re.search(r'\bINSERT\s+OR\s+IGNORE\b', sql, _re.IGNORECASE))
+    sql = _re.sub(r'\bINSERT\s+OR\s+IGNORE\b', 'INSERT', sql, flags=_re.IGNORECASE)
+    # AUTOINCREMENT → not needed with SERIAL; remove it
+    sql = _re.sub(r'\bAUTOINCREMENT\b', '', sql, flags=_re.IGNORECASE)
+    # COLLATE NOCASE → PostgreSQL doesn't use this; strip it
+    sql = _re.sub(r'\bCOLLATE\s+NOCASE\b', '', sql, flags=_re.IGNORECASE)
+    # Append ON CONFLICT DO NOTHING for converted INSERT OR IGNORE
+    if _was_or_ignore and 'ON CONFLICT' not in sql.upper():
+        sql = sql.rstrip().rstrip(';') + ' ON CONFLICT DO NOTHING'
     return sql
 
 
@@ -175,7 +183,7 @@ def _pg_execute(sql: str, args: list = None) -> list:
 
 
 def _init_pg_tables():
-    """Create analytics tables in PostgreSQL if they don't exist."""
+    """Create all app tables in PostgreSQL (Supabase) if they don't exist."""
     ddl = """
         CREATE TABLE IF NOT EXISTS search_logs (
             id          SERIAL PRIMARY KEY,
@@ -190,6 +198,7 @@ def _init_pg_tables():
         );
         CREATE INDEX IF NOT EXISTS idx_sl_created ON search_logs(created_at);
         CREATE INDEX IF NOT EXISTS idx_sl_query   ON search_logs(query);
+
         CREATE TABLE IF NOT EXISTS error_logs (
             id         SERIAL PRIMARY KEY,
             route      TEXT DEFAULT '',
@@ -198,6 +207,58 @@ def _init_pg_tables():
             created_at TIMESTAMPTZ DEFAULT NOW()
         );
         CREATE INDEX IF NOT EXISTS idx_el_created ON error_logs(created_at);
+
+        CREATE TABLE IF NOT EXISTS users (
+            id            SERIAL PRIMARY KEY,
+            username      TEXT UNIQUE NOT NULL,
+            email         TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            display_name  TEXT,
+            bio           TEXT DEFAULT '',
+            avatar        TEXT,
+            created_at    TIMESTAMPTZ DEFAULT NOW(),
+            last_seen     TIMESTAMPTZ DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_users_username ON users(LOWER(username));
+        CREATE INDEX IF NOT EXISTS idx_users_email    ON users(LOWER(email));
+
+        CREATE TABLE IF NOT EXISTS user_bookmarks (
+            id       SERIAL PRIMARY KEY,
+            user_id  INTEGER NOT NULL,
+            url      TEXT NOT NULL,
+            title    TEXT,
+            snippet  TEXT,
+            saved_at TIMESTAMPTZ DEFAULT NOW(),
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            UNIQUE(user_id, url)
+        );
+        CREATE INDEX IF NOT EXISTS idx_ub_user ON user_bookmarks(user_id);
+
+        CREATE TABLE IF NOT EXISTS user_search_history (
+            id          SERIAL PRIMARY KEY,
+            user_id     INTEGER NOT NULL,
+            query       TEXT NOT NULL,
+            search_type TEXT DEFAULT 'text',
+            searched_at TIMESTAMPTZ DEFAULT NOW(),
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_ush_user ON user_search_history(user_id);
+
+        CREATE TABLE IF NOT EXISTS payments (
+            id           SERIAL PRIMARY KEY,
+            session_id   TEXT UNIQUE NOT NULL,
+            email        TEXT,
+            amount_total INTEGER,
+            currency     TEXT,
+            status       TEXT DEFAULT 'paid',
+            created_at   TIMESTAMPTZ DEFAULT NOW()
+        );
+
+        CREATE TABLE IF NOT EXISTS waitlist (
+            id         SERIAL PRIMARY KEY,
+            email      TEXT UNIQUE NOT NULL,
+            created_at TIMESTAMPTZ DEFAULT NOW()
+        );
     """
     try:
         _pg_execute(ddl)
@@ -327,6 +388,47 @@ def _init_analytics_db():
 _init_analytics_db()
 
 
+def _users_execute(sql: str, args: list = None, return_id: bool = False) -> list:
+    """Route SQL to Supabase or users.db SQLite. When return_id=True, returns [{'id': N}]."""
+    if _SUPABASE_DB_URL:
+        if return_id and sql.strip().upper().startswith('INSERT'):
+            pg_sql = sql.rstrip().rstrip(';') + ' RETURNING id'
+            return _pg_execute(pg_sql, args)
+        return _pg_execute(sql, args)
+    with sqlite3.connect(_USERS_DB) as con:
+        con.row_factory = sqlite3.Row
+        cur = con.execute(sql, args or [])
+        if return_id:
+            return [{"id": cur.lastrowid}]
+        if cur.description:
+            return [dict(r) for r in cur.fetchall()]
+        return []
+
+
+def _payments_execute(sql: str, args: list = None) -> list:
+    """Route SQL to Supabase or payments.db SQLite."""
+    if _SUPABASE_DB_URL:
+        return _pg_execute(sql, args)
+    with sqlite3.connect(_PAYMENTS_DB) as con:
+        con.row_factory = sqlite3.Row
+        cur = con.execute(sql, args or [])
+        if cur.description:
+            return [dict(r) for r in cur.fetchall()]
+        return []
+
+
+def _waitlist_execute(sql: str, args: list = None) -> list:
+    """Route SQL to Supabase or waitlist.db SQLite."""
+    if _SUPABASE_DB_URL:
+        return _pg_execute(sql, args)
+    with sqlite3.connect(_WAITLIST_DB) as con:
+        con.row_factory = sqlite3.Row
+        cur = con.execute(sql, args or [])
+        if cur.description:
+            return [dict(r) for r in cur.fetchall()]
+        return []
+
+
 # ---------------------------------------------------------------------------
 # Users DB
 # ---------------------------------------------------------------------------
@@ -368,12 +470,13 @@ def _init_users_db():
 
 _init_users_db()
 
-# Add avatar column if it doesn't exist yet (safe migration)
-try:
-    with sqlite3.connect(_USERS_DB) as _con:
-        _con.execute("ALTER TABLE users ADD COLUMN avatar TEXT")
-except Exception:
-    pass  # Column already exists
+# Avatar column migration — SQLite only (PG schema already includes it)
+if not _SUPABASE_DB_URL:
+    try:
+        with sqlite3.connect(_USERS_DB) as _con:
+            _con.execute("ALTER TABLE users ADD COLUMN avatar TEXT")
+    except Exception:
+        pass  # Column already exists
 
 # Ensure avatars upload directory exists (not on Vercel)
 _AVATARS_DIR = os.path.join(os.path.dirname(__file__), "static", "avatars")
@@ -382,20 +485,16 @@ if not os.environ.get("VERCEL"):
 
 
 def _get_user_by_id(uid: int) -> "dict | None":
-    with sqlite3.connect(_USERS_DB) as con:
-        con.row_factory = sqlite3.Row
-        row = con.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
-    return dict(row) if row else None
+    rows = _users_execute("SELECT * FROM users WHERE id=?", [uid])
+    return rows[0] if rows else None
 
 
 def _get_user_by_login(identifier: str) -> "dict | None":
-    with sqlite3.connect(_USERS_DB) as con:
-        con.row_factory = sqlite3.Row
-        row = con.execute(
-            "SELECT * FROM users WHERE email=? OR username=?",
-            (identifier, identifier),
-        ).fetchone()
-    return dict(row) if row else None
+    rows = _users_execute(
+        "SELECT * FROM users WHERE email=? OR username=?",
+        [identifier, identifier],
+    )
+    return rows[0] if rows else None
 
 
 @app.context_processor
@@ -406,17 +505,13 @@ def _inject_current_user():
         user = _get_user_by_id(uid)
         if user:
             try:
-                with sqlite3.connect(_USERS_DB) as con:
-                    con.execute(
-                        "UPDATE users SET last_seen=datetime('now') WHERE id=?", (uid,)
-                    )
+                _users_execute(
+                    "UPDATE users SET last_seen=datetime('now') WHERE id=?", [uid]
+                )
             except Exception:
                 pass
             return {**ctx, "current_user": user}
     return {**ctx, "current_user": None}
-
-
-_init_analytics_db()
 
 
 def _log_search(query: str, search_type: str, region: str, result_count: int, latency_ms: int = 0):
@@ -514,11 +609,10 @@ def _expand_query(query: str) -> "tuple[str, list[str]]":
 def _record_payment(session_id: str, email: str = "", amount_total: int = 0, currency: str = "usd"):
     """Persist a confirmed payment. Safe to call multiple times (UPSERT)."""
     try:
-        with sqlite3.connect(_PAYMENTS_DB) as con:
-            con.execute(
-                "INSERT OR IGNORE INTO payments (session_id, email, amount_total, currency) VALUES (?,?,?,?)",
-                (session_id, email, amount_total, currency),
-            )
+        _payments_execute(
+            "INSERT OR IGNORE INTO payments (session_id, email, amount_total, currency) VALUES (?,?,?,?)",
+            [session_id, email, amount_total, currency],
+        )
     except Exception as exc:
         logger.error("Failed to record payment %s: %s", session_id, exc)
 
@@ -530,16 +624,13 @@ def _make_access_token(session_id: str) -> str:
 
 
 def _check_persistent_access() -> bool:
-    """Check abbiey_sid cookie directly against payments.db. No HMAC — survives restarts."""
+    """Check abbiey_sid cookie directly against payments store. No HMAC — survives restarts."""
     sid = request.cookies.get("abbiey_sid", "")
     if not sid:
         return False
     try:
-        with sqlite3.connect(_PAYMENTS_DB) as con:
-            row = con.execute(
-                "SELECT id FROM payments WHERE session_id = ?", (sid,)
-            ).fetchone()
-        return row is not None
+        rows = _payments_execute("SELECT id FROM payments WHERE session_id = ?", [sid])
+        return len(rows) > 0
     except Exception:
         pass
     return False
@@ -2085,13 +2176,12 @@ def api_waitlist():
     if not email or "@" not in email or len(email) > 254:
         return jsonify({"error": "Invalid email address"}), 400
     try:
-        with sqlite3.connect(_WAITLIST_DB) as con:
-            con.execute("INSERT INTO waitlist (email) VALUES (?)", (email,))
-        return jsonify({"ok": True})
-    except sqlite3.IntegrityError:
-        # Already on list — treat as success so we don't leak existence
+        _waitlist_execute("INSERT INTO waitlist (email) VALUES (?)", [email])
         return jsonify({"ok": True})
     except Exception as exc:
+        msg = str(exc).lower()
+        if "unique" in msg or "duplicate" in msg or "already exists" in msg:
+            return jsonify({"ok": True})  # Already on list — treat as success
         logger.error("Waitlist insert failed: %s", exc)
         return jsonify({"error": "Server error"}), 500
 
@@ -2105,9 +2195,8 @@ def api_privacy_stats():
     """Returns real, server-confirmed privacy stats. All zeros reflect genuine policy."""
     total_queries = 0
     try:
-        with sqlite3.connect(_ANALYTICS_DB) as con:
-            row = con.execute("SELECT COUNT(*) FROM search_logs").fetchone()
-            total_queries = row[0] if row else 0
+        rows = _analytics_execute("SELECT COUNT(*) as cnt FROM search_logs")
+        total_queries = rows[0]["cnt"] if rows else 0
     except Exception:
         pass
     return jsonify({
@@ -2124,15 +2213,14 @@ def api_privacy_stats():
 def api_trends():
     """Public endpoint — returns top 10 trending queries from the last 24 h."""
     try:
-        with sqlite3.connect(_ANALYTICS_DB) as con:
-            rows = con.execute(
-                "SELECT query, COUNT(*) as cnt FROM search_logs"
-                " WHERE created_at >= datetime('now', '-1 day')"
-                "   AND search_type = 'text'"
-                "   AND length(query) BETWEEN 2 AND 80"
-                " GROUP BY lower(query) ORDER BY cnt DESC LIMIT 10"
-            ).fetchall()
-        return jsonify([{"query": r[0], "count": r[1]} for r in rows])
+        rows = _analytics_execute(
+            "SELECT query, COUNT(*) as cnt FROM search_logs"
+            " WHERE created_at >= datetime('now', '-1 day')"
+            "   AND search_type = 'text'"
+            "   AND length(query) BETWEEN 2 AND 80"
+            " GROUP BY lower(query) ORDER BY cnt DESC LIMIT 10"
+        )
+        return jsonify([{"query": r["query"], "count": r["cnt"]} for r in rows])
     except Exception as exc:
         logger.error("Trends error: %s", exc)
         return jsonify([])
@@ -2149,50 +2237,52 @@ def admin_analytics():
     import datetime as _dt
     stats = {}
     try:
-        with sqlite3.connect(_ANALYTICS_DB) as con:
-            # Total searches
-            stats["total_all_time"] = con.execute(
-                "SELECT COUNT(*) FROM search_logs").fetchone()[0]
-            stats["total_today"] = con.execute(
-                "SELECT COUNT(*) FROM search_logs WHERE created_at >= date('now')").fetchone()[0]
-            stats["total_week"] = con.execute(
-                "SELECT COUNT(*) FROM search_logs WHERE created_at >= datetime('now','-7 days')").fetchone()[0]
+        rows = _analytics_execute("SELECT COUNT(*) as cnt FROM search_logs")
+        stats["total_all_time"] = rows[0]["cnt"] if rows else 0
 
-            # Top queries (7 days)
-            stats["top_queries"] = con.execute(
-                "SELECT query, COUNT(*) as cnt FROM search_logs"
-                " WHERE created_at >= datetime('now','-7 days')"
-                "   AND length(query) BETWEEN 2 AND 80"
-                " GROUP BY lower(query) ORDER BY cnt DESC LIMIT 20"
-            ).fetchall()
+        rows = _analytics_execute(
+            "SELECT COUNT(*) as cnt FROM search_logs WHERE created_at >= date('now')")
+        stats["total_today"] = rows[0]["cnt"] if rows else 0
 
-            # Tab distribution
-            stats["by_type"] = con.execute(
-                "SELECT search_type, COUNT(*) as cnt FROM search_logs"
-                " WHERE created_at >= datetime('now','-7 days')"
-                " GROUP BY search_type ORDER BY cnt DESC"
-            ).fetchall()
+        rows = _analytics_execute(
+            "SELECT COUNT(*) as cnt FROM search_logs WHERE created_at >= datetime('now','-7 days')")
+        stats["total_week"] = rows[0]["cnt"] if rows else 0
 
-            # Hourly distribution (last 7 days)
-            stats["by_hour"] = con.execute(
-                "SELECT hour, COUNT(*) as cnt FROM search_logs"
-                " WHERE created_at >= datetime('now','-7 days')"
-                " GROUP BY hour ORDER BY hour"
-            ).fetchall()
+        # Top queries (7 days) — as (query, cnt) tuples for template
+        raw = _analytics_execute(
+            "SELECT query, COUNT(*) as cnt FROM search_logs"
+            " WHERE created_at >= datetime('now','-7 days')"
+            "   AND length(query) BETWEEN 2 AND 80"
+            " GROUP BY lower(query) ORDER BY cnt DESC LIMIT 20")
+        stats["top_queries"] = [(r["query"], r["cnt"]) for r in raw]
 
-            # Daily volume (last 30 days)
-            stats["daily"] = con.execute(
-                "SELECT date(created_at) as day, COUNT(*) as cnt FROM search_logs"
-                " WHERE created_at >= datetime('now','-30 days')"
-                " GROUP BY day ORDER BY day"
-            ).fetchall()
+        # Tab distribution
+        raw = _analytics_execute(
+            "SELECT search_type, COUNT(*) as cnt FROM search_logs"
+            " WHERE created_at >= datetime('now','-7 days')"
+            " GROUP BY search_type ORDER BY cnt DESC")
+        stats["by_type"] = [(r["search_type"], r["cnt"]) for r in raw]
 
-            # Top regions
-            stats["top_regions"] = con.execute(
-                "SELECT region, COUNT(*) as cnt FROM search_logs"
-                " WHERE created_at >= datetime('now','-7 days') AND region != ''"
-                " GROUP BY region ORDER BY cnt DESC LIMIT 10"
-            ).fetchall()
+        # Hourly distribution (last 7 days)
+        raw = _analytics_execute(
+            "SELECT hour, COUNT(*) as cnt FROM search_logs"
+            " WHERE created_at >= datetime('now','-7 days')"
+            " GROUP BY hour ORDER BY hour")
+        stats["by_hour"] = [(r["hour"], r["cnt"]) for r in raw]
+
+        # Daily volume (last 30 days)
+        raw = _analytics_execute(
+            "SELECT date(created_at) as day, COUNT(*) as cnt FROM search_logs"
+            " WHERE created_at >= datetime('now','-30 days')"
+            " GROUP BY day ORDER BY day")
+        stats["daily"] = [(r["day"], r["cnt"]) for r in raw]
+
+        # Top regions
+        raw = _analytics_execute(
+            "SELECT region, COUNT(*) as cnt FROM search_logs"
+            " WHERE created_at >= datetime('now','-7 days') AND region != ''"
+            " GROUP BY region ORDER BY cnt DESC LIMIT 10")
+        stats["top_regions"] = [(r["region"], r["cnt"]) for r in raw]
 
         # Build hourly heatmap (fill missing hours with 0)
         hour_map = {r[0]: r[1] for r in stats["by_hour"]}
@@ -2319,12 +2409,14 @@ def admin_api_stats():
 
         # User stats
         try:
-            with sqlite3.connect(_USERS_DB) as ucon:
-                data["total_users"] = ucon.execute("SELECT COUNT(*) FROM users").fetchone()[0]
-                data["users_today"] = ucon.execute(
-                    "SELECT COUNT(*) FROM users WHERE created_at >= date('now')").fetchone()[0]
-                data["users_week"] = ucon.execute(
-                    "SELECT COUNT(*) FROM users WHERE created_at >= datetime('now','-7 days')").fetchone()[0]
+            rows = _users_execute("SELECT COUNT(*) as cnt FROM users")
+            data["total_users"] = rows[0]["cnt"] if rows else 0
+            rows = _users_execute(
+                "SELECT COUNT(*) as cnt FROM users WHERE created_at >= date('now')")
+            data["users_today"] = rows[0]["cnt"] if rows else 0
+            rows = _users_execute(
+                "SELECT COUNT(*) as cnt FROM users WHERE created_at >= datetime('now','-7 days')")
+            data["users_week"] = rows[0]["cnt"] if rows else 0
         except Exception:
             data["total_users"] = 0
             data["users_today"] = 0
@@ -2414,8 +2506,7 @@ def admin_api_health():
         health["status"] = "degraded"
     # Test users DB
     try:
-        with sqlite3.connect(_USERS_DB) as c:
-            c.execute("SELECT 1")
+        _users_execute("SELECT 1 as ok")
         health["users_db"] = "ok"
     except Exception as e:
         health["users_db"] = f"error: {e}"
@@ -4391,13 +4482,13 @@ def signup():
 
     pw_hash = generate_password_hash(password)
     try:
-        with sqlite3.connect(_USERS_DB) as con:
-            cur = con.execute(
-                "INSERT INTO users (username, email, password_hash, display_name) VALUES (?,?,?,?)",
-                (username, email, pw_hash, username),
-            )
-            uid = cur.lastrowid
-    except sqlite3.IntegrityError as exc:
+        rows = _users_execute(
+            "INSERT INTO users (username, email, password_hash, display_name) VALUES (?,?,?,?)",
+            [username, email, pw_hash, username],
+            return_id=True,
+        )
+        uid = rows[0]["id"] if rows else None
+    except Exception as exc:
         msg = str(exc).lower()
         if "username" in msg:
             errors.append("That username is already taken.")
@@ -4458,21 +4549,15 @@ def profile():
         session.pop("user_id", None)
         return redirect(url_for("login"))
 
-    with sqlite3.connect(_USERS_DB) as con:
-        con.row_factory = sqlite3.Row
-        bookmarks = [
-            dict(r) for r in con.execute(
-                "SELECT * FROM user_bookmarks WHERE user_id=? ORDER BY saved_at DESC LIMIT 100",
-                (uid,)
-            ).fetchall()
-        ]
-        history = [
-            dict(r) for r in con.execute(
-                "SELECT query, search_type, searched_at FROM user_search_history"
-                " WHERE user_id=? ORDER BY searched_at DESC LIMIT 50",
-                (uid,)
-            ).fetchall()
-        ]
+    bookmarks = _users_execute(
+        "SELECT * FROM user_bookmarks WHERE user_id=? ORDER BY saved_at DESC LIMIT 100",
+        [uid],
+    )
+    history = _users_execute(
+        "SELECT query, search_type, searched_at FROM user_search_history"
+        " WHERE user_id=? ORDER BY searched_at DESC LIMIT 50",
+        [uid],
+    )
 
     return render_template("profile.html", user=user, bookmarks=bookmarks, history=history)
 
@@ -4487,11 +4572,10 @@ def profile_update():
     display_name = request.form.get("display_name", "").strip()[:60]
     bio          = request.form.get("bio", "").strip()[:200]
 
-    with sqlite3.connect(_USERS_DB) as con:
-        con.execute(
-            "UPDATE users SET display_name=?, bio=? WHERE id=?",
-            (display_name or None, bio, uid),
-        )
+    _users_execute(
+        "UPDATE users SET display_name=?, bio=? WHERE id=?",
+        [display_name or None, bio, uid],
+    )
 
     return redirect(url_for("profile"))
 
@@ -4522,8 +4606,7 @@ def profile_avatar():
     f.save(os.path.join(save_dir, filename))
 
     avatar_path = f"avatars/{filename}"
-    with sqlite3.connect(_USERS_DB) as con:
-        con.execute("UPDATE users SET avatar=? WHERE id=?", (avatar_path, uid))
+    _users_execute("UPDATE users SET avatar=? WHERE id=?", [avatar_path, uid])
 
     return redirect(url_for("profile"))
 
@@ -4535,14 +4618,12 @@ def api_user_bookmarks_get():
     if not session.get("user_id"):
         return jsonify({"error": "Not authenticated"}), 401
     uid = session["user_id"]
-    with sqlite3.connect(_USERS_DB) as con:
-        con.row_factory = sqlite3.Row
-        rows = con.execute(
-            "SELECT id, url, title, snippet, saved_at FROM user_bookmarks"
-            " WHERE user_id=? ORDER BY saved_at DESC",
-            (uid,)
-        ).fetchall()
-    return jsonify({"bookmarks": [dict(r) for r in rows]})
+    rows = _users_execute(
+        "SELECT id, url, title, snippet, saved_at FROM user_bookmarks"
+        " WHERE user_id=? ORDER BY saved_at DESC",
+        [uid],
+    )
+    return jsonify({"bookmarks": rows})
 
 
 @app.route("/api/user/recent-searches", methods=["GET"])
@@ -4550,13 +4631,11 @@ def api_user_recent_searches():
     if not session.get("user_id"):
         return jsonify([]), 401
     uid = session["user_id"]
-    with sqlite3.connect(_USERS_DB) as con:
-        con.row_factory = sqlite3.Row
-        rows = con.execute(
-            "SELECT query, search_type FROM user_search_history"
-            " WHERE user_id=? ORDER BY searched_at DESC LIMIT 5",
-            (uid,)
-        ).fetchall()
+    rows = _users_execute(
+        "SELECT query, search_type FROM user_search_history"
+        " WHERE user_id=? ORDER BY searched_at DESC LIMIT 5",
+        [uid],
+    )
     seen = set()
     unique = []
     for r in rows:
@@ -4579,13 +4658,13 @@ def api_user_bookmarks_save():
     if not url:
         return jsonify({"error": "url required"}), 400
     try:
-        with sqlite3.connect(_USERS_DB) as con:
-            cur = con.execute(
-                "INSERT OR IGNORE INTO user_bookmarks (user_id, url, title, snippet)"
-                " VALUES (?,?,?,?)",
-                (uid, url, title, snippet),
-            )
-            bid = cur.lastrowid
+        rows = _users_execute(
+            "INSERT OR IGNORE INTO user_bookmarks (user_id, url, title, snippet)"
+            " VALUES (?,?,?,?)",
+            [uid, url, title, snippet],
+            return_id=True,
+        )
+        bid = rows[0]["id"] if rows else None
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
     return jsonify({"ok": True, "id": bid}), 201
@@ -4596,10 +4675,9 @@ def api_user_bookmarks_delete(bid: int):
     if not session.get("user_id"):
         return jsonify({"error": "Not authenticated"}), 401
     uid = session["user_id"]
-    with sqlite3.connect(_USERS_DB) as con:
-        con.execute(
-            "DELETE FROM user_bookmarks WHERE id=? AND user_id=?", (bid, uid)
-        )
+    _users_execute(
+        "DELETE FROM user_bookmarks WHERE id=? AND user_id=?", [bid, uid]
+    )
     return jsonify({"ok": True})
 
 
@@ -4612,19 +4690,21 @@ def api_user_bookmarks_sync():
     uid   = session["user_id"]
     items = (request.get_json(silent=True) or {}).get("bookmarks", [])
     saved = 0
-    with sqlite3.connect(_USERS_DB) as con:
-        for item in items[:500]:
-            url     = str(item.get("url") or "")[:2000].strip()
-            title   = str(item.get("title") or "")[:300].strip()
-            snippet = str(item.get("snippet") or "")[:500].strip()
-            if not url:
-                continue
-            con.execute(
+    for item in items[:500]:
+        url     = str(item.get("url") or "")[:2000].strip()
+        title   = str(item.get("title") or "")[:300].strip()
+        snippet = str(item.get("snippet") or "")[:500].strip()
+        if not url:
+            continue
+        try:
+            _users_execute(
                 "INSERT OR IGNORE INTO user_bookmarks (user_id, url, title, snippet)"
                 " VALUES (?,?,?,?)",
-                (uid, url, title, snippet),
+                [uid, url, title, snippet],
             )
             saved += 1
+        except Exception:
+            continue
     return jsonify({"ok": True, "saved": saved})
 
 
@@ -4640,12 +4720,11 @@ def api_user_history_add():
     if not q:
         return jsonify({"ok": False}), 200
     try:
-        with sqlite3.connect(_USERS_DB) as con:
-            con.execute(
-                "INSERT INTO user_search_history (user_id, query, search_type)"
-                " VALUES (?,?,?)",
-                (uid, q, st),
-            )
+        _users_execute(
+            "INSERT INTO user_search_history (user_id, query, search_type)"
+            " VALUES (?,?,?)",
+            [uid, q, st],
+        )
     except Exception:
         pass
     return jsonify({"ok": True})
