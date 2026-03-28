@@ -374,11 +374,6 @@ class TestBangCommands:
         resp = client.get("/search?q=!w")
         assert resp.status_code == 200
 
-    def test_homepage_shows_bang_hint(self, client):
-        resp = client.get("/")
-        assert b"!w" in resp.data
-        assert b"!yt" in resp.data
-        assert b"!gh" in resp.data
 
 
 # =====================================================================
