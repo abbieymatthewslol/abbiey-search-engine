@@ -8,8 +8,69 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<<<<<<< HEAD
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='44' cy='44' r='28' fill='none' stroke='%2300e5a0' stroke-width='10'/><line x1='64' y1='64' x2='90' y2='90' stroke='%2300e5a0' stroke-width='10' stroke-linecap='round'/></svg>">
 </head>
+=======
+    <meta name="deploy-hash" content="{{ deploy_hash }}">
+    <!-- SEO meta tags -->
+    {% if query %}
+    <meta name="description" content="Private search results for {{ query }} — no tracking, no profiling.">
+    <meta property="og:title" content="{{ query }} — abbiey.search">
+    <meta property="og:description" content="Private search results for: {{ query }}">
+    <meta property="og:url" content="https://www.abbieysearch.com/search?q={{ query|urlencode }}">
+    {% else %}
+    <meta name="description" content="abbiey.search — A private, fast search engine. No tracking, no data collection, no judgement.">
+    <meta property="og:title" content="abbiey.search — Private Search Engine">
+    <meta property="og:description" content="Search the web without being tracked. No logs. No profiling. No judgment.">
+    <meta property="og:url" content="https://www.abbieysearch.com/">
+    {% endif %}
+    <meta name="keywords" content="private search engine, no tracking search, privacy search, anonymous search">
+    <meta name="author" content="abbiey.search">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="abbiey.search">
+    <meta property="og:image" content="https://www.abbieysearch.com/static/og-image.png">
+    <meta name="twitter:card" content="summary_large_image">
+    {% if query %}
+    <meta name="twitter:title" content="{{ query }} — abbiey.search">
+    <meta name="twitter:description" content="Private search results for: {{ query }}">
+    {% else %}
+    <meta name="twitter:title" content="abbiey.search — Private Search Engine">
+    <meta name="twitter:description" content="Search the web without being tracked. No logs. No profiling. No judgment.">
+    {% endif %}
+    <meta name="twitter:image" content="https://www.abbieysearch.com/static/og-image.png">
+    {% if not query %}<link rel="canonical" href="https://www.abbieysearch.com/">{% endif %}
+    <!-- PWA -->
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#34d399">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="abbiey.search">
+    <link rel="apple-touch-icon" href="/static/icon-192.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png">
+    <link rel="shortcut icon" href="/favicon.ico">
+    <!-- OpenSearch -->
+    <link rel="search" type="application/opensearchdescription+xml" title="abbiey.search" href="/opensearch.xml">
+    <!-- JSON-LD -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "name": "abbiey.search",
+      "url": "https://www.abbieysearch.com",
+      "description": "Private search engine. No tracking. No profiling. No judgment.",
+      "potentialAction": {
+        "@type": "SearchAction",
+        "target": {
+          "@type": "EntryPoint",
+          "urlTemplate": "https://www.abbieysearch.com/search?q={search_term_string}"
+        },
+        "query-input": "required name=search_term_string"
+      }
+    }
+    </script>
+>>>>>>> dcadf5476ab743af0de523f280e691c6ecdf3277
 <body class="{% if query %}has-results{% endif %}">
 
     <header>
@@ -42,10 +103,21 @@
                 <span class="user-avatar-name">{{ current_user.display_name or current_user.username }}</span>
             </a>
             {% else %}
+            <a href="/signup" class="header-auth-btn header-signup-btn" aria-label="Create account">Sign up</a>
             <a href="/login" class="header-auth-btn" aria-label="Sign in">Sign in</a>
             {% endif %}
         </div>
     </header>
+    <!-- Install banner -->
+    <div id="install-banner" class="install-banner" style="display:none">
+      <span class="install-banner-icon">🔍</span>
+      <div class="install-banner-text">
+        <strong>Set as default search engine</strong>
+        <span>Click the address bar → manage search engines → add abbiey.search</span>
+      </div>
+      <a href="/opensearch.xml" class="install-banner-btn" target="_blank">Add to browser</a>
+      <button class="install-banner-close" id="install-banner-close" aria-label="Dismiss">×</button>
+    </div>
     <div class="settings-overlay" id="settings-overlay" hidden>
         <div class="settings-modal" id="settings-modal" role="dialog" aria-label="Settings">
             <div class="settings-modal-header">
@@ -291,12 +363,24 @@
                 <input type="hidden" name="lang" id="lang-input" value="{{ lang or '' }}">
                 <input type="hidden" name="df" id="df-input" value="{{ time_filter or '' }}">
                 <input type="hidden" name="safesearch" id="safesearch-input" value="off">
+<<<<<<< HEAD
 
+=======
+>>>>>>> dcadf5476ab743af0de523f280e691c6ecdf3277
             </form>
 
 
             {% if not query %}
+<<<<<<< HEAD
             
+=======
+            {# ===== TRENDING (homepage only) ===== #}
+            <p class="home-tagline">Private search. No tracking.</p>
+            <p class="home-section-label">Trending</p>
+            <div id="trending-home" class="trending-home"></div>
+            <div id="recent-searches-home" class="recent-searches-home"></div>
+            {% endif %}
+>>>>>>> dcadf5476ab743af0de523f280e691c6ecdf3277
 
             {% if query %}
             {# Active operator chips #}
@@ -330,6 +414,12 @@
                     </div>
                 </div>
             </nav>
+            {% if query %}
+            <button class="share-search-btn" id="share-search-btn" title="Share this search" aria-label="Share search">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+              Share
+            </button>
+            {% endif %}
 
             {# ===== QUICK FILTERS BAR ===== #}
             <div class="filter-bar" id="filter-bar">
@@ -930,9 +1020,104 @@
         });
     </script>
     {% endif %}
+    {# ===== WELCOME TOAST (after signup) ===== #}
+    {% with messages = get_flashed_messages(category_filter=["welcome"]) %}
+    {% if messages %}
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            const toast = document.createElement("div");
+            toast.style.cssText = "position:fixed;top:1.5rem;left:50%;transform:translateX(-50%);background:var(--accent,#6ee7b7);color:#0a0a0a;padding:.75rem 1.5rem;border-radius:8px;font-weight:700;z-index:10000;animation:paywall-fade-in .3s ease";
+            toast.textContent = "Welcome to abbiey.search, @{{ current_user.username if current_user else '' }}! 🎉";
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 6000);
+        });
+    </script>
+    {% endif %}
+    {% endwith %}
+
+    {# ===== ONBOARDING MODAL (shown after signup via ?welcome=1) ===== #}
+    {% if request.args.get('welcome') == '1' %}
+    <div id="welcome-overlay" class="settings-overlay" role="dialog" aria-modal="true" aria-label="Welcome">
+        <div class="settings-modal welcome-modal">
+            <div class="settings-modal-header">
+                <span class="settings-modal-title">Welcome! What are you looking for?</span>
+                <button class="settings-modal-close" id="welcome-close" aria-label="Skip">✕</button>
+            </div>
+            <div class="settings-modal-body">
+                <p style="margin:0 0 1rem;color:var(--text-dim);font-size:.9rem">Pick a category to get started, or just type in the search box.</p>
+                <div class="welcome-chips">
+                    <button class="welcome-chip" data-type="text">🔍 Web</button>
+                    <button class="welcome-chip" data-type="news">📰 News</button>
+                    <button class="welcome-chip" data-type="images">🖼️ Images</button>
+                    <button class="welcome-chip" data-type="code">💻 Code</button>
+                    <button class="welcome-chip" data-type="videos">🎬 Videos</button>
+                    <button class="welcome-chip" data-type="onion">🌐 Tor/Onion</button>
+                </div>
+                <p style="margin:1rem 0 0;text-align:center"><a href="/" class="welcome-skip">Skip</a></p>
+            </div>
+        </div>
+    </div>
+    <script>
+        (function() {
+            var overlay = document.getElementById("welcome-overlay");
+            var closeBtn = document.getElementById("welcome-close");
+            function closeModal() { overlay.classList.add("closing"); setTimeout(function(){ overlay.hidden = true; }, 150); }
+            closeBtn.addEventListener("click", closeModal);
+            overlay.addEventListener("click", function(e){ if (e.target === overlay) closeModal(); });
+            document.querySelectorAll(".welcome-chip").forEach(function(chip) {
+                chip.addEventListener("click", function() {
+                    var type = chip.dataset.type;
+                    var typeInput = document.getElementById("type-input") || document.querySelector("input[name='type']");
+                    if (typeInput) typeInput.value = type;
+                    var form = document.querySelector(".search-form") || document.querySelector("form[action]");
+                    closeModal();
+                    if (form) {
+                        var q = document.querySelector("input[name='q']");
+                        if (q) q.focus();
+                    }
+                });
+            });
+        })();
+    </script>
+    {% endif %}
+
     <script src="{{ url_for('static', filename='script.js') }}"></script>
     {% if query and search_type == 'onion' %}
     <script src="{{ url_for('static', filename='onion-rewriter.js') }}"></script>
     {% endif %}
+    <script>
+    // Install banner
+    (function() {
+      if (window.location.search) return;
+      if (localStorage.getItem('abbiey_banner_dismissed')) return;
+      setTimeout(() => {
+        const banner = document.getElementById('install-banner');
+        if (banner) banner.style.display = 'flex';
+      }, 3000);
+      const closeBtn = document.getElementById('install-banner-close');
+      if (closeBtn) {
+        closeBtn.addEventListener('click', () => {
+          document.getElementById('install-banner').style.display = 'none';
+          localStorage.setItem('abbiey_banner_dismissed', '1');
+        });
+      }
+    })();
+    // Share button
+    const shareBtn = document.getElementById('share-search-btn');
+    if (shareBtn) {
+      shareBtn.addEventListener('click', async () => {
+        const url = window.location.href;
+        const title = document.title;
+        if (navigator.share) {
+          try { await navigator.share({ title, url }); return; } catch(e) {}
+        }
+        try {
+          await navigator.clipboard.writeText(url);
+          shareBtn.textContent = '✓ Copied!';
+          setTimeout(() => { shareBtn.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg> Share'; }, 2000);
+        } catch(e) {}
+      });
+    }
+    </script>
 </body>
 </html>

@@ -27,6 +27,33 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  // ===== Top loading progress bar =====
+  (function initProgressBar() {
+    const bar = document.createElement('div');
+    bar.id = 'nprogress-bar';
+    bar.style.cssText = 'width:0%;opacity:0';
+    document.body.prepend(bar);
+
+    function start() {
+      bar.style.transition = 'none';
+      bar.style.width = '0%';
+      bar.style.opacity = '1';
+      requestAnimationFrame(() => {
+        bar.style.transition = 'width 8s cubic-bezier(.1,1,.1,1)';
+        bar.style.width = '85%';
+      });
+    }
+    function finish() {
+      bar.style.transition = 'width .2s ease, opacity .3s .2s ease';
+      bar.style.width = '100%';
+      bar.style.opacity = '0';
+    }
+
+    const form = document.getElementById('search-form');
+    if (form) form.addEventListener('submit', start);
+    window.addEventListener('pageshow', finish);
+  })();
+
   // ===== Theme toggle =====
   const toggle = document.getElementById("theme-toggle");
   const saved = localStorage.getItem("theme");
@@ -1500,6 +1527,40 @@ document.addEventListener("DOMContentLoaded", () => {
         })
         .catch(() => {});
     }
+  })();
+
+  // ===== Recent Search History Chips =====
+  (function initRecentSearches() {
+    const container = document.getElementById("recent-searches-home");
+    if (!container) return;
+    // Only show if user is logged in (avatar chip present)
+    if (!document.querySelector(".user-avatar-chip")) return;
+    fetch("/api/user/recent-searches")
+      .then(r => r.ok ? r.json() : [])
+      .then(items => {
+        if (!Array.isArray(items) || !items.length) return;
+        const chips = items.map(item =>
+          `<button class="recent-search-chip" data-query="${esc(item.query)}" data-type="${esc(item.type || 'text')}">${esc(item.query)}</button>`
+        ).join("");
+        container.innerHTML =
+          `<div class="trending-header">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            Recent
+          </div>
+          <div class="trending-pills">${chips}</div>`;
+        container.style.display = "";
+        container.querySelectorAll(".recent-search-chip").forEach(chip => {
+          chip.addEventListener("click", () => {
+            const q = document.querySelector("input[name='q']");
+            const typeInput = document.getElementById("type-input") || document.querySelector("input[name='type']");
+            const form = document.querySelector(".search-form") || document.querySelector("form[action]");
+            if (q) q.value = chip.dataset.query;
+            if (typeInput) typeInput.value = chip.dataset.type;
+            if (form) form.submit();
+          });
+        });
+      })
+      .catch(() => {});
   })();
 
   // ===== Feature 1: Voice Search =====

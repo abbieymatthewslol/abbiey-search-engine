@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
@@ -184,3 +185,176 @@
     </script>
 </body>
 </html>
+=======
+{% extends "base.html" %}
+{% block title %}{{ user.display_name or user.username }} · abbiey.search{% endblock %}
+
+{% block content %}
+<main class="profile-page">
+
+    {# ── Profile header ── #}
+    <section class="profile-hero">
+        <div class="profile-avatar-wrap">
+            {% if user.avatar %}
+            <img class="profile-avatar profile-avatar-img" src="{{ url_for('static', filename=user.avatar) }}" alt="{{ user.display_name or user.username }}">
+            {% else %}
+            <div class="profile-avatar" aria-hidden="true">
+                {{ (user.display_name or user.username)[0] | upper }}
+            </div>
+            {% endif %}
+            <form method="POST" action="/profile/avatar" enctype="multipart/form-data" style="display:inline">
+                <label class="profile-avatar-upload-btn" title="Upload photo" aria-label="Upload avatar">
+                    📷
+                    <input type="file" name="avatar" accept="image/*" style="display:none" onchange="this.form.submit()">
+                </label>
+            </form>
+        </div>
+        <div class="profile-hero-info">
+            <h1 class="profile-display-name">{{ user.display_name or user.username }}</h1>
+            <p class="profile-username">@{{ user.username }}</p>
+            {% if user.bio %}<p class="profile-bio">{{ user.bio }}</p>{% endif %}
+            <p class="profile-meta">
+                Member since {{ user.created_at[:10] }}
+                &nbsp;·&nbsp;
+                {{ bookmarks|length }} bookmark{% if bookmarks|length != 1 %}s{% endif %}
+            </p>
+        </div>
+    </section>
+
+    <div class="profile-body">
+
+        {# ── Edit profile ── #}
+        <section class="profile-section" id="edit-section">
+            <h2 class="profile-section-title">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                Edit profile
+            </h2>
+            <form class="profile-edit-form" method="POST" action="/profile/update">
+                <div class="auth-field">
+                    <label for="display_name">Display name</label>
+                    <div class="auth-input-pill">
+                        <input type="text" id="display_name" name="display_name"
+                               value="{{ user.display_name or '' }}" maxlength="60"
+                               placeholder="How your name appears">
+                    </div>
+                </div>
+                <div class="auth-field">
+                    <label for="bio">Bio <span class="form-hint">(max 200 chars)</span></label>
+                    <div class="auth-input-pill">
+                        <textarea id="bio" name="bio" rows="2" maxlength="200"
+                                  placeholder="A short line about you">{{ user.bio or '' }}</textarea>
+                    </div>
+                </div>
+                <button type="submit" class="auth-submit-btn">Save changes</button>
+            </form>
+        </section>
+
+        {# ── Saved bookmarks ── #}
+        <section class="profile-section" id="bookmarks-section">
+            <h2 class="profile-section-title">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>
+                Saved bookmarks
+                <span class="badge-count">{{ bookmarks|length }}</span>
+            </h2>
+            {% if bookmarks %}
+            <ul class="bookmark-list" id="bookmark-list">
+                {% for b in bookmarks %}
+                <li class="bookmark-item" data-id="{{ b.id }}">
+                    <div class="bookmark-main">
+                        <a href="{{ b.url }}" target="_blank" rel="noopener" class="bookmark-title">
+                            {{ b.title or b.url }}
+                        </a>
+                        <span class="bookmark-domain">{{ b.url | replace('https://', '') | replace('http://', '') | truncate(50, True, '…') }}</span>
+                        {% if b.snippet %}<p class="bookmark-snippet">{{ b.snippet }}</p>{% endif %}
+                    </div>
+                    <button class="bookmark-delete-btn" data-id="{{ b.id }}" title="Remove bookmark" aria-label="Remove bookmark">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p class="profile-empty">No bookmarks yet. Hit the bookmark icon on any search result to save it here.</p>
+            {% endif %}
+        </section>
+
+        {# ── Search history ── #}
+        <section class="profile-section" id="history-section">
+            <h2 class="profile-section-title">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                Recent searches
+                <span class="badge-count">{{ history|length }}</span>
+            </h2>
+            {% if history %}
+            <ul class="history-list">
+                {% for h in history %}
+                <li class="history-item">
+                    <a href="/search?q={{ h.query|urlencode }}&type={{ h.search_type }}" class="history-query">{{ h.query }}</a>
+                    <span class="history-type">{{ h.search_type }}</span>
+                    <span class="history-time">{{ h.searched_at[:16].replace('T', ' ') }}</span>
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p class="profile-empty">Your search history will appear here after you search while logged in.</p>
+            {% endif %}
+        </section>
+
+        {# ── Account info ── #}
+        <section class="profile-section" id="account-section">
+            <h2 class="profile-section-title">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+                Account
+            </h2>
+            <dl class="account-details">
+                <dt>Username</dt><dd>{{ user.username }}</dd>
+                <dt>Email</dt><dd>{{ user.email }}</dd>
+                <dt>Joined</dt><dd>{{ user.created_at[:10] }}</dd>
+                <dt>Last active</dt><dd>{{ user.last_seen[:16].replace('T', ' ') }}</dd>
+            </dl>
+            <a href="/logout" class="signout-link">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+                Sign out
+            </a>
+        </section>
+
+    </div>{# /profile-body #}
+</main>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    // Bookmark delete
+    document.querySelectorAll('.bookmark-delete-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const id  = btn.dataset.id;
+            const res = await fetch(`/api/user/bookmarks/${id}`, { method: 'DELETE' });
+            if (res.ok) {
+                const li = btn.closest('.bookmark-item');
+                li.style.transition = 'opacity .2s, transform .2s';
+                li.style.opacity = '0';
+                li.style.transform = 'translateX(12px)';
+                setTimeout(() => li.remove(), 200);
+                const badge = document.querySelector('#bookmarks-section .badge-count');
+                if (badge) badge.textContent = parseInt(badge.textContent) - 1;
+            }
+        });
+    });
+
+    // Sync localStorage bookmarks on page load
+    (async () => {
+        try {
+            const raw = localStorage.getItem('bookmarks');
+            if (!raw) return;
+            const items = JSON.parse(raw);
+            if (!Array.isArray(items) || items.length === 0) return;
+            await fetch('/api/user/bookmarks/sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ bookmarks: items }),
+            });
+        } catch (_) {}
+    })();
+</script>
+{% endblock %}
+>>>>>>> dcadf5476ab743af0de523f280e691c6ecdf3277

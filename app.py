@@ -3,13 +3,18 @@ abbiey.search - A privacy-respecting, non-judgmental search engine.
 No tracking. No filtering. No logs. Just results.
 """
 
+import json
 import logging
 import os
+import queue
 import re
 import sqlite3
+import subprocess
 import threading
 import time
+import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed, wait as _futures_wait
+from itertools import zip_longest
 from dataclasses import asdict
 from urllib.parse import parse_qs, quote_plus, unquote, urlparse
 
@@ -18,7 +23,7 @@ import httpx
 import stripe
 from cachetools import TTLCache
 from ddgs import DDGS
-from flask import Flask, render_template, request, jsonify, redirect, session, url_for, flash
+from flask import Flask, render_template, request, jsonify, redirect, session, url_for, flash, Response
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -27,7 +32,33 @@ from entity_parser import detect_entities, build_search_queries, primary_entity
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", os.urandom(24).hex())
-app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0  # no caching for static files
+app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 31536000  # 1-year cache for static files
+
+try:
+    from flask_compress import Compress
+    Compress(app)
+    app.config["COMPRESS_ALGORITHM"] = ["br", "gzip"]
+    app.config["COMPRESS_MIN_SIZE"] = 500
+except ImportError:
+    pass
+
+def _get_deploy_hash() -> str:
+    """Return the current git commit hash baked into the running process."""
+    # Prefer an env var set at build/deploy time (Render, Vercel, etc.)
+    for env_var in ("RENDER_GIT_COMMIT", "VERCEL_GIT_COMMIT_SHA", "GIT_COMMIT"):
+        val = os.environ.get(env_var, "")
+        if val:
+            return val[:7]
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            stderr=subprocess.DEVNULL,
+            cwd=os.path.dirname(__file__),
+        ).decode().strip()
+    except Exception:
+        return "unknown"
+
+DEPLOY_HASH = _get_deploy_hash()
 
 # ---------------------------------------------------------------------------
 # Stripe configuration
@@ -47,6 +78,183 @@ _ADMIN_TOKEN  = os.environ.get("ADMIN_TOKEN", "")
 
 OLLAMA_MODEL    = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+
+# ---------------------------------------------------------------------------
+# Turso / libSQL persistent DB (optional upgrade — survives Vercel cold starts)
+# Set LIBSQL_URL=https://xxx.turso.io and LIBSQL_AUTH_TOKEN=<token> in Vercel
+# env vars to enable.  Falls back to local SQLite automatically.
+# ---------------------------------------------------------------------------
+_LIBSQL_URL   = os.environ.get("LIBSQL_URL", "").rstrip("/")
+_LIBSQL_TOKEN = os.environ.get("LIBSQL_AUTH_TOKEN", "")
+
+
+def _turso_execute(sql: str, args: list = None, db: str = "analytics") -> list:
+    """Execute a SQL statement against Turso/libSQL HTTP API.
+    Returns list of row dicts on SELECT, empty list on write.
+    Raises on error.
+    """
+    url = f"{_LIBSQL_URL}/v2/pipeline"
+    if db == "users" and os.environ.get("LIBSQL_USERS_URL"):
+        url = os.environ.get("LIBSQL_USERS_URL", "").rstrip("/") + "/v2/pipeline"
+    stmt: dict = {"sql": sql}
+    if args:
+        stmt["args"] = [
+            {"type": "text", "value": str(a)} if isinstance(a, str)
+            else {"type": "integer", "value": int(a)} if isinstance(a, int)
+            else {"type": "null"} if a is None
+            else {"type": "text", "value": str(a)}
+            for a in args
+        ]
+    payload = {"requests": [{"type": "execute", "stmt": stmt}, {"type": "close"}]}
+    import httpx as _hx
+    resp = _hx.post(url, json=payload,
+                    headers={"Authorization": f"Bearer {_LIBSQL_TOKEN}"},
+                    timeout=8)
+    resp.raise_for_status()
+    data = resp.json()
+    result = data["results"][0]
+    if result.get("type") == "error":
+        raise RuntimeError(result["error"]["message"])
+    rows_data = result.get("response", {}).get("result", {})
+    cols = [c["name"] for c in rows_data.get("cols", [])]
+    rows = []
+    for raw_row in rows_data.get("rows", []):
+        rows.append({cols[i]: (v.get("value") if v.get("type") != "null" else None)
+                     for i, v in enumerate(raw_row)})
+    return rows
+
+
+# ---------------------------------------------------------------------------
+# Supabase / PostgreSQL persistent backend (alternative to Turso)
+# Set SUPABASE_DB_URL=postgresql://postgres:[password]@[host]:6543/postgres
+# (use the pooler URL from Supabase Project Settings → Database → Connection Pooling)
+# ---------------------------------------------------------------------------
+_SUPABASE_DB_URL = os.environ.get("SUPABASE_DB_URL", "") or os.environ.get("DATABASE_URL", "")
+_pg_conn_lock = threading.Lock()
+
+
+def _adapt_sql_pg(sql: str) -> str:
+    """Translate SQLite date/time functions to PostgreSQL equivalents."""
+    import re as _re
+    # datetime('now', '-N days/hours/minutes') → NOW() - INTERVAL 'N unit'
+    sql = _re.sub(r"datetime\('now',\s*'-(\d+) (days?|hours?|minutes?)'\)",
+                  r"NOW() - INTERVAL '\1 \2'", sql)
+    # datetime('now') → NOW()
+    sql = _re.sub(r"datetime\('now'\)", "NOW()", sql)
+    # date('now') → CURRENT_DATE
+    sql = _re.sub(r"date\('now'\)", "CURRENT_DATE", sql)
+    # date(col) → DATE(col)  — same, but make sure it's upper
+    sql = _re.sub(r"\bdate\((\w+)\)", r"DATE(\1)", sql)
+    # strftime('%H:%M', col) → TO_CHAR(col, 'HH24:MI')
+    sql = _re.sub(r"strftime\('%H:%M',\s*(\w+)\)", r"TO_CHAR(\1, 'HH24:MI')", sql)
+    # strftime('%Y-%m-%d', col) → TO_CHAR(col, 'YYYY-MM-DD')
+    sql = _re.sub(r"strftime\('%Y-%m-%d',\s*(\w+)\)", r"TO_CHAR(\1, 'YYYY-MM-DD')", sql)
+    # ROUND(AVG(...)) — same in PostgreSQL
+    # INTEGER PRIMARY KEY → SERIAL PRIMARY KEY (handled in init)
+    return sql
+
+
+def _pg_execute(sql: str, args: list = None) -> list:
+    """Execute SQL against PostgreSQL (Supabase). Returns list of row dicts."""
+    import psycopg2
+    import psycopg2.extras
+    pg_sql = _adapt_sql_pg(sql)
+    # Use %s placeholders for psycopg2 (SQLite uses ?)
+    pg_sql = pg_sql.replace("?", "%s")
+    conn = psycopg2.connect(_SUPABASE_DB_URL, connect_timeout=8,
+                            options="-c statement_timeout=10000")
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(pg_sql, args or [])
+            conn.commit()
+            if cur.description:
+                return [dict(row) for row in cur.fetchall()]
+        return []
+    finally:
+        conn.close()
+
+
+def _init_pg_tables():
+    """Create analytics tables in PostgreSQL if they don't exist."""
+    ddl = """
+        CREATE TABLE IF NOT EXISTS search_logs (
+            id          SERIAL PRIMARY KEY,
+            query       TEXT NOT NULL,
+            search_type TEXT DEFAULT 'text',
+            region      TEXT DEFAULT '',
+            result_count INTEGER DEFAULT 0,
+            latency_ms  INTEGER DEFAULT 0,
+            hour        INTEGER DEFAULT 0,
+            day_of_week INTEGER DEFAULT 0,
+            created_at  TIMESTAMPTZ DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_sl_created ON search_logs(created_at);
+        CREATE INDEX IF NOT EXISTS idx_sl_query   ON search_logs(query);
+        CREATE TABLE IF NOT EXISTS error_logs (
+            id         SERIAL PRIMARY KEY,
+            route      TEXT DEFAULT '',
+            level      TEXT DEFAULT 'error',
+            message    TEXT NOT NULL,
+            created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_el_created ON error_logs(created_at);
+    """
+    try:
+        _pg_execute(ddl)
+    except Exception as exc:
+        logger.warning("PG table init failed: %s", exc)
+
+
+if _SUPABASE_DB_URL:
+    try:
+        _init_pg_tables()
+        logger.info("Supabase/PostgreSQL analytics backend active")
+    except Exception as _pg_init_err:
+        logger.warning("Supabase init failed: %s", _pg_init_err)
+
+
+def _analytics_execute(sql: str, args: list = None):
+    """Route SQL to the active analytics backend: Supabase → Turso → SQLite."""
+    if _SUPABASE_DB_URL:
+        return _pg_execute(sql, args or [])
+    if _LIBSQL_URL and _LIBSQL_TOKEN:
+        return _turso_execute(sql, args or [], db="analytics")
+    with sqlite3.connect(_ANALYTICS_DB) as con:
+        con.row_factory = sqlite3.Row
+        cur = con.execute(sql, args or [])
+        if cur.description:
+            cols = [d[0] for d in cur.description]
+            return [dict(zip(cols, row)) for row in cur.fetchall()]
+        return []
+
+
+def _active_storage() -> str:
+    if _SUPABASE_DB_URL:
+        return "supabase"
+    if _LIBSQL_URL and _LIBSQL_TOKEN:
+        return "turso"
+    return "sqlite_tmp"
+
+
+# ---------------------------------------------------------------------------
+# SSE live broadcast queue — receives events from _log_search
+# ---------------------------------------------------------------------------
+_SSE_CLIENTS: list = []  # list of queue.Queue objects, one per connected admin
+_SSE_LOCK = threading.Lock()
+
+
+def _sse_broadcast(event: dict):
+    """Push a JSON event to all connected SSE clients."""
+    data = json.dumps(event)
+    with _SSE_LOCK:
+        dead = []
+        for q in _SSE_CLIENTS:
+            try:
+                q.put_nowait(data)
+            except Exception:
+                dead.append(q)
+        for q in dead:
+            _SSE_CLIENTS.remove(q)
 
 
 def _init_waitlist_db():
@@ -90,6 +298,7 @@ def _init_analytics_db():
             "  search_type TEXT DEFAULT 'text',"
             "  region TEXT DEFAULT '',"
             "  result_count INTEGER DEFAULT 0,"
+            "  latency_ms INTEGER DEFAULT 0,"
             "  hour INTEGER DEFAULT 0,"
             "  day_of_week INTEGER DEFAULT 0,"
             "  created_at TEXT DEFAULT (datetime('now'))"
@@ -97,6 +306,22 @@ def _init_analytics_db():
         )
         con.execute("CREATE INDEX IF NOT EXISTS idx_sl_created ON search_logs(created_at)")
         con.execute("CREATE INDEX IF NOT EXISTS idx_sl_query   ON search_logs(query)")
+        # Add latency_ms column to existing tables (idempotent)
+        try:
+            con.execute("ALTER TABLE search_logs ADD COLUMN latency_ms INTEGER DEFAULT 0")
+        except Exception:
+            pass
+        # Error log table
+        con.execute(
+            "CREATE TABLE IF NOT EXISTS error_logs ("
+            "  id INTEGER PRIMARY KEY,"
+            "  route TEXT DEFAULT '',"
+            "  level TEXT DEFAULT 'error',"
+            "  message TEXT NOT NULL,"
+            "  created_at TEXT DEFAULT (datetime('now'))"
+            ")"
+        )
+        con.execute("CREATE INDEX IF NOT EXISTS idx_el_created ON error_logs(created_at)")
 
 
 _init_analytics_db()
@@ -143,6 +368,18 @@ def _init_users_db():
 
 _init_users_db()
 
+# Add avatar column if it doesn't exist yet (safe migration)
+try:
+    with sqlite3.connect(_USERS_DB) as _con:
+        _con.execute("ALTER TABLE users ADD COLUMN avatar TEXT")
+except Exception:
+    pass  # Column already exists
+
+# Ensure avatars upload directory exists (not on Vercel)
+_AVATARS_DIR = os.path.join(os.path.dirname(__file__), "static", "avatars")
+if not os.environ.get("VERCEL"):
+    os.makedirs(_AVATARS_DIR, exist_ok=True)
+
 
 def _get_user_by_id(uid: int) -> "dict | None":
     with sqlite3.connect(_USERS_DB) as con:
@@ -164,6 +401,7 @@ def _get_user_by_login(identifier: str) -> "dict | None":
 @app.context_processor
 def _inject_current_user():
     uid = session.get("user_id")
+    ctx = {"deploy_hash": DEPLOY_HASH}
     if uid:
         user = _get_user_by_id(uid)
         if user:
@@ -174,27 +412,50 @@ def _inject_current_user():
                     )
             except Exception:
                 pass
-            return {"current_user": user}
-    return {"current_user": None}
+            return {**ctx, "current_user": user}
+    return {**ctx, "current_user": None}
 
 
 _init_analytics_db()
 
 
-def _log_search(query: str, search_type: str, region: str, result_count: int):
-    """Fire-and-forget analytics log — never raises."""
+def _log_search(query: str, search_type: str, region: str, result_count: int, latency_ms: int = 0):
+    """Fire-and-forget analytics log — never raises. Also pushes live SSE event."""
     import datetime as _dt
     now = _dt.datetime.now(_dt.timezone.utc)
+    ts = now.strftime("%Y-%m-%dT%H:%M:%SZ")
     try:
-        with sqlite3.connect(_ANALYTICS_DB) as con:
-            con.execute(
-                "INSERT INTO search_logs (query, search_type, region, result_count, hour, day_of_week)"
-                " VALUES (?,?,?,?,?,?)",
-                (query[:500], search_type, region or "", result_count,
-                 now.hour, now.weekday()),
-            )
+        _analytics_execute(
+            "INSERT INTO search_logs (query, search_type, region, result_count, latency_ms, hour, day_of_week)"
+            " VALUES (?,?,?,?,?,?,?)",
+            [query[:500], search_type, region or "", result_count, latency_ms,
+             now.hour, now.weekday()],
+        )
     except Exception as exc:
         logger.debug("Analytics log failed: %s", exc)
+    # Broadcast to live SSE clients (non-blocking)
+    try:
+        _sse_broadcast({
+            "type": "search",
+            "query": query[:120],
+            "search_type": search_type,
+            "results": result_count,
+            "latency_ms": latency_ms,
+            "ts": ts,
+        })
+    except Exception:
+        pass
+
+
+def _log_error(route: str, message: str, level: str = "error"):
+    """Log an error event to analytics DB — never raises."""
+    try:
+        _analytics_execute(
+            "INSERT INTO error_logs (route, level, message) VALUES (?,?,?)",
+            [route[:200], level, str(message)[:1000]],
+        )
+    except Exception:
+        pass
 
 
 # ---------------------------------------------------------------------------
@@ -295,7 +556,39 @@ def domain_filter(url):
 RESULTS_PER_PAGE = 20
 MAX_PAGE = 50
 MAX_QUERY_LENGTH = 2000
-ALLOWED_TYPES = {"text", "images", "news", "videos", "code", "onion", "saved"}
+ALLOWED_TYPES = {"text", "images", "news", "videos", "code", "onion", "saved", "prices", "alts"}
+
+# Price extraction
+PRICE_RE = re.compile(
+    r'(?:AU|NZ|CA?|HK|US)?\$\s*[\d,]+(?:\.\d{1,2})?'
+    r'|(?:£|€|¥|₹|₩)\s*[\d,]+(?:\.\d{1,2})?'
+    r'|[\d,]+(?:\.\d{1,2})?\s*(?:USD|GBP|EUR|AUD|CAD)\b',
+    re.IGNORECASE,
+)
+
+RETAILER_DOMAINS = {
+    "amazon.com": "Amazon", "amazon.co.uk": "Amazon", "amazon.com.au": "Amazon",
+    "amazon.ca": "Amazon", "amazon.de": "Amazon",
+    "ebay.com": "eBay", "ebay.co.uk": "eBay", "ebay.com.au": "eBay",
+    "walmart.com": "Walmart",
+    "bestbuy.com": "Best Buy",
+    "target.com": "Target",
+    "etsy.com": "Etsy",
+    "newegg.com": "Newegg",
+    "costco.com": "Costco",
+    "bhphotovideo.com": "B&H Photo",
+    "adorama.com": "Adorama",
+    "officeworks.com.au": "Officeworks",
+    "jbhifi.com.au": "JB Hi-Fi",
+    "harveynorman.com.au": "Harvey Norman",
+    "kogan.com": "Kogan",
+    "aliexpress.com": "AliExpress",
+    "pricespy.com.au": "PriceSpy",
+    "staticice.com.au": "StaticICE",
+    "getpricelist.com.au": "GetPrice",
+    "shopping.google.com": "Google Shopping",
+    "google.com": "Google Shopping",
+}
 CACHE_FETCH_SIZE = 100  # Fetch enough results to serve multiple pages
 
 logging.basicConfig(level=logging.INFO)
@@ -314,8 +607,10 @@ limiter = Limiter(
 # ---------------------------------------------------------------------------
 # TTL cache for search results — fixes pagination instability
 # ---------------------------------------------------------------------------
-_cache = TTLCache(maxsize=500, ttl=900)
+_cache = TTLCache(maxsize=1000, ttl=600)
 _cache_lock = threading.Lock()
+_in_flight: dict = {}
+_in_flight_lock = threading.Lock()
 
 # Onion link status cache (TTL 10 min)
 _onion_status_cache = TTLCache(maxsize=2000, ttl=600)
@@ -328,7 +623,11 @@ _http = None
 def _get_http():
     global _http
     if _http is None:
-        _http = httpx.Client(timeout=3.0, follow_redirects=True)
+        _http = httpx.Client(
+            timeout=3.0,
+            follow_redirects=True,
+            limits=httpx.Limits(max_connections=100, max_keepalive_connections=20, keepalive_expiry=30),
+        )
     return _http
 
 
@@ -1129,11 +1428,13 @@ def search():
         results = _fetch_results(clean_query, page, search_type, region, lang, operators, time_filter=time_filter, safesearch=safesearch)
         return jsonify(results)
 
+    _t0 = time.perf_counter()
     results = _fetch_results(clean_query, 1, search_type, region, lang, operators, time_filter=time_filter, safesearch=safesearch)
+    _latency_ms = int((time.perf_counter() - _t0) * 1000)
 
     # Log search analytics (non-blocking, never fails)
     if page == 1:
-        _log_search(query, search_type, region or "", len(results.get("results", [])))
+        _log_search(query, search_type, region or "", len(results.get("results", [])), _latency_ms)
 
     # Fetch entity-specific results on page 1 (text only) — parallel
     entity_results = []
@@ -1915,6 +2216,488 @@ def admin_analytics():
         stats["error"] = str(exc)
 
     return render_template("analytics.html", stats=stats)
+
+
+# ---------------------------------------------------------------------------
+# Admin Dashboard — full command centre with AI chatbot
+# ---------------------------------------------------------------------------
+
+def _admin_check():
+    """Return None if authorised, else an error Response."""
+    token = request.args.get("token", "") or request.headers.get("X-Admin-Token", "")
+    if _ADMIN_TOKEN and token != _ADMIN_TOKEN:
+        return jsonify({"error": "Forbidden"}), 403
+    return None
+
+
+@app.route("/admin")
+def admin_dashboard():
+    """Main admin dashboard — protected by ADMIN_TOKEN."""
+    token = request.args.get("token", "")
+    if _ADMIN_TOKEN and token != _ADMIN_TOKEN:
+        return render_template("error.html", code=403, title="Forbidden",
+                               message="Admin access only."), 403
+    return render_template("admin.html", token=token)
+
+
+@app.route("/admin/api/stats")
+def admin_api_stats():
+    """JSON stats endpoint for the admin dashboard — real data, Turso or SQLite."""
+    err = _admin_check()
+    if err:
+        return err
+    import datetime as _dt
+    data = {"storage": _active_storage()}
+    try:
+        def _scalar(sql, args=None):
+            rows = _analytics_execute(sql, args or [])
+            if rows:
+                v = list(rows[0].values())[0]
+                return v
+            return 0
+
+        data["searches_today"] = _scalar(
+            "SELECT COUNT(*) as c FROM search_logs WHERE created_at >= date('now')")
+        data["searches_week"] = _scalar(
+            "SELECT COUNT(*) as c FROM search_logs WHERE created_at >= datetime('now','-7 days')")
+        data["searches_total"] = _scalar(
+            "SELECT COUNT(*) as c FROM search_logs")
+        data["searches_last_hour"] = _scalar(
+            "SELECT COUNT(*) as c FROM search_logs WHERE created_at >= datetime('now','-1 hour')")
+        data["searches_last_5min"] = _scalar(
+            "SELECT COUNT(*) as c FROM search_logs WHERE created_at >= datetime('now','-5 minutes')")
+        data["avg_latency_ms"] = _scalar(
+            "SELECT ROUND(AVG(latency_ms)) as c FROM search_logs"
+            " WHERE latency_ms > 0 AND created_at >= datetime('now','-7 days')") or 0
+        data["p95_latency_ms"] = _scalar(
+            "SELECT latency_ms as c FROM search_logs WHERE latency_ms > 0"
+            " AND created_at >= datetime('now','-7 days')"
+            " ORDER BY latency_ms LIMIT 1 OFFSET MAX(0,"
+            "(SELECT COUNT(*)*95/100 FROM search_logs WHERE latency_ms > 0"
+            " AND created_at >= datetime('now','-7 days'))-1)") or 0
+        data["errors_today"] = _scalar(
+            "SELECT COUNT(*) as c FROM error_logs WHERE created_at >= date('now')")
+        data["errors_week"] = _scalar(
+            "SELECT COUNT(*) as c FROM error_logs WHERE created_at >= datetime('now','-7 days')")
+
+        # Top queries (7 days)
+        data["top_queries"] = _analytics_execute(
+            "SELECT query, COUNT(*) as count FROM search_logs"
+            " WHERE created_at >= datetime('now','-7 days') AND length(query) BETWEEN 2 AND 80"
+            " GROUP BY lower(query) ORDER BY count DESC LIMIT 15")
+
+        # Type breakdown (7 days)
+        data["by_type"] = _analytics_execute(
+            "SELECT search_type as type, COUNT(*) as count FROM search_logs"
+            " WHERE created_at >= datetime('now','-7 days')"
+            " GROUP BY search_type ORDER BY count DESC")
+
+        # Daily chart (30 days) — fill zeros for missing days
+        today = _dt.date.today()
+        raw_daily = _analytics_execute(
+            "SELECT date(created_at) as d, COUNT(*) as count FROM search_logs"
+            " WHERE created_at >= datetime('now','-30 days') GROUP BY d ORDER BY d")
+        daily_map = {r["d"]: int(r["count"]) for r in raw_daily}
+        data["daily"] = [
+            {"date": (today - _dt.timedelta(days=29 - i)).isoformat(),
+             "count": daily_map.get((today - _dt.timedelta(days=29 - i)).isoformat(), 0)}
+            for i in range(30)
+        ]
+
+        # Hourly heatmap (7 days)
+        raw_hourly = _analytics_execute(
+            "SELECT hour, COUNT(*) as count FROM search_logs"
+            " WHERE created_at >= datetime('now','-7 days') GROUP BY hour")
+        hour_map = {int(r["hour"]): int(r["count"]) for r in raw_hourly}
+        data["hourly"] = [{"hour": h, "count": hour_map.get(h, 0)} for h in range(24)]
+
+        # Recent searches (50)
+        data["recent_searches"] = _analytics_execute(
+            "SELECT query, search_type as type, result_count as results,"
+            " latency_ms, created_at as ts"
+            " FROM search_logs ORDER BY id DESC LIMIT 50")
+
+        # User stats
+        try:
+            with sqlite3.connect(_USERS_DB) as ucon:
+                data["total_users"] = ucon.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+                data["users_today"] = ucon.execute(
+                    "SELECT COUNT(*) FROM users WHERE created_at >= date('now')").fetchone()[0]
+                data["users_week"] = ucon.execute(
+                    "SELECT COUNT(*) FROM users WHERE created_at >= datetime('now','-7 days')").fetchone()[0]
+        except Exception:
+            data["total_users"] = 0
+            data["users_today"] = 0
+            data["users_week"] = 0
+
+        # Error logs (100 most recent)
+        data["error_logs"] = _analytics_execute(
+            "SELECT route, level, message, created_at as ts FROM error_logs"
+            " ORDER BY id DESC LIMIT 100")
+
+        # Searches per minute over last 10 minutes (per-minute breakdown)
+        raw_min = _analytics_execute(
+            "SELECT strftime('%H:%M', created_at) as minute, COUNT(*) as count"
+            " FROM search_logs WHERE created_at >= datetime('now','-10 minutes')"
+            " GROUP BY minute ORDER BY minute")
+        data["per_minute"] = raw_min
+
+        data["live_clients"] = len(_SSE_CLIENTS)
+        data["server_time"] = _dt.datetime.utcnow().isoformat() + "Z"
+
+    except Exception as exc:
+        data["error"] = str(exc)
+    return jsonify(data)
+
+
+@app.route("/admin/api/stream")
+def admin_api_stream():
+    """Server-Sent Events endpoint — pushes live search events to admin dashboard."""
+    err = _admin_check()
+    if err:
+        return err
+
+    client_q: queue.Queue = queue.Queue(maxsize=200)
+    with _SSE_LOCK:
+        _SSE_CLIENTS.append(client_q)
+
+    def generate():
+        # Send a heartbeat immediately so browser knows connection is open
+        yield "event: connected\ndata: {\"status\":\"ok\"}\n\n"
+        try:
+            while True:
+                try:
+                    data = client_q.get(timeout=25)
+                    yield f"data: {data}\n\n"
+                except queue.Empty:
+                    # Send heartbeat every 25s to keep connection alive
+                    yield ": heartbeat\n\n"
+        except GeneratorExit:
+            pass
+        finally:
+            with _SSE_LOCK:
+                try:
+                    _SSE_CLIENTS.remove(client_q)
+                except ValueError:
+                    pass
+
+    return Response(
+        generate(),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
+
+
+@app.route("/admin/api/health")
+def admin_api_health():
+    """Health check — shows DB connectivity, cache state, live clients."""
+    err = _admin_check()
+    if err:
+        return err
+    import datetime as _dt
+    health: dict = {
+        "status": "ok",
+        "server_time": _dt.datetime.utcnow().isoformat() + "Z",
+        "storage": _active_storage(),
+        "live_sse_clients": len(_SSE_CLIENTS),
+    }
+    # Test analytics DB
+    try:
+        _analytics_execute("SELECT 1 as ok")
+        health["analytics_db"] = "ok"
+    except Exception as e:
+        health["analytics_db"] = f"error: {e}"
+        health["status"] = "degraded"
+    # Test users DB
+    try:
+        with sqlite3.connect(_USERS_DB) as c:
+            c.execute("SELECT 1")
+        health["users_db"] = "ok"
+    except Exception as e:
+        health["users_db"] = f"error: {e}"
+        health["status"] = "degraded"
+    # Cache stats
+    try:
+        from cachetools import TTLCache as _TC
+        health["cache_size"] = len(_result_cache)
+        health["cache_maxsize"] = _result_cache.maxsize
+    except Exception:
+        pass
+    return jsonify(health)
+
+
+# ---------------------------------------------------------------------------
+# Admin AI Chatbot — knows everything about abbiey.search
+# ---------------------------------------------------------------------------
+
+_ABBIEY_SYSTEM_PROMPT = """You are AbbeyBot, the private internal AI assistant built exclusively for the owner/admin of abbiey.search.
+
+You are an expert in every aspect of this project. You are direct, insightful, and genuinely helpful. You think like a senior full-stack engineer and product strategist who built this system from scratch.
+
+== ARCHITECTURE ==
+- Backend: Python Flask (~4200+ lines, app.py) served as a Vercel serverless function via api/index.py
+- Host: Vercel (abbieysearch.com → prj_NNB1SRC35VzeuKs5odeDOdS0amTe). Deploy with: vercel deploy --prod --token <token>
+- Database (priority order — _analytics_execute() routes automatically):
+  1. Supabase/PostgreSQL — set SUPABASE_DB_URL env var (pooler URL port 6543). Auto-creates tables. SQL translated via _adapt_sql_pg().
+  2. Turso/libSQL — set LIBSQL_URL + LIBSQL_AUTH_TOKEN env vars. SQLite-compatible HTTP API.
+  3. SQLite /tmp — fallback. Ephemeral on Vercel (wiped on cold start). Fine for dev/testing.
+  - analytics.db / search_logs table: query, type, region, result_count, latency_ms, hour, day_of_week, created_at
+  - analytics.db / error_logs table: route, level, message, created_at
+  - users.db: users, user_bookmarks, user_search_history
+  - payments.db: payments
+- Caching: TTLCache (1000 entries, 300s TTL) + threading.Lock; _in_flight dict deduplicates concurrent identical queries
+- HTTP client: httpx connection pool (100 max, 20 keepalive); singleton via _get_http()
+- Compression: flask-compress (Brotli preferred, gzip fallback), min_size=500 bytes
+- Rate limiting: flask-limiter (30 searches/min, 5 breach-checks/min)
+- Auth: Werkzeug password hashing (pbkdf2), Flask sessions
+- Payments: Stripe Checkout + webhook
+- Live dashboard: SSE /admin/api/stream pushes search events in real-time; _sse_broadcast() called from _log_search()
+
+== SEARCH FLOW ==
+1. GET /search?q=&type=&region=&lang=&df=&page=
+2. Query sanitised, entities detected (detect_entities in entity_parser.py), bang commands parsed (!w Wikipedia, !yt YouTube, !gh GitHub, etc.)
+3. TTLCache check (key = query+type+region+page) — return instantly if hit
+4. _fetch_results() dispatches by search_type:
+   - "text": DDG multi-backend (DDGS lib) → DDG HTML scrape → Mojeek → DDG instant answers; multi-region fallback; entity enrichment (Wikipedia, definitions, calculations, colour previews, unit conversions)
+   - "images": DDG images API
+   - "news": DDG news API + feedparser RSS
+   - "videos": DDG videos API
+   - "code": ThreadPoolExecutor(4) → GitHub Search API + StackOverflow API + GitLab API + npm registry — ALL IN PARALLEL. Never uses DDG for code.
+   - "onion": Ahmia.fi API → DDG onion-site filter fallback
+5. Results deduped by URL, scored, paginated
+6. _log_search() fires async (never blocks response)
+7. HTML rendered via index.html (standalone, ~970 lines, does NOT extend base.html)
+
+== KEY ROUTES ==
+/ — Homepage: search bar, recent-searches chips, install banner, onboarding modal
+/search — Results page (same index.html template, different render path)
+/login /signup /profile — Auth pages (extend base.html)
+/admin?token= — THIS dashboard
+/admin/analytics?token= — Legacy analytics (still works)
+/admin/api/stats — JSON stats (this chatbot uses it)
+/admin/api/chat — This AI endpoint
+/api/user/recent-searches — Last 10 searches for logged-in user (JSON)
+/opensearch.xml — OpenSearch description (add as browser default search)
+/manifest.json — PWA web app manifest
+/robots.txt /sitemap.xml — SEO crawlability
+/breach-check — HaveIBeenPwned email checker (XposedOrNot API)
+/admin/grant-access?token= — Manually grant premium access
+
+== DEPLOYMENT ==
+The old deploy hook (api.vercel.com/v1/integrations/deploy/...) NEVER worked — it redeploys an old snapshot.
+Correct deploy: cd /home/alex/abbiey-search-engine && /home/alex/node_modules/.bin/vercel deploy --prod --token <VERCEL_TOKEN>
+GitHub: github.com/abbieymatthewslol/abbiey-search-engine (master branch)
+GitHub Actions workflow: .github/workflows/deploy.yml — auto-deploys on push once VERCEL_TOKEN secret is added
+
+== KNOWN BUGS FIXED ==
+- Code search was broken (DDG results displayed in code font) — FIXED: parallel GitHub/SO/GitLab/npm fetch
+- Deploy hook redeployed old snapshot — FIXED: Vercel CLI deploy
+- Static files uncached (max-age=0) — FIXED: 1-year immutable cache
+- Post-signup redirect to /profile standalone — FIXED: redirect to index
+- Bang-hint shortcut bar was distracting — REMOVED
+
+== PERFORMANCE ==
+- Cold start: ~2-3s (unavoidable on Vercel serverless)
+- Cache hit: <50ms
+- Typical search: 300-800ms (DDG API latency dominates)
+- Compression saves ~65% on HTML payloads
+- TTLCache hit rate should be >30% for healthy traffic
+
+== GROWTH FEATURES ==
+- OpenSearch XML: browsers can add as default search engine
+- PWA manifest + icons: installable on mobile home screen
+- Open Graph + Twitter cards: rich link previews when shared
+- JSON-LD structured data: Google sitelinks search box
+- Install banner: prompts users to add as browser default (dismissible, localStorage)
+- Share button: Web Share API + clipboard fallback on results pages
+- robots.txt + sitemap.xml: full crawler access
+
+== HOW TO HELP IT ==
+Performance: Increase TTLCache size, add Redis/Upstash for persistent cache, CDN for static assets
+Growth: Submit sitemap to Google Search Console, add to browser extension directories, post on Product Hunt
+Reliability: Add Sentry error tracking, health check endpoint /health, Vercel function logs
+Features to build: image search results in grid, dark/light theme sync across devices, search history export, API for developers, browser extension
+Monetisation: Premium features (currently Stripe integrated), API access tiers, white-label
+
+Always answer as if you have full context of what's happening right now on the platform. Be specific, actionable, and opinionated. If you see data from the dashboard, analyse it and give real insights."""
+
+
+@app.route("/admin/api/chat", methods=["POST"])
+def admin_chat():
+    """AI chatbot for the admin — specialised in abbiey.search."""
+    err = _admin_check()
+    if err:
+        return err
+
+    body = request.get_json(silent=True) or {}
+    user_message = (body.get("message") or "").strip()
+    history = body.get("history") or []  # list of {role, content}
+    dashboard_context = body.get("context") or ""  # optional JSON stats snapshot
+
+    if not user_message:
+        return jsonify({"error": "No message"}), 400
+
+    # Build messages for LLM
+    system = _ABBIEY_SYSTEM_PROMPT
+    if dashboard_context:
+        system += f"\n\n== CURRENT LIVE STATS (from dashboard) ==\n{dashboard_context}"
+
+    messages = [{"role": "system", "content": system}]
+    for h in history[-10:]:  # last 10 turns for context
+        if h.get("role") in ("user", "assistant") and h.get("content"):
+            messages.append({"role": h["role"], "content": h["content"][:2000]})
+    messages.append({"role": "user", "content": user_message})
+
+    # Try Ollama first (local/self-hosted)
+    ollama_url = OLLAMA_BASE_URL.rstrip("/")
+    try:
+        resp = _get_http().post(
+            f"{ollama_url}/api/chat",
+            json={"model": OLLAMA_MODEL, "messages": messages, "stream": False},
+            timeout=30,
+        )
+        if resp.status_code == 200:
+            reply = resp.json().get("message", {}).get("content", "")
+            if reply:
+                return jsonify({"reply": reply, "source": "ollama"})
+    except Exception:
+        pass
+
+    # Try OpenAI-compatible API if key set
+    openai_key = os.environ.get("OPENAI_API_KEY", "")
+    openai_base = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
+    openai_model = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+    if openai_key:
+        try:
+            resp = _get_http().post(
+                f"{openai_base.rstrip('/')}/chat/completions",
+                headers={"Authorization": f"Bearer {openai_key}"},
+                json={"model": openai_model, "messages": messages, "max_tokens": 1200},
+                timeout=30,
+            )
+            if resp.status_code == 200:
+                reply = resp.json()["choices"][0]["message"]["content"]
+                return jsonify({"reply": reply, "source": "openai"})
+        except Exception as exc:
+            logger.warning("OpenAI chat failed: %s", exc)
+
+    # Built-in rule-based fallback — always available
+    reply = _abbiey_bot_fallback(user_message, dashboard_context)
+    return jsonify({"reply": reply, "source": "builtin"})
+
+
+def _abbiey_bot_fallback(msg: str, ctx: str = "") -> str:
+    """Rule-based fallback when no LLM is available. Answers common admin questions."""
+    m = msg.lower()
+
+    if any(w in m for w in ["deploy", "push", "release", "live", "publish"]):
+        return (
+            "**Deploy command:**\n```\ncd /home/alex/abbiey-search-engine\n"
+            "/home/alex/node_modules/.bin/vercel deploy --prod --token YOUR_VERCEL_TOKEN\n```\n"
+            "After committing your changes, run this from the repo directory. "
+            "Your Vercel token is stored securely — retrieve it from https://vercel.com/account/tokens. "
+            "Takes ~60-90s. The old deploy hook on Vercel's dashboard does NOT work — always use the CLI."
+        )
+
+    if any(w in m for w in ["slow", "latency", "performance", "fast", "speed"]):
+        return (
+            "**Performance levers:**\n"
+            "- Cache hit rate: check avg latency in stats — if >500ms consistently, TTLCache may be small\n"
+            "- Cold starts: unavoidable on Vercel (~2-3s). Consider Vercel Pro for warmer instances\n"
+            "- Code search: parallel fetch (GitHub/SO/GitLab/npm) — fastest path already\n"
+            "- Add Upstash Redis as persistent cache layer (free tier available)\n"
+            "- Enable Vercel Edge Functions for static responses"
+        )
+
+    if any(w in m for w in ["user", "signup", "register", "account"]):
+        return (
+            "**User system:**\n"
+            "- Users stored in `users.db` (SQLite, /tmp on Vercel)\n"
+            "- Auth: Werkzeug pbkdf2 hashing, Flask sessions\n"
+            "- Avatar uploads: `static/avatars/` (disabled on Vercel — read-only filesystem)\n"
+            "- Sessions expire when Vercel instance restarts (stateless). Consider adding a persistent session store.\n"
+            "- ⚠️ SQLite in /tmp is ephemeral on Vercel — users are lost on cold starts. Migrate to Supabase or PlanetScale for production."
+        )
+
+    if any(w in m for w in ["error", "bug", "broken", "fix", "issue"]):
+        return (
+            "**Known fixed issues:**\n"
+            "- ✅ Code search (was DDG results in code font) — now parallel GitHub/SO/GitLab/npm\n"
+            "- ✅ Deploy hook (was redeploying old snapshot) — fixed with Vercel CLI\n"
+            "- ✅ Static cache (max-age was 0) — now 1 year immutable\n"
+            "- ✅ Post-signup redirect to /profile — now redirects to homepage\n\n"
+            "**Current watch areas:**\n"
+            "- SQLite in /tmp is ephemeral on Vercel (data lost on cold start)\n"
+            "- Rate limiter uses in-memory storage (resets on cold start)\n"
+            "- No error alerting (Sentry not yet integrated)"
+        )
+
+    if any(w in m for w in ["grow", "traffic", "seo", "users", "marketing", "promote"]):
+        return (
+            "**Growth actions (prioritised):**\n"
+            "1. Submit sitemap to Google Search Console → https://search.google.com/search-console\n"
+            "2. Submit to Bing Webmaster Tools\n"
+            "3. Post on ProductHunt (best day: Tuesday)\n"
+            "4. Submit to browser extension stores (Chrome, Firefox) as default search option\n"
+            "5. OpenSearch is live — users who visit can add via browser address bar\n"
+            "6. Share button on results → viral loop\n"
+            "7. Reddit posts in r/privacy, r/degoogle, r/selfhosted\n"
+            "8. Add to alternativeto.net as DuckDuckGo/Google alternative"
+        )
+
+    if any(w in m for w in ["search", "ddg", "duckduckgo", "result"]):
+        return (
+            "**Search architecture:**\n"
+            "- Primary: DDGS library (DuckDuckGo) with multi-backend fallback\n"
+            "- Code: GitHub API + StackOverflow + GitLab + npm (parallel, never DDG)\n"
+            "- Images/News/Videos: DDG-specific APIs\n"
+            "- Onion: Ahmia.fi → DDG onion fallback\n"
+            "- Entity enrichment: Wikipedia, definitions, calculations, colour, units\n"
+            "- Cache: TTLCache 1000 entries, 300s TTL\n"
+            "- Bang commands: !w (Wikipedia), !yt (YouTube), !gh (GitHub), 50+ others"
+        )
+
+    if any(w in m for w in ["database", "sqlite", "db", "storage", "data"]):
+        return (
+            "**Data storage:**\n"
+            "- `analytics.db` → search_logs, error_logs (grows ~1KB per 10 searches)\n"
+            "- `users.db` → users table\n"
+            "- `payments.db` → Stripe payment records\n"
+            "⚠️ All SQLite files live in `/tmp` on Vercel — **ephemeral, wiped on cold start**.\n"
+            "For production persistence, migrate to: Turso (SQLite-compatible), Supabase (PostgreSQL), or PlanetScale."
+        )
+
+    if any(w in m for w in ["feature", "next", "todo", "build", "add", "improve"]):
+        return (
+            "**High-impact features to build next:**\n"
+            "1. **Persistent database** (Turso/Supabase) — most critical, analytics are lost on restart\n"
+            "2. **Browser extension** — install as default search from Chrome/Firefox store\n"
+            "3. **Search result clustering** — group results by topic/source\n"
+            "4. **API endpoint** — `GET /api/search?q=&key=` for developers\n"
+            "5. **Saved searches / bookmarks** — user collections\n"
+            "6. **Custom themes** — beyond dark/light\n"
+            "7. **Search suggestions** — live autocomplete as you type\n"
+            "8. **PDF/document search** — specialised tab\n"
+            "9. **Answer engine mode** — AI-summarised answers at top\n"
+            "10. **Sentry error tracking** — get alerts on production errors"
+        )
+
+    # Generic helpful response
+    return (
+        f"I'm AbbeyBot — I know everything about abbiey.search. Ask me about:\n"
+        "- **Deploy** — how to push changes live\n"
+        "- **Performance** — latency, caching, cold starts\n"
+        "- **Search** — how DDG/code/onion search works\n"
+        "- **Users** — auth, sessions, database\n"
+        "- **Growth** — SEO, traffic, marketing\n"
+        "- **Errors** — known bugs, fixes, monitoring\n"
+        "- **Features** — what to build next\n\n"
+        "For full AI responses, set `OLLAMA_BASE_URL` (local Ollama) or `OPENAI_API_KEY` in Vercel environment variables."
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -3040,6 +3823,176 @@ def _try_hackernews_text(query, max_results=10):
     return results
 
 
+# ---- Price comparison helpers ----
+
+def _extract_price(text):
+    """Extract first price from text; returns (display_str, numeric_val)."""
+    m = PRICE_RE.search(text or "")
+    if not m:
+        return None, None
+    raw = m.group(0).strip()
+    numeric_str = re.sub(r"[^\d.]", "", raw)
+    try:
+        return raw, float(numeric_str)
+    except Exception:
+        return raw, None
+
+
+def _get_retailer(url):
+    """Map a URL to a known retailer name."""
+    try:
+        domain = urlparse(url).netloc.lower().lstrip("www.")
+        for d, name in RETAILER_DOMAINS.items():
+            if d in domain:
+                return name
+        return domain.split(".")[0].capitalize()
+    except Exception:
+        return "Store"
+
+
+def _try_prices(query, max_results=40):
+    """Parallel DDG searches scoped to major retail sites; extracts prices from results."""
+    site_queries = [
+        f"{query} site:amazon.com OR site:amazon.com.au OR site:amazon.co.uk",
+        f"{query} site:ebay.com OR site:ebay.com.au OR site:ebay.co.uk",
+        f"{query} site:walmart.com OR site:bestbuy.com OR site:target.com OR site:newegg.com",
+        f"{query} site:etsy.com OR site:costco.com OR site:bhphotovideo.com",
+        f"{query} site:jbhifi.com.au OR site:harveynorman.com.au OR site:kogan.com OR site:officeworks.com.au",
+        f"{query} buy price compare",
+    ]
+
+    seen_urls: set = set()
+    results = []
+
+    with ThreadPoolExecutor(max_workers=len(site_queries)) as pool:
+        futs = [pool.submit(_try_ddg, q, 10, "text") for q in site_queries]
+        for fut in as_completed(futs, timeout=10):
+            try:
+                for r in (fut.result() or []):
+                    url = r.get("url", "")
+                    if not url or url in seen_urls:
+                        continue
+                    seen_urls.add(url)
+                    title = r.get("title", "")
+                    body = r.get("body", "")
+                    price_str, price_val = _extract_price(f"{title} {body}")
+                    results.append({
+                        "title": title,
+                        "url": url,
+                        "body": body,
+                        "price": price_str,
+                        "price_val": price_val,
+                        "retailer": _get_retailer(url),
+                        "source_type": "price",
+                    })
+            except Exception as exc:
+                logger.warning("prices fetch error: %s", exc)
+
+    with_price = sorted(
+        [r for r in results if r.get("price_val") is not None],
+        key=lambda x: x["price_val"],
+    )
+    without_price = [r for r in results if r.get("price_val") is None]
+    return (with_price + without_price)[:max_results]
+
+
+# ---- Alternatives helpers ----
+
+def _try_alternativeto(query, max_results=16):
+    """Scrape AlternativeTo search results page."""
+    from bs4 import BeautifulSoup
+    try:
+        resp = _get_http().get(
+            f"https://alternativeto.net/browse/search/?q={quote_plus(query)}",
+            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
+            timeout=8,
+            follow_redirects=True,
+        )
+        if resp.status_code != 200:
+            return []
+        soup = BeautifulSoup(resp.text, "lxml")
+        results = []
+        seen = set()
+        # Software links follow pattern /software/{name}/ or /software/{name}/about/
+        sw_re = re.compile(r"^/software/([^/]+)/?(?:about/?)?$")
+        for link in soup.find_all("a", href=sw_re):
+            href = link.get("href", "").rstrip("/")
+            slug = sw_re.match(href)
+            if not slug:
+                continue
+            canonical = f"/software/{slug.group(1)}/"
+            if canonical in seen:
+                continue
+            seen.add(canonical)
+            name = link.get_text(strip=True) or slug.group(1).replace("-", " ").title()
+            if len(name) < 2:
+                continue
+            # Search upward for a description paragraph
+            description = ""
+            card = link.find_parent(["article", "section", "li", "div"])
+            if card:
+                for p in card.find_all(["p", "span"]):
+                    text = p.get_text(strip=True)
+                    if 20 < len(text) < 300 and text.lower() != name.lower():
+                        description = text
+                        break
+            # Platforms chips
+            platforms = []
+            if card:
+                for chip in card.find_all(["li", "span"], class_=re.compile(r"platform|Platform", re.I)):
+                    t = chip.get_text(strip=True)
+                    if t and len(t) < 30:
+                        platforms.append(t)
+            results.append({
+                "title": name,
+                "url": f"https://alternativeto.net{canonical}",
+                "body": description,
+                "platforms": platforms[:5],
+                "source": "AlternativeTo",
+                "source_type": "alternative",
+            })
+            if len(results) >= max_results:
+                break
+        return results
+    except Exception as exc:
+        logger.warning("alternativeto scrape error: %s", exc)
+        return []
+
+
+def _try_alternatives_ddg(query, max_results=20):
+    """DDG text search for alternatives on known comparison sites."""
+    alt_query = (
+        f'"{query}" alternatives '
+        f'site:alternativeto.net OR site:slant.co OR site:g2.com OR site:capterra.com OR site:producthunt.com'
+    )
+    try:
+        raw = _try_ddg(alt_query, max_results, "text") or []
+        results = []
+        for r in raw:
+            url = r.get("url", "")
+            domain = urlparse(url).netloc.lower().lstrip("www.")
+            source_map = {
+                "alternativeto.net": "AlternativeTo",
+                "slant.co": "Slant",
+                "g2.com": "G2",
+                "capterra.com": "Capterra",
+                "producthunt.com": "Product Hunt",
+            }
+            source = next((v for k, v in source_map.items() if k in domain), domain)
+            results.append({
+                "title": r.get("title", ""),
+                "url": url,
+                "body": r.get("body", ""),
+                "platforms": [],
+                "source": source,
+                "source_type": "alternative",
+            })
+        return results
+    except Exception as exc:
+        logger.warning("alternatives DDG error: %s", exc)
+        return []
+
+
 # ---- Deduplication ----
 
 def _deduplicate(results):
@@ -3185,6 +4138,26 @@ def _fetch_results(query, page, search_type, region=None, lang=None, operators=N
         has_more = len(cached) > start + RESULTS_PER_PAGE
         return {"results": page_results, "has_more": has_more, "page": page}
 
+    # In-flight deduplication: if another thread is already fetching the same key, wait for it
+    _my_event = None
+    with _in_flight_lock:
+        if cache_key in _in_flight:
+            _wait_event = _in_flight[cache_key]
+        else:
+            _my_event = threading.Event()
+            _in_flight[cache_key] = _my_event
+            _wait_event = None
+
+    if _wait_event is not None:
+        _wait_event.wait(timeout=10)
+        with _cache_lock:
+            cached = _cache.get(cache_key)
+        if cached is not None:
+            start = RESULTS_PER_PAGE * (page - 1)
+            page_results = cached[start : start + RESULTS_PER_PAGE]
+            has_more = len(cached) > start + RESULTS_PER_PAGE
+            return {"results": page_results, "has_more": has_more, "page": page}
+
     # Build effective query with operators
     effective_query = _build_engine_query(query, operators) if operators else query
     max_results = CACHE_FETCH_SIZE
@@ -3196,6 +4169,41 @@ def _fetch_results(query, page, search_type, region=None, lang=None, operators=N
         if not results:
             logger.info("Ahmia empty, trying DDG onion fallback")
             results = _try_onion_ddg(effective_query)
+    elif search_type == "code":
+        # Code — dedicated path: fetch GitHub, StackOverflow, GitLab, npm in parallel.
+        # Never use generic DDG — it returns unrelated web pages styled in code font.
+        logger.info("Code search: fetching GitHub/SO/GitLab/npm in parallel")
+        with ThreadPoolExecutor(max_workers=4) as _code_pool:
+            _gh_fut  = _code_pool.submit(_try_github_search,   effective_query, max_results)
+            _so_fut  = _code_pool.submit(_try_stackoverflow,   effective_query, max_results)
+            _gl_fut  = _code_pool.submit(_try_gitlab,          effective_query, max_results)
+            _npm_fut = _code_pool.submit(_try_npm,             effective_query, max_results)
+            gh_res  = _gh_fut.result(timeout=8)  or []
+            so_res  = _so_fut.result(timeout=8)  or []
+            gl_res  = _gl_fut.result(timeout=8)  or []
+            npm_res = _npm_fut.result(timeout=8) or []
+
+        # Interleave sources so results aren't all from one platform
+        seen_urls = set()
+        for batch in zip_longest(gh_res, so_res, gl_res, npm_res):
+            for r in batch:
+                if r and r.get("url") not in seen_urls:
+                    seen_urls.add(r.get("url"))
+                    results.append(r)
+
+        # Fallback: DDG with code-site filter if all APIs failed
+        if not results:
+            logger.info("Code APIs all failed, falling back to DDG code-focused")
+            results = _try_code_ddg(effective_query, max_results)
+    elif search_type == "prices":
+        logger.info("Price search: fetching from retailers in parallel")
+        results = _try_prices(effective_query, max_results)
+    elif search_type == "alts":
+        logger.info("Alternatives search: trying AlternativeTo + DDG fallback")
+        results = _try_alternativeto(effective_query)
+        if not results:
+            logger.info("AlternativeTo empty, falling back to DDG alternatives search")
+            results = _try_alternatives_ddg(effective_query, max_results)
     else:
         # Layer 1: DDG multi-backend (with timeout guard)
         try:
@@ -3299,30 +4307,6 @@ def _fetch_results(query, page, search_type, region=None, lang=None, operators=N
                     except Exception:
                         pass
 
-        # Code-specific fallbacks
-        if search_type == "code":
-            if not results:
-                logger.info("Code search: trying GitHub")
-                results = _try_github_search(effective_query, max_results)
-            if not results:
-                logger.info("Code search: trying StackOverflow")
-                results = _try_stackoverflow(effective_query, max_results)
-            if not results:
-                logger.info("Code search: trying GitLab")
-                results = _try_gitlab(effective_query, max_results)
-            if not results:
-                logger.info("Code search: trying DDG code-focused")
-                results = _try_code_ddg(effective_query, max_results)
-            # For code, merge extra sources for variety
-            if results and len(results) < max_results // 2:
-                try:
-                    so = _try_stackoverflow(effective_query, 10)
-                    gh = _try_github_search(effective_query, 10)
-                    gl = _try_gitlab(effective_query, 10)
-                    npm = _try_npm(effective_query, 10)
-                    results = results + so + gh + gl + npm
-                except Exception:
-                    pass
 
     # Text-only deep fallbacks
     if not results and search_type == "text":
@@ -3350,6 +4334,11 @@ def _fetch_results(query, page, search_type, region=None, lang=None, operators=N
     # Store in cache
     with _cache_lock:
         _cache[cache_key] = results
+
+    if _my_event is not None:
+        with _in_flight_lock:
+            _in_flight.pop(cache_key, None)
+        _my_event.set()
 
     start = RESULTS_PER_PAGE * (page - 1)
     page_results = results[start : start + RESULTS_PER_PAGE]
@@ -3420,7 +4409,8 @@ def signup():
 
     session.permanent = True
     session["user_id"] = uid
-    return redirect(url_for("profile"))
+    flash("welcome", "welcome")
+    return redirect(url_for("index") + "?welcome=1")
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -3447,7 +4437,7 @@ def login():
 
     session.permanent = True
     session["user_id"] = user["id"]
-    return redirect(next_url or url_for("profile"))
+    return redirect(next_url or url_for("index"))
 
 
 @app.route("/logout")
@@ -3506,6 +4496,38 @@ def profile_update():
     return redirect(url_for("profile"))
 
 
+# ---- Avatar upload ----------------------------------------------------------
+
+@app.route("/profile/avatar", methods=["POST"])
+def profile_avatar():
+    redir = _require_login()
+    if redir:
+        return redir
+
+    uid = session["user_id"]
+    f = request.files.get("avatar")
+    if not f or not f.content_type or not f.content_type.startswith("image/"):
+        return redirect(url_for("profile"))
+
+    ext_map = {"image/jpeg": "jpg", "image/png": "png", "image/gif": "gif", "image/webp": "webp"}
+    ext = ext_map.get(f.content_type, "jpg")
+
+    if os.environ.get("VERCEL"):
+        # On Vercel filesystem is read-only — skip saving
+        return redirect(url_for("profile"))
+
+    save_dir = os.path.join(os.path.dirname(__file__), "static", "avatars")
+    os.makedirs(save_dir, exist_ok=True)
+    filename = f"{uid}.{ext}"
+    f.save(os.path.join(save_dir, filename))
+
+    avatar_path = f"avatars/{filename}"
+    with sqlite3.connect(_USERS_DB) as con:
+        con.execute("UPDATE users SET avatar=? WHERE id=?", (avatar_path, uid))
+
+    return redirect(url_for("profile"))
+
+
 # ---- Bookmarks API (server-side, requires login) ----------------------------
 
 @app.route("/api/user/bookmarks", methods=["GET"])
@@ -3521,6 +4543,27 @@ def api_user_bookmarks_get():
             (uid,)
         ).fetchall()
     return jsonify({"bookmarks": [dict(r) for r in rows]})
+
+
+@app.route("/api/user/recent-searches", methods=["GET"])
+def api_user_recent_searches():
+    if not session.get("user_id"):
+        return jsonify([]), 401
+    uid = session["user_id"]
+    with sqlite3.connect(_USERS_DB) as con:
+        con.row_factory = sqlite3.Row
+        rows = con.execute(
+            "SELECT query, search_type FROM user_search_history"
+            " WHERE user_id=? ORDER BY searched_at DESC LIMIT 5",
+            (uid,)
+        ).fetchall()
+    seen = set()
+    unique = []
+    for r in rows:
+        if r["query"] not in seen:
+            seen.add(r["query"])
+            unique.append({"query": r["query"], "type": r["search_type"] or "text"})
+    return jsonify(unique)
 
 
 @app.route("/api/user/bookmarks", methods=["POST"])
@@ -3606,6 +4649,216 @@ def api_user_history_add():
     except Exception:
         pass
     return jsonify({"ok": True})
+
+
+@app.route("/opensearch.xml")
+def opensearch():
+    xml = '''<?xml version="1.0" encoding="UTF-8"?>
+<OpenSearchDescription xmlns="http://a9.com/-/spec/opensearch/1.1/">
+  <ShortName>abbiey.search</ShortName>
+  <Description>Private, fast, no-tracking search engine</Description>
+  <Tags>privacy search private</Tags>
+  <Contact>hello@abbieysearch.com</Contact>
+  <Url type="text/html" template="https://www.abbieysearch.com/search?q={searchTerms}"/>
+  <Url type="application/opensearchdescription+xml" rel="self"
+       template="https://www.abbieysearch.com/opensearch.xml"/>
+  <Image height="16" width="16" type="image/x-icon">https://www.abbieysearch.com/static/favicon.ico</Image>
+  <InputEncoding>UTF-8</InputEncoding>
+  <OutputEncoding>UTF-8</OutputEncoding>
+</OpenSearchDescription>'''
+    return Response(xml, mimetype="application/opensearchdescription+xml")
+
+
+@app.route("/manifest.json")
+def manifest():
+    return jsonify({
+        "name": "abbiey.search",
+        "short_name": "abbiey",
+        "description": "Private, fast, no-tracking search engine",
+        "start_url": "/",
+        "display": "standalone",
+        "background_color": "#0d0d10",
+        "theme_color": "#34d399",
+        "orientation": "portrait-primary",
+        "icons": [
+            {"src": "/static/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+            {"src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
+        ],
+        "categories": ["search", "productivity", "utilities"],
+        "shortcuts": [
+            {"name": "Web Search", "url": "/?type=text", "description": "Search the web privately"},
+            {"name": "Image Search", "url": "/?type=images", "description": "Search images privately"},
+            {"name": "News Search", "url": "/?type=news", "description": "Search news privately"}
+        ]
+    })
+
+
+@app.route("/robots.txt")
+def robots():
+    txt = """User-agent: *
+Allow: /
+Allow: /search
+Disallow: /api/
+Disallow: /profile
+Disallow: /profile/update
+Disallow: /logout
+
+Sitemap: https://www.abbieysearch.com/sitemap.xml
+"""
+    return Response(txt, mimetype="text/plain")
+
+
+@app.route("/sitemap.xml")
+def sitemap():
+    xml = '''<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://www.abbieysearch.com/</loc>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://www.abbieysearch.com/login</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://www.abbieysearch.com/signup</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.abbieysearch.com/breach-check</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+</urlset>'''
+    return Response(xml, mimetype="application/xml")
+
+
+@app.route("/favicon.ico")
+def favicon_ico():
+    return redirect("/static/icon-192.png", code=301)
+
+
+# ── Breach Check ──────────────────────────────────────────────────────────────
+
+@app.route("/breach-check")
+def breach_check():
+    return render_template("breach_check.html", deploy_hash=_get_deploy_hash())
+
+
+@app.route("/api/breach-check", methods=["POST"])
+@limiter.limit("5 per minute")
+def api_breach_check():
+    """Check an email address against the XposedOrNot breach database."""
+    body = request.get_json(silent=True) or {}
+    email = body.get("email", "").strip().lower()
+
+    if not email or "@" not in email or "." not in email.split("@")[-1]:
+        return jsonify({"error": "Please enter a valid email address."}), 400
+
+    try:
+        resp = _get_http().get(
+            f"https://api.xposedornot.com/v1/breach-analytics?email={quote_plus(email)}",
+            timeout=12,
+            headers={"User-Agent": "abbiey.search/1.0 (breach-check)"},
+            follow_redirects=True,
+        )
+        if resp.status_code == 404:
+            return jsonify({"breaches": [], "total": 0, "email": _mask_email(email)})
+        if resp.status_code == 429:
+            return jsonify({"error": "Rate limit reached. Please try again in a moment."}), 429
+        if resp.status_code != 200:
+            return jsonify({"error": "Breach database unavailable. Try again shortly."}), 502
+
+        data = resp.json()
+
+        # XposedOrNot returns {"Error":"Not found"} when email has no breaches
+        if "Error" in data:
+            return jsonify({"breaches": [], "total": 0, "email": _mask_email(email)})
+
+        raw = (data.get("ExposedBreaches") or {}).get("breaches_details") or []
+        breaches = []
+        for b in raw:
+            exposed_data = b.get("xposed_data") or []
+            if isinstance(exposed_data, str):
+                exposed_data = [x.strip() for x in exposed_data.split(",") if x.strip()]
+            breaches.append({
+                "name": b.get("breach") or "Unknown",
+                "date": b.get("xposed_date") or "",
+                "count": b.get("xposed_records") or 0,
+                "data": exposed_data,
+                "industry": b.get("industry") or "",
+                "logo": b.get("logo_path") or "",
+                "password_risk": b.get("password_risk") or "",
+            })
+
+        return jsonify({
+            "breaches": breaches,
+            "total": len(breaches),
+            "email": _mask_email(email),
+        })
+
+    except Exception as exc:
+        logging.warning("breach_check error: %s", exc)
+        return jsonify({"error": "Could not complete the breach check. Please try again."}), 500
+
+
+def _mask_email(email: str) -> str:
+    """Return a partially masked email for display (e.g. jo***@example.com)."""
+    try:
+        local, domain = email.split("@", 1)
+        visible = local[:2] if len(local) > 2 else local[:1]
+        return f"{visible}***@{domain}"
+    except Exception:
+        return "***"
+
+
+@app.route("/api/password-check")
+@limiter.limit("20 per minute")
+def api_password_check():
+    """Proxy the HIBP k-anonymity range API. Receives only a 5-char SHA-1 prefix."""
+    prefix = request.args.get("prefix", "").upper()
+    if not prefix or len(prefix) != 5 or not re.match(r"^[0-9A-F]{5}$", prefix):
+        return jsonify({"error": "Invalid hash prefix"}), 400
+
+    try:
+        resp = _get_http().get(
+            f"https://api.pwnedpasswords.com/range/{prefix}",
+            timeout=10,
+            headers={
+                "Add-Padding": "true",
+                "User-Agent": "abbiey.search/1.0 (password-check)",
+            },
+        )
+        if resp.status_code != 200:
+            return jsonify({"error": "HIBP service unavailable"}), 502
+        return Response(resp.text, content_type="text/plain")
+    except Exception as exc:
+        logging.warning("password_check error: %s", exc)
+        return jsonify({"error": "Could not check password"}), 500
+
+
+@app.after_request
+def _set_cache_headers(response):
+    """Set appropriate cache headers based on response type and path."""
+    path = request.path
+    # Static assets — long-lived immutable cache
+    if path.startswith("/static/") and any(
+        path.endswith(ext) for ext in (".css", ".js", ".woff2", ".woff", ".ttf", ".png", ".ico", ".svg", ".webp")
+    ):
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        return response
+    # Trends / autocomplete API — short public cache
+    if path in ("/api/trends", "/api/autocomplete", "/api/suggestions"):
+        response.headers["Cache-Control"] = "public, max-age=60, s-maxage=60"
+        return response
+    # Search page and HTML — never cache
+    if path == "/search" or (response.content_type and "text/html" in response.content_type):
+        response.headers["Cache-Control"] = "no-store"
+        return response
+    return response
 
 
 if __name__ == "__main__":
