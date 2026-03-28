@@ -2365,3 +2365,25 @@ footer {
      b a c k g r o u n d :   r a d i a l - g r a d i e n t ( c i r c l e   a t   c e n t e r ,   # 0 b 0 b 0 f ,   # 0 0 0 0 0 0 ) ; 
  }  
  
+ / *   = = =   F O R C E   R E M O V E   T O P   B A N N E R   ( A N Y T H I N G   F I X E D   A T   T O P )   = = =   * / 
+ b o d y   >   d i v : f i r s t - c h i l d   { 
+     d i s p l a y :   n o n e   ! i m p o r t a n t ; 
+ } 
+ 
+ / *   = = =   R E M O V E   E M O J I S   E V E R Y W H E R E   = = =   * / 
+ *   { 
+     f o n t - v a r i a n t - e m o j i :   t e x t   ! i m p o r t a n t ; 
+ } 
+ 
+ / *   = = =   K I L L   A N Y   E M O J I   I C O N   E L E M E N T S   = = =   * / 
+ i ,   s p a n ,   d i v   { 
+     f i l t e r :   g r a y s c a l e ( 1 ) ; 
+ } 
+ 
+ / *   = = =   E X T R A :   H I D E   C O M M O N   B A N N E R / N O T I C E   W O R D S   = = =   * / 
+ d i v : h a s ( p : c o n t a i n s ( " d e f a u l t " ) ) , 
+ d i v : h a s ( p : c o n t a i n s ( " s e a r c h   e n g i n e " ) )   { 
+     d i s p l a y :   n o n e   ! i m p o r t a n t ; 
+ } 
+  
+ 
