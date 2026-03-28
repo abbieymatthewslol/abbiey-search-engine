@@ -460,7 +460,6 @@ body:not(.has-results) #search-input { font-size: 1.0625rem; }
 .ac-item-icon-clock { display: flex; align-items: center; color: var(--text-muted); }
 .ac-item-history { color: var(--text-dim); }
 .ac-item-desc { font-size: .78rem; color: var(--text-muted); margin-left: .15rem; }
-.ac-bang-label { color: var(--text); font-weight: 600; font-size: .85rem; }
 
 .ac-section-divider {
   display: flex;
@@ -476,8 +475,6 @@ body:not(.has-results) #search-input { font-size: 1.0625rem; }
   margin-top: .125rem;
 }
 .ac-section-divider:first-child { border-top: none; margin-top: 0; }
-
-/* Bang hint */
 
 /* ===== 7. SEARCH TABS ===== */
 .search-tabs {
@@ -1181,41 +1178,6 @@ article.result.code-result { font-size: .9rem; }
   width: 100%;
   max-width: 600px;
   margin-top: .5rem;
-}
-
-.home-bang-hint {
-  text-align: center;
-  font-size: .8rem;
-  color: var(--text-muted);
-  margin: -.25rem 0 .35rem;
-  font-weight: 500;
-  letter-spacing: -.01em;
-}
-
-/* Bang command chips */
-.bang-hints {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: .4rem;
-  margin-top: .65rem;
-}
-.bang-chip {
-  font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
-  font-size: .72rem;
-  font-weight: 600;
-  padding: .35rem .6rem;
-  border-radius: var(--radius-sm);
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  color: var(--text-dim);
-  cursor: default;
-  letter-spacing: -.02em;
-  transition: color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
-}
-.bang-chip:hover {
-  color: var(--text);
-  border-color: var(--border-strong);
 }
 
 .trending-pill {

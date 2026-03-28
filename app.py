@@ -864,33 +864,6 @@ def _try_dictionary(query):
 
 
 # ---------------------------------------------------------------------------
-# Bang commands (!w, !yt, !gh etc.)
-# ---------------------------------------------------------------------------
-_BANG_RE = re.compile(r"^!(\w+)\s+(.*)", re.DOTALL)
-_BANG_MAP = {
-    "w":    "https://en.wikipedia.org/wiki/Special:Search?search={}",
-    "wiki": "https://en.wikipedia.org/wiki/Special:Search?search={}",
-    "yt":   "https://www.youtube.com/results?search_query={}",
-    "gh":   "https://github.com/search?q={}",
-    "so":   "https://stackoverflow.com/search?q={}",
-    "r":    "https://www.reddit.com/search/?q={}",
-    "a":    "https://www.amazon.com/s?k={}",
-    "g":    "https://www.google.com/search?q={}",
-    "tw":   "https://x.com/search?q={}",
-    "npm":  "https://www.npmjs.com/search?q={}",
-    "pypi": "https://pypi.org/search/?q={}",
-    "mdn":  "https://developer.mozilla.org/en-US/search?q={}",
-    "maps": "https://www.openstreetmap.org/search?query={}",
-    "ddg":  "https://duckduckgo.com/?q={}",
-    "sp":   "https://open.spotify.com/search/{}",
-    "img":  "https://www.google.com/search?tbm=isch&q={}",
-    "x":    "https://x.com/search?q={}",
-    "hn":   "https://hn.algolia.com/?q={}",
-    "wb":   "https://web.archive.org/web/*/{}",
-}
-
-
-# ---------------------------------------------------------------------------
 # Calculator / math evaluation
 # ---------------------------------------------------------------------------
 import math as _math
@@ -1474,13 +1447,6 @@ def search():
                                lang=lang or "", dictionary=None, calculator=None, color=None,
                                unit_convert=None, knowledge=None, weather=None, qr=None,
                                time_filter="")
-
-    # Bang commands — redirect immediately
-    bang_m = _BANG_RE.match(query)
-    if bang_m:
-        bang, bang_query = bang_m.group(1).lower(), bang_m.group(2).strip()
-        if bang in _BANG_MAP and bang_query:
-            return redirect(_BANG_MAP[bang].format(quote_plus(bang_query)))
 
     if len(query) > MAX_QUERY_LENGTH:
         return render_template("error.html", code=400, title="Query Too Long",
@@ -2552,7 +2518,7 @@ You are an expert in every aspect of this project. You are direct, insightful, a
 
 == SEARCH FLOW ==
 1. GET /search?q=&type=&region=&lang=&df=&page=
-2. Query sanitised, entities detected (detect_entities in entity_parser.py), bang commands parsed (!w Wikipedia, !yt YouTube, !gh GitHub, etc.)
+2. Query sanitised, entities detected (detect_entities in entity_parser.py)
 3. TTLCache check (key = query+type+region+page) — return instantly if hit
 4. _fetch_results() dispatches by search_type:
    - "text": DDG multi-backend (DDGS lib) → DDG HTML scrape → Mojeek → DDG instant answers; multi-region fallback; entity enrichment (Wikipedia, definitions, calculations, colour previews, unit conversions)
@@ -2591,7 +2557,7 @@ GitHub Actions workflow: .github/workflows/deploy.yml — auto-deploys on push o
 - Deploy hook redeployed old snapshot — FIXED: Vercel CLI deploy
 - Static files uncached (max-age=0) — FIXED: 1-year immutable cache
 - Post-signup redirect to /profile standalone — FIXED: redirect to index
-- Bang-hint shortcut bar was distracting — REMOVED
+- DuckDuckGo-style bang redirects removed — queries like !w term are searched literally
 
 == PERFORMANCE ==
 - Cold start: ~2-3s (unavoidable on Vercel serverless)
@@ -2751,7 +2717,7 @@ def _abbiey_bot_fallback(msg: str, ctx: str = "") -> str:
             "- Onion: Ahmia.fi → DDG onion fallback\n"
             "- Entity enrichment: Wikipedia, definitions, calculations, colour, units\n"
             "- Cache: TTLCache 1000 entries, 300s TTL\n"
-            "- Bang commands: !w (Wikipedia), !yt (YouTube), !gh (GitHub), 50+ others"
+            "- Search operators: site:, filetype:, before:, after:, etc."
         )
 
     if any(w in m for w in ["database", "sqlite", "db", "storage", "data"]):

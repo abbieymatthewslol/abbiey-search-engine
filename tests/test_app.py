@@ -7,7 +7,7 @@ import pytest
 
 from app import (
     _try_calculator, _try_color_picker, _try_unit_convert,
-    _try_knowledge_panel, _BANG_MAP, _BANG_RE,
+    _try_knowledge_panel,
 )
 
 
@@ -324,56 +324,6 @@ class TestChatAPI:
                 "history": [],
             })
             assert resp.status_code == 503
-
-
-# =====================================================================
-# BANG COMMANDS
-# =====================================================================
-class TestBangCommands:
-    """Test bang redirect functionality."""
-
-    def test_bang_regex_matches(self):
-        m = _BANG_RE.match("!w python")
-        assert m is not None
-        assert m.group(1) == "w"
-        assert m.group(2) == "python"
-
-    def test_bang_regex_with_spaces(self):
-        m = _BANG_RE.match("!yt funny cats")
-        assert m is not None
-        assert m.group(1) == "yt"
-        assert m.group(2) == "funny cats"
-
-    def test_bang_map_has_required_entries(self):
-        required = ["w", "yt", "gh", "so", "r", "a", "g", "tw", "npm", "pypi", "mdn", "maps"]
-        for bang in required:
-            assert bang in _BANG_MAP, f"Missing bang: !{bang}"
-
-    def test_bang_redirect_wikipedia(self, client):
-        resp = client.get("/search?q=!w+python")
-        assert resp.status_code == 302
-        assert "wikipedia.org" in resp.headers["Location"]
-        assert "python" in resp.headers["Location"]
-
-    def test_bang_redirect_youtube(self, client):
-        resp = client.get("/search?q=!yt+music")
-        assert resp.status_code == 302
-        assert "youtube.com" in resp.headers["Location"]
-
-    def test_bang_redirect_github(self, client):
-        resp = client.get("/search?q=!gh+flask")
-        assert resp.status_code == 302
-        assert "github.com" in resp.headers["Location"]
-
-    def test_unknown_bang_does_normal_search(self, client, mock_ddg):
-        resp = client.get("/search?q=!zz+something")
-        assert resp.status_code == 200  # Normal search, not a redirect
-
-    def test_bang_no_query_does_normal_search(self, client, mock_ddg):
-        """Bang with no search term should do normal search."""
-        resp = client.get("/search?q=!w")
-        assert resp.status_code == 200
-
 
 
 # =====================================================================

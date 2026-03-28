@@ -558,7 +558,6 @@ document.addEventListener("DOMContentLoaded", () => {
       "Try a name, email, or username…",
       "Search a domain or IP address…",
       "Ask anything — weather, math, conversions…",
-      "Try !w Wikipedia or !yt YouTube…",
       "Search phone numbers, crypto addresses…",
       "Find people, places, or things…",
       "Try a hashtag or social handle…",
@@ -570,55 +569,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     const phInterval = setInterval(rotatePlaceholder, 3500);
     rotatingInput.addEventListener("focus", () => clearInterval(phInterval));
-  }
-
-  // ===== Bang command suggestions =====
-  const searchInput = document.getElementById("search-input");
-  const acDropdown = document.getElementById("ac-dropdown");
-  if (searchInput && acDropdown) {
-    const bangList = [
-      {bang: "!w",    label: "Wikipedia",    desc: "Search Wikipedia"},
-      {bang: "!wiki", label: "Wikipedia",    desc: "Search Wikipedia"},
-      {bang: "!yt",   label: "YouTube",      desc: "Search YouTube"},
-      {bang: "!gh",   label: "GitHub",       desc: "Search GitHub"},
-      {bang: "!so",   label: "StackOverflow",desc: "Search StackOverflow"},
-      {bang: "!r",    label: "Reddit",       desc: "Search Reddit"},
-      {bang: "!a",    label: "Amazon",       desc: "Search Amazon"},
-      {bang: "!g",    label: "Google",       desc: "Search Google"},
-      {bang: "!tw",   label: "X / Twitter",  desc: "Search X"},
-      {bang: "!npm",  label: "npm",          desc: "Search npm"},
-      {bang: "!pypi", label: "PyPI",         desc: "Search PyPI"},
-      {bang: "!mdn",  label: "MDN",          desc: "Search MDN"},
-      {bang: "!maps", label: "Maps",         desc: "Search OpenStreetMap"},
-      {bang: "!ddg",  label: "DuckDuckGo",   desc: "Search DuckDuckGo"},
-      {bang: "!sp",   label: "Spotify",      desc: "Search Spotify"},
-      {bang: "!img",  label: "Google Images",desc: "Search Google Images"},
-      {bang: "!hn",   label: "Hacker News",  desc: "Search Hacker News"},
-      {bang: "!wb",   label: "Wayback Machine", desc: "Search Internet Archive"},
-      {bang: "!x",    label: "X / Twitter",  desc: "Search X"},
-    ];
-    searchInput.addEventListener("input", () => {
-      const val = searchInput.value;
-      if (val.startsWith("!") && !val.includes(" ")) {
-        const query = val.toLowerCase();
-        const matches = bangList.filter(b => b.bang.startsWith(query));
-        if (matches.length && val.length > 0) {
-          acDropdown.innerHTML = matches.map((b, i) =>
-            `<div class="ac-item" data-idx="${i}"><span class="ac-item-icon">\u{26A1}</span><span class="ac-item-text">${esc(b.bang)} <span style="color:var(--text-dim);font-size:.8em">${esc(b.desc)}</span></span></div>`
-          ).join("");
-          acDropdown.classList.add("open");
-          // Override click to insert bang + space
-          acDropdown.querySelectorAll(".ac-item").forEach((item, idx) => {
-            item.addEventListener("mousedown", (e) => {
-              e.preventDefault();
-              searchInput.value = matches[idx].bang + " ";
-              acDropdown.classList.remove("open");
-              searchInput.focus();
-            });
-          });
-        }
-      }
-    });
   }
 
   // ===== Operator chip removal =====
@@ -729,8 +679,6 @@ document.addEventListener("DOMContentLoaded", () => {
       const val = input.value.trim();
       if (!val) { renderHistory(); return; }
       if (gs("autocomplete") === "false") { hideDropdown(); return; }
-      // Don't interfere with bang command suggestions
-      if (val.startsWith("!") && !val.includes(" ")) return;
       hideDropdown();
       acTimer = setTimeout(() => fetchSuggestions(val), 120);
     });

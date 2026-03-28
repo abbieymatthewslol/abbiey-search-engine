@@ -7,7 +7,7 @@ Last commit: feat: add time filter, bookmarks, QR cards, and full settings modal
 
 ## 🔴 High Priority (bugs / stability)
 
-- [ ] **Run full test suite** — confirm all ~170 tests pass on current branch; fix any regressions from last commit
+- [ ] **Run full test suite** — confirm all tests pass on current branch; fix any regressions from last commit
 - [ ] **Verify bookmarks persistence** — confirm bookmarks survive page reload (localStorage vs. in-memory)
 - [ ] **QR card edge cases** — test QR generation for very long URLs and non-ASCII queries
 - [ ] **Time filter wiring** — confirm time filter param is passed correctly to DDG backend and reflected in results
@@ -21,7 +21,6 @@ Last commit: feat: add time filter, bookmarks, QR cards, and full settings modal
 - [ ] **AI summary error handling** — show graceful fallback message when DDG AI chat is rate-limited or times out
 - [ ] **Keyboard navigation** — audit j/k preview panel nav; ensure it works on all tabs (Images, News, Videos)
 - [ ] **Mobile responsiveness audit** — test on 375px viewport; fix any overflow in operator chips and settings modal
-- [ ] **Bang command expansion** — add `!wiki`, `!ddg`, `!sp` (Spotify), `!img` (Google Images redirect)
 - [ ] **Related searches** — surface `/api/related` results in the UI below main results
 
 ---
