@@ -158,6 +158,9 @@ button{background:none;border:none;cursor:pointer;font:inherit;color:inherit}
     <button class="nav-item" data-view="query-log" onclick="showView('query-log',this)">
       <span class="nav-icon">📋</span><span>Query log</span>
     </button>
+    <button class="nav-item" data-view="account-history" onclick="showView('account-history',this)">
+      <span class="nav-icon">🕘</span><span>Account history</span>
+    </button>
     <button class="nav-item" data-view="users" onclick="showView('users',this)">
       <span class="nav-icon">👤</span><span>Users</span>
     </button>
@@ -169,6 +172,12 @@ button{background:none;border:none;cursor:pointer;font:inherit;color:inherit}
     </button>
     <div class="sidebar-footer">
       <span class="status-dot"></span>Live
+      <div style="margin-top:.75rem;padding-top:.75rem;border-top:1px solid var(--border);line-height:1.45;color:var(--text-muted)">
+        <strong style="color:var(--text-dim);font-size:.65rem;text-transform:uppercase;letter-spacing:.06em">Viewing logs</strong>
+        <p style="margin-top:.35rem;font-size:.65rem"><strong style="color:var(--text)">Query log</strong> — every search (IP, device, location) from analytics.</p>
+        <p style="margin-top:.25rem;font-size:.65rem"><strong style="color:var(--text)">Account history</strong> — queries stored for <em>signed-in</em> users (profile / API).</p>
+        <p style="margin-top:.35rem;font-size:.62rem;opacity:.9">Open <code style="background:var(--bg-hov);padding:.08em .25em;border-radius:3px">/admin?token=YOUR_ADMIN_TOKEN</code></p>
+      </div>
     </div>
   </aside>
 
@@ -199,6 +208,7 @@ button{background:none;border:none;cursor:pointer;font:inherit;color:inherit}
           <div class="stat-card" style="--accent-color:var(--blue)"><div class="stat-val skeleton" id="s-users" style="height:36px;width:60px">&nbsp;</div><div class="stat-label">Total Users</div><div class="stat-sub" id="s-users-today"></div></div>
           <div class="stat-card" style="--accent-color:var(--yellow)"><div class="stat-val skeleton" id="s-latency" style="height:36px;width:60px">&nbsp;</div><div class="stat-label">Avg Latency</div><div class="stat-sub">7-day (ms)</div></div>
           <div class="stat-card" style="--accent-color:var(--red)"><div class="stat-val skeleton" id="s-errors" style="height:36px;width:60px">&nbsp;</div><div class="stat-label">Errors Today</div><div class="stat-sub" id="s-errors-week"></div></div>
+          <div class="stat-card" style="--accent-color:#a78bfa"><div class="stat-val skeleton" id="s-acct-history" style="height:36px;width:60px">&nbsp;</div><div class="stat-label">Account history rows</div><div class="stat-sub">Signed-in saved queries</div></div>
         </div>
 
         <!-- Live Feed -->
@@ -250,9 +260,9 @@ button{background:none;border:none;cursor:pointer;font:inherit;color:inherit}
       <!-- ── Query log (every search + IP, device, location) ───────────── -->
       <div id="view-query-log" style="display:none">
         <p style="font-size:.78rem;color:var(--text-muted);margin-bottom:1rem;line-height:1.5;max-width:52rem">
-          Each row is one search request. <strong style="color:var(--text-dim)">Device</strong> is inferred from the browser user-agent.
-          <strong style="color:var(--text-dim)">Location</strong> is estimated from the client IP via ip-api.com (public IPs only; no API key).
-          Behind a reverse proxy, set <code style="background:var(--bg-hov);padding:.1em .35em;border-radius:4px;font-size:.72rem">X-Forwarded-For</code> so the real visitor IP is stored.
+          Each row is one <strong style="color:var(--text-dim)">server-side</strong> search request (all visitors). For queries tied to logged-in accounts only, use sidebar <strong style="color:var(--text)">Account history</strong>.
+          <strong style="color:var(--text-dim)">Device</strong> is inferred from the user-agent; <strong style="color:var(--text-dim)">location</strong> from IP via ip-api.com (public IPs).
+          Behind a proxy, set <code style="background:var(--bg-hov);padding:.1em .35em;border-radius:4px;font-size:.72rem">X-Forwarded-For</code>.
         </p>
         <div class="section">
           <div class="section-head">
@@ -270,6 +280,32 @@ button{background:none;border:none;cursor:pointer;font:inherit;color:inherit}
           </div>
           <div class="section-body" style="padding-top:0">
             <button type="button" id="query-log-more" class="refresh-btn" style="display:none;margin-top:.5rem" onclick="loadQueryLog(true)">Load more</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Account history (user_search_history for signed-in users) ─── -->
+      <div id="view-account-history" style="display:none">
+        <p style="font-size:.78rem;color:var(--text-muted);margin-bottom:1rem;line-height:1.5;max-width:52rem">
+          These rows come from the <strong style="color:var(--text-dim)">users</strong> database table <code style="background:var(--bg-hov);padding:.1em .35em;border-radius:4px;font-size:.72rem">user_search_history</code> — the same list users see on their profile (recent searches).
+          A row is added when a signed-in user runs a search and the app records it via <code style="background:var(--bg-hov);padding:.1em .35em;border-radius:4px;font-size:.72rem">POST /api/user/history</code>. Anonymous searches do not appear here (they still appear in <strong style="color:var(--text)">Query log</strong> if analytics logging is on).
+        </p>
+        <div class="section">
+          <div class="section-head">
+            <span class="section-title">Signed-in search history</span>
+            <div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap">
+              <span id="acct-history-meta" style="font-size:.72rem;color:var(--text-muted)"></span>
+              <input id="acct-history-filter" placeholder="Filter loaded rows…" style="background:var(--bg-hov);border:1px solid var(--border);border-radius:var(--r-full);padding:.3rem .8rem;font-size:.78rem;color:var(--text);outline:none;width:200px" oninput="filterAccountHistory(this.value)">
+            </div>
+          </div>
+          <div style="overflow-x:auto">
+            <table class="tbl" id="acct-history-tbl">
+              <thead><tr><th>Query</th><th>Type</th><th>Username</th><th>Email</th><th>User ID</th><th>Time</th></tr></thead>
+              <tbody id="acct-history-body"></tbody>
+            </table>
+          </div>
+          <div class="section-body" style="padding-top:0">
+            <button type="button" id="acct-history-more" class="refresh-btn" style="display:none;margin-top:.5rem" onclick="loadAccountHistory(true)">Load more</button>
           </div>
         </div>
       </div>
@@ -402,6 +438,9 @@ function renderAll() {
   if (document.getElementById('view-query-log') && document.getElementById('view-query-log').style.display !== 'none') {
     loadQueryLog(false);
   }
+  if (document.getElementById('view-account-history') && document.getElementById('view-account-history').style.display !== 'none') {
+    loadAccountHistory(false);
+  }
 }
 
 // ── Stats cards ──────────────────────────────────────────────────────────
@@ -418,6 +457,7 @@ function renderStats() {
   set('s-users',   s.total_users);
   set('s-latency', s.avg_latency_ms);
   set('s-errors',  s.errors_today);
+  set('s-acct-history', s.account_history_rows != null ? s.account_history_rows : 0);
   setTxt('s-lasthr', s.searches_last_hour != null ? `${s.searches_last_hour} last hour` : '');
   const rate = s.searches_last_5min != null ? ((s.searches_last_5min / 5).toFixed(1) + '/min') : '';
   setTxt('s-5min-rate', rate);
@@ -583,6 +623,74 @@ function filterQueryLog(q) {
   drawQueryLogTable(filterQueryLogRows(q));
 }
 
+// ── Account history (user_search_history) ───────────────────────────────
+let _acctHistoryRows = [];
+let _acctHistoryTotal = 0;
+let _acctHistoryOffset = 0;
+const ACCT_HISTORY_PAGE = 100;
+
+async function loadAccountHistory(append) {
+  const tbody = document.getElementById('acct-history-body');
+  const meta = document.getElementById('acct-history-meta');
+  const moreBtn = document.getElementById('acct-history-more');
+  if (!tbody) return;
+  if (!append) {
+    _acctHistoryOffset = 0;
+    _acctHistoryRows = [];
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:1.5rem">Loading…</td></tr>';
+  }
+  try {
+    const r = await fetch(`/admin/api/account-history${BASE}${_queryLogConn()}limit=${ACCT_HISTORY_PAGE}&offset=${_acctHistoryOffset}`);
+    if (!r.ok) throw new Error(r.status);
+    const data = await r.json();
+    _acctHistoryTotal = data.total || 0;
+    const chunk = data.rows || [];
+    if (append) _acctHistoryRows = _acctHistoryRows.concat(chunk);
+    else _acctHistoryRows = chunk;
+    _acctHistoryOffset += chunk.length;
+    if (meta) meta.textContent = `Showing ${_acctHistoryRows.length} of ${_acctHistoryTotal} rows`;
+    if (moreBtn) moreBtn.style.display = _acctHistoryOffset < _acctHistoryTotal ? 'inline-flex' : 'none';
+    const f = document.getElementById('acct-history-filter');
+    const fv = f && f.value.trim();
+    drawAccountHistoryTable(fv ? filterAccountHistoryRows(fv) : _acctHistoryRows);
+  } catch (e) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--red);padding:1.5rem">Failed to load account history</td></tr>';
+    console.error(e);
+  }
+}
+
+function filterAccountHistoryRows(q) {
+  const t = (q || '').trim().toLowerCase();
+  if (!t) return _acctHistoryRows;
+  return _acctHistoryRows.filter(r =>
+    (r.query || '').toLowerCase().includes(t) ||
+    String(r.username || '').toLowerCase().includes(t) ||
+    String(r.email || '').toLowerCase().includes(t) ||
+    String(r.type || '').toLowerCase().includes(t)
+  );
+}
+
+function drawAccountHistoryTable(rows) {
+  const tbody = document.getElementById('acct-history-body');
+  if (!tbody) return;
+  tbody.innerHTML = (rows || []).map(r => {
+    const ts = r.ts ? String(r.ts).slice(0, 19).replace('T', ' ') : '';
+    const typeBadge = `<span class="badge badge-${r.type}">${esc(r.type || 'text')}</span>`;
+    return `<tr>
+      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.query)}">${esc(r.query)}</td>
+      <td>${typeBadge}</td>
+      <td style="font-size:.78rem;color:var(--text-dim)">${esc(r.username || '—')}</td>
+      <td style="font-size:.75rem;color:var(--text-muted);max-width:160px;overflow:hidden;text-overflow:ellipsis" title="${esc(r.email||'')}">${esc(r.email || '—')}</td>
+      <td style="font-size:.72rem;font-family:ui-monospace,monospace;color:var(--text-muted)">${r.user_id != null ? esc(String(r.user_id)) : '—'}</td>
+      <td style="color:var(--text-muted);white-space:nowrap;font-size:.75rem">${ts}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:1.5rem">No signed-in search history yet</td></tr>';
+}
+
+function filterAccountHistory(q) {
+  drawAccountHistoryTable(filterAccountHistoryRows(q));
+}
+
 // ── Error log ────────────────────────────────────────────────────────────
 function renderErrors() {
   const errs = _data.error_logs || [];
@@ -601,6 +709,7 @@ function renderErrors() {
 const VIEWS = {
   overview: 'Overview',
   'query-log': 'Query log',
+  'account-history': 'Account history',
   users:    'Users',
   errors:   'Error Log',
 };
@@ -613,6 +722,7 @@ function showView(name, btn) {
   if(btn) btn.classList.add('active');
   document.getElementById('view-title').textContent = VIEWS[name] || name;
   if (name === 'query-log') loadQueryLog(false);
+  if (name === 'account-history') loadAccountHistory(false);
 }
 
 // ── Live Feed (SSE) ──────────────────────────────────────────────────────

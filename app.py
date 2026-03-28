@@ -2619,10 +2619,13 @@ def admin_api_stats():
             rows = _users_execute(
                 "SELECT COUNT(*) as cnt FROM users WHERE created_at >= datetime('now','-7 days')")
             data["users_week"] = rows[0]["cnt"] if rows else 0
+            rows = _users_execute("SELECT COUNT(*) as cnt FROM user_search_history")
+            data["account_history_rows"] = int(rows[0]["cnt"]) if rows else 0
         except Exception:
             data["total_users"] = 0
             data["users_today"] = 0
             data["users_week"] = 0
+            data["account_history_rows"] = 0
 
         # Error logs (100 most recent)
         data["error_logs"] = _analytics_execute(
@@ -2659,6 +2662,34 @@ def admin_api_query_log():
             "SELECT id, query, search_type as type, result_count as results, latency_ms,"
             " created_at as ts, client_ip, user_agent, device_label, location"
             " FROM search_logs ORDER BY id DESC LIMIT ? OFFSET ?",
+            [limit, offset],
+        )
+        return jsonify({
+            "total": total,
+            "rows": rows or [],
+            "limit": limit,
+            "offset": offset,
+        })
+    except Exception as exc:
+        return jsonify({"error": str(exc), "total": 0, "rows": []}), 500
+
+
+@app.route("/admin/api/account-history")
+def admin_api_account_history():
+    """Paginated rows from user_search_history (queries saved for logged-in accounts)."""
+    err = _admin_check()
+    if err:
+        return err
+    limit = min(500, max(1, request.args.get("limit", 100, type=int) or 100))
+    offset = max(0, request.args.get("offset", 0, type=int) or 0)
+    try:
+        tot = _users_execute("SELECT COUNT(*) as cnt FROM user_search_history")
+        total = int(tot[0]["cnt"]) if tot else 0
+        rows = _users_execute(
+            "SELECT h.id, h.query, h.search_type as type, h.searched_at as ts,"
+            " u.id as user_id, u.username, u.email"
+            " FROM user_search_history h INNER JOIN users u ON u.id = h.user_id"
+            " ORDER BY h.searched_at DESC LIMIT ? OFFSET ?",
             [limit, offset],
         )
         return jsonify({

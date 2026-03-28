@@ -624,7 +624,24 @@ document.addEventListener("DOMContentLoaded", () => {
     function removeHistory(term) { saveHistory(getHistory().filter(i => i !== term)); }
     function clearHistory() { try { localStorage.removeItem(HISTORY_KEY); } catch {} }
 
-    form.addEventListener("submit", () => { addHistory(input.value); });
+    function syncServerUserHistory(q) {
+      if (!document.querySelector(".user-avatar-chip")) return;
+      const t = (q || "").trim();
+      if (!t) return;
+      const typeInput = document.getElementById("search-type-input");
+      const st = (typeInput && typeInput.value) ? typeInput.value : "text";
+      fetch("/api/user/history", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ query: t, search_type: st }),
+      }).catch(() => {});
+    }
+
+    form.addEventListener("submit", () => {
+      addHistory(input.value);
+      syncServerUserHistory(input.value);
+    });
 
     function showDropdown() { dropdown.classList.add("open"); }
     function hideDropdown() { dropdown.classList.remove("open"); activeIdx = -1; }

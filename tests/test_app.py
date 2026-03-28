@@ -811,3 +811,17 @@ class TestAdminQueryLog:
             assert "rows" in data
             assert "total" in data
             assert isinstance(data["rows"], list)
+
+    def test_account_history_forbidden_wrong_token(self, client):
+        with patch("app._ADMIN_TOKEN", "secret"):
+            r = client.get("/admin/api/account-history?token=wrong")
+            assert r.status_code == 403
+
+    def test_account_history_ok_with_token(self, client):
+        with patch("app._ADMIN_TOKEN", "secret"):
+            r = client.get("/admin/api/account-history?token=secret")
+            assert r.status_code == 200
+            data = r.get_json()
+            assert "rows" in data
+            assert "total" in data
+            assert isinstance(data["rows"], list)
