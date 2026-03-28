@@ -4724,8 +4724,8 @@ def manifest():
         "description": "Private, fast, no-tracking search engine",
         "start_url": "/",
         "display": "standalone",
-        "background_color": "#0f1115",
-        "theme_color": "#2563eb",
+        "background_color": "#000000",
+        "theme_color": "#000000",
         "orientation": "portrait-primary",
         "icons": [
             {"src": "/static/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},

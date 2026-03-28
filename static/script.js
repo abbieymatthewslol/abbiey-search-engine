@@ -123,7 +123,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const ffMap = {
       system: "",
       serif:  "Georgia, 'Times New Roman', serif",
-      mono:   "'SF Mono', 'Fira Code', Consolas, monospace",
+      mono:   "ui-monospace, Consolas, monospace",
     };
     html.setAttribute("data-font-family", gs("fontFamily"));
     document.body.style.fontFamily = ffMap[gs("fontFamily")] || "";
@@ -359,7 +359,7 @@ document.addEventListener("DOMContentLoaded", () => {
     html.setAttribute("data-font-size", val);
   });
   wireBtnGroup("font-family-group", "fontFamily", (val) => {
-    const m = { system: "", serif: "Georgia,'Times New Roman',serif", mono: "'SF Mono','Fira Code',Consolas,monospace" };
+    const m = { system: "", serif: "Georgia,'Times New Roman',serif", mono: "ui-monospace,Consolas,monospace" };
     document.body.style.fontFamily = m[val] || "";
     html.setAttribute("data-font-family", val);
   });
@@ -1460,21 +1460,16 @@ document.addEventListener("DOMContentLoaded", () => {
       container.style.display = "";
     }
 
-    // Homepage trending
-    const homeEl = document.getElementById("trending-home");
-    // Results page trending (shown after related searches)
     const resultsEl = document.getElementById("trending-searches");
+    if (!resultsEl) return;
 
-    if (homeEl || resultsEl) {
-      fetch("/api/trends")
-        .then(r => r.json())
-        .then(items => {
-          if (!Array.isArray(items) || !items.length) return;
-          if (homeEl) renderTrending(homeEl, items.slice(0, 8), false);
-          if (resultsEl) renderTrending(resultsEl, items.slice(0, 6), true);
-        })
-        .catch(() => {});
-    }
+    fetch("/api/trends")
+      .then(r => r.json())
+      .then(items => {
+        if (!Array.isArray(items) || !items.length) return;
+        renderTrending(resultsEl, items.slice(0, 6), true);
+      })
+      .catch(() => {});
   })();
 
   // ===== Recent Search History Chips =====
