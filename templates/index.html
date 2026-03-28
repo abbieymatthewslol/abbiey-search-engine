@@ -8,10 +8,6 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-<<<<<<< HEAD
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='44' cy='44' r='28' fill='none' stroke='%2300e5a0' stroke-width='10'/><line x1='64' y1='64' x2='90' y2='90' stroke='%2300e5a0' stroke-width='10' stroke-linecap='round'/></svg>">
-</head>
-=======
     <meta name="deploy-hash" content="{{ deploy_hash }}">
     <!-- SEO meta tags -->
     {% if query %}
@@ -70,7 +66,6 @@
       }
     }
     </script>
->>>>>>> dcadf5476ab743af0de523f280e691c6ecdf3277
 <body class="{% if query %}has-results{% endif %}">
 
     <header>
@@ -363,24 +358,16 @@
                 <input type="hidden" name="lang" id="lang-input" value="{{ lang or '' }}">
                 <input type="hidden" name="df" id="df-input" value="{{ time_filter or '' }}">
                 <input type="hidden" name="safesearch" id="safesearch-input" value="off">
-<<<<<<< HEAD
-
-=======
->>>>>>> dcadf5476ab743af0de523f280e691c6ecdf3277
             </form>
 
 
             {% if not query %}
-<<<<<<< HEAD
-            
-=======
             {# ===== TRENDING (homepage only) ===== #}
             <p class="home-tagline">Private search. No tracking.</p>
             <p class="home-section-label">Trending</p>
             <div id="trending-home" class="trending-home"></div>
             <div id="recent-searches-home" class="recent-searches-home"></div>
             {% endif %}
->>>>>>> dcadf5476ab743af0de523f280e691c6ecdf3277
 
             {% if query %}
             {# Active operator chips #}
