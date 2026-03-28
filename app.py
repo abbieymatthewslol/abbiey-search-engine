@@ -263,15 +263,15 @@ def _init_pg_tables():
     try:
         _pg_execute(ddl)
     except Exception as exc:
-        logger.warning("PG table init failed: %s", exc)
+        logging.warning("PG table init failed: %s", exc)
 
 
 if _SUPABASE_DB_URL:
     try:
         _init_pg_tables()
-        logger.info("Supabase/PostgreSQL analytics backend active")
+        logging.info("Supabase/PostgreSQL analytics backend active")
     except Exception as _pg_init_err:
-        logger.warning("Supabase init failed: %s", _pg_init_err)
+        logging.warning("Supabase init failed: %s", _pg_init_err)
 
 
 def _analytics_execute(sql: str, args: list = None):
