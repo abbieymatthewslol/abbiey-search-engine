@@ -6,6 +6,7 @@ from unittest.mock import patch, MagicMock
 import pytest
 
 from app import (
+    _GSC_DEFAULT_VERIFICATION,
     _try_calculator, _try_color_picker, _try_unit_convert,
     _try_knowledge_panel,
 )
@@ -19,7 +20,7 @@ class TestRoutes:
         assert resp.status_code == 200
         assert b"abbiey.search" in resp.data
         assert b'name="google-site-verification"' in resp.data
-        assert b"iUMaOvsVzVceHScuX-0i35fWbUJxEfZKM9QH8l3mPM8" in resp.data
+        assert _GSC_DEFAULT_VERIFICATION.encode() in resp.data
 
     def test_google_site_verification_meta_when_configured(self, client):
         import app as app_module
@@ -29,6 +30,14 @@ class TestRoutes:
         assert resp.status_code == 200
         assert b'name="google-site-verification"' in resp.data
         assert b'content="gsc-test-token"' in resp.data
+
+    def test_google_site_verification_omitted_when_disabled(self, client):
+        import app as app_module
+
+        with patch.object(app_module, "_GOOGLE_SITE_VERIFICATION", ""):
+            resp = client.get("/")
+        assert resp.status_code == 200
+        assert b"google-site-verification" not in resp.data
 
     def test_search_empty_query_shows_index(self, client):
         resp = client.get("/search?q=")

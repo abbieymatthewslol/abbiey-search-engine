@@ -61,14 +61,19 @@ def _get_deploy_hash() -> str:
         return "unknown"
 
 DEPLOY_HASH = _get_deploy_hash()
-# Default: Google Search Console HTML-tag verification (override with GOOGLE_SITE_VERIFICATION).
-_GOOGLE_SITE_VERIFICATION = (
-    os.environ.get(
-        "GOOGLE_SITE_VERIFICATION",
-        "iUMaOvsVzVceHScuX-0i35fWbUJxEfZKM9QH8l3mPM8",
-    )
-    .strip()
-)
+
+# Google Search Console — HTML tag method. If GOOGLE_SITE_VERIFICATION is unset, the default
+# is used. If set to empty (e.g. GOOGLE_SITE_VERIFICATION=), the meta tag is omitted.
+_GSC_DEFAULT_VERIFICATION = "iUMaOvsVzVceHScuX-0i35fWbUJxEfZKM9QH8l3mPM8"
+
+
+def _load_google_site_verification() -> str:
+    if "GOOGLE_SITE_VERIFICATION" in os.environ:
+        return os.environ["GOOGLE_SITE_VERIFICATION"].strip()
+    return _GSC_DEFAULT_VERIFICATION
+
+
+_GOOGLE_SITE_VERIFICATION = _load_google_site_verification()
 
 # ---------------------------------------------------------------------------
 # Stripe configuration

@@ -8,7 +8,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png">
     <link rel="shortcut icon" href="/favicon.ico">
     <meta name="deploy-hash" content="{{ deploy_hash }}">
-    <meta name="google-site-verification" content="{{ google_site_verification }}">
+    {% include 'includes/google_site_verification.html' %}
     <!-- SEO & PWA -->
     <meta name="description" content="{% block meta_description %}abbiey.search — Private, fast, no-tracking search engine.{% endblock %}">
     <meta property="og:type" content="website">

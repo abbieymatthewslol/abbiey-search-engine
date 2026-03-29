@@ -5,7 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ code }} - abbiey.search</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='44' cy='44' r='28' fill='none' stroke='%2300e5a0' stroke-width='10'/><line x1='64' y1='64' x2='90' y2='90' stroke='%2300e5a0' stroke-width='10' stroke-linecap='round'/></svg>"></head>
+    <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='icon-192.png') }}">
+    <link rel="shortcut icon" href="{{ url_for('favicon_ico') }}">
+</head>
 <body>
     <header>
         <a href="/" class="logo">abbiey.<span>search</span></a>
@@ -33,7 +35,7 @@
         const html = document.documentElement;
         const saved = localStorage.getItem("theme");
         if (saved) html.setAttribute("data-theme", saved);
-        toggle.addEventListener("click", () => {
+        if (toggle) toggle.addEventListener("click", () => {
             const next = html.getAttribute("data-theme") === "dark" ? "light" : "dark";
             html.setAttribute("data-theme", next);
             localStorage.setItem("theme", next);

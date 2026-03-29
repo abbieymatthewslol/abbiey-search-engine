@@ -63,6 +63,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const next = html.getAttribute("data-theme") === "dark" ? "light" : "dark";
     html.setAttribute("data-theme", next);
     localStorage.setItem("theme", next);
+    const om = document.getElementById("header-overflow-menu");
+    if (om) om.setAttribute("hidden", "");
   });
 
   // ===== Custom accent color =====
@@ -125,7 +127,7 @@ document.addEventListener("DOMContentLoaded", () => {
       serif:  "Georgia, 'Times New Roman', serif",
       mono:   "ui-monospace, Consolas, monospace",
     };
-    html.setAttribute("data-font-family", gs("fontFamily"));
+    html.setAttribute("data-font", gs("fontFamily"));
     document.body.style.fontFamily = ffMap[gs("fontFamily")] || "";
 
     // Safe search hidden input
@@ -201,6 +203,8 @@ document.addEventListener("DOMContentLoaded", () => {
       densityBtn.title = `Density: ${next}`;
       // keep settings modal in sync if open
       syncBtnGroup("density-group", next);
+      const om = document.getElementById("header-overflow-menu");
+      if (om) om.setAttribute("hidden", "");
     });
     densityBtn.title = `Density: ${savedDensity}`;
   }
@@ -230,7 +234,7 @@ document.addEventListener("DOMContentLoaded", () => {
     document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !settingsOverlay.hasAttribute("hidden")) closeSettings(); });
   }
 
-  // ===== Header overflow dropdown (kept for compat; elements removed from DOM) =====
+  // ===== Header overflow dropdown (search page + base layout) =====
   const overflowBtn = document.getElementById("header-overflow-btn");
   const overflowMenu = document.getElementById("header-overflow-menu");
   if (overflowBtn && overflowMenu) {
@@ -315,6 +319,11 @@ document.addEventListener("DOMContentLoaded", () => {
     syncToggle("cards-toggle",         gs("showCards")     === "true");
     syncToggle("favicons-toggle",      gs("showFavicons")  === "true");
     syncToggle("dates-toggle",         gs("showDates")     === "true");
+    const regionSelectModal = document.getElementById("region-select-modal");
+    const regionInput = document.getElementById("region-input");
+    if (regionSelectModal && regionInput) {
+      regionSelectModal.value = regionInput.value || "";
+    }
     const cc = document.getElementById("custom-color");
     if (cc) cc.value = gs("accent");
     // mark active swatch
@@ -361,7 +370,7 @@ document.addEventListener("DOMContentLoaded", () => {
   wireBtnGroup("font-family-group", "fontFamily", (val) => {
     const m = { system: "", serif: "Georgia,'Times New Roman',serif", mono: "ui-monospace,Consolas,monospace" };
     document.body.style.fontFamily = m[val] || "";
-    html.setAttribute("data-font-family", val);
+    html.setAttribute("data-font", val);
   });
   wireBtnGroup("safesearch-group", "safesearch", (val) => {
     const inp = document.getElementById("safesearch-input");
@@ -458,6 +467,8 @@ document.addEventListener("DOMContentLoaded", () => {
   if (regionSelect && regionInput) {
     regionSelect.addEventListener("change", () => {
       applyRegion(regionSelect.value);
+      const om = document.getElementById("header-overflow-menu");
+      if (om) om.setAttribute("hidden", "");
       const q = document.getElementById("search-input");
       if (q && q.value.trim()) document.getElementById("search-form").submit();
     });
@@ -481,6 +492,10 @@ document.addEventListener("DOMContentLoaded", () => {
     let privacyStatsFetched = false;
     privacyBadge.addEventListener("click", (e) => {
       e.stopPropagation();
+      const overflowMenu = document.getElementById("header-overflow-menu");
+      if (overflowMenu && !overflowMenu.hasAttribute("hidden")) {
+        overflowMenu.setAttribute("hidden", "");
+      }
       if (privacyPopover.classList.contains("open")) {
         privacyPopover.classList.add("closing");
         setTimeout(() => { privacyPopover.classList.remove("open", "closing"); }, 150);
