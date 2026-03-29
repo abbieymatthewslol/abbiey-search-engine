@@ -2790,7 +2790,7 @@ Always answer as if you have full context of what's happening right now on the p
 
 @app.route("/admin/api/chat", methods=["POST"])
 def admin_chat():
-    """AI chatbot for the admin — specialised in abbiey.search."""
+    """AI chatbot for the admin — specialized in abbiey.search."""
     err = _admin_check()
     if err:
         return err
@@ -2942,7 +2942,7 @@ def _abbiey_bot_fallback(msg: str, ctx: str = "") -> str:
             "5. **Saved searches / bookmarks** — user collections\n"
             "6. **Custom themes** — beyond dark/light\n"
             "7. **Search suggestions** — live autocomplete as you type\n"
-            "8. **PDF/document search** — specialised tab\n"
+            "8. **PDF/document search** — specialized tab\n"
             "9. **Answer engine mode** — AI-summarised answers at top\n"
             "10. **Sentry error tracking** — get alerts on production errors"
         )
@@ -4970,7 +4970,7 @@ def api_user_bookmarks_save():
     title   = (data.get("title") or "").strip()[:300]
     snippet = (data.get("snippet") or "").strip()[:500]
     if not url:
-        return jsonify({"error": "url required"}), 400
+        return jsonify({"error": "URL is required"}), 400
     try:
         rows = _users_execute(
             "INSERT OR IGNORE INTO user_bookmarks (user_id, url, title, snippet)"

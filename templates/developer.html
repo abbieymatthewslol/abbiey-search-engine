@@ -10,7 +10,7 @@
 
     <section class="dev-card dev-card-billing">
         <h2 class="dev-card-title">Billing &amp; access</h2>
-        <p class="dev-card-text">API usage is billed as prepaid access. Complete checkout on Stripe to support your key usage; then create keys here and use them in the <code>Authorization</code> header when calling our APIs.</p>
+        <p class="dev-card-text">API access is sold as prepaid usage. Complete checkout on Stripe first, then create keys here and send them in the <code>Authorization</code> header when you call our APIs.</p>
         <a href="{{ stripe_api_checkout_url }}" class="dev-stripe-btn" target="_blank" rel="noopener noreferrer">Buy API access</a>
         <p class="dev-card-hint">Opens secure Stripe Checkout (card, Apple Pay, PayPal where enabled).</p>
     </section>
@@ -91,7 +91,7 @@
         <p class="dev-card-text">Verify authentication:</p>
         <pre class="dev-code-sample" translate="no"><code>curl -s -H &quot;Authorization: Bearer YOUR_KEY&quot; \
   https://www.abbieysearch.com/api/user/me</code></pre>
-        <p class="dev-card-text">Same header works for signed-in APIs such as <code>GET /api/user/bookmarks</code>, <code>POST /api/user/bookmarks</code>, <code>GET /api/user/recent-searches</code>, and <code>POST /api/user/history</code> (invalid keys return 401).</p>
+        <p class="dev-card-text">The same header works for account APIs such as <code>GET /api/user/bookmarks</code>, <code>POST /api/user/bookmarks</code>, <code>GET /api/user/recent-searches</code>, and <code>POST /api/user/history</code>. Invalid or revoked keys return <code>401</code>.</p>
         <p class="dev-card-hint">Public JSON endpoints (no key required) are listed at <a href="/api/access-resources">/api/access-resources</a>.</p>
     </section>
 </main>
