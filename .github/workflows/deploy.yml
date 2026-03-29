@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - master
+  # GitHub → Actions → "Deploy to Vercel" → Run workflow (no code change needed)
+  workflow_dispatch:
 
 env:
   VERCEL_ORG_ID: ynmEwQEoP5I6GjvWlRkxa34I
