@@ -1,14 +1,3 @@
-// Sync paid access token from localStorage to cookie so server can validate it
-// across restarts without requiring re-payment.
-(function syncAccessCookie() {
-  try {
-    const token = localStorage.getItem("abbiey_access_token");
-    if (token && token.length === 32) {
-      document.cookie = "abbiey_token=" + token + ";path=/;max-age=" + (365 * 24 * 3600) + ";SameSite=Lax";
-    }
-  } catch (e) {}
-})();
-
 document.addEventListener("DOMContentLoaded", () => {
   const html = document.documentElement;
 

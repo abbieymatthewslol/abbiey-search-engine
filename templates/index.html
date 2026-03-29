@@ -1028,18 +1028,6 @@
     </script>
     {% endif %}
 
-    {# ===== PAYMENT SUCCESS TOAST ===== #}
-    {% if payment_success %}
-    <script>
-        document.addEventListener("DOMContentLoaded", () => {
-            const toast = document.createElement("div");
-            toast.style.cssText = "position:fixed;top:1.5rem;left:50%;transform:translateX(-50%);background:var(--accent,#2563eb);color:#fff;padding:.75rem 1.5rem;border-radius:8px;font-weight:700;z-index:10000;animation:paywall-fade-in .3s ease";
-            toast.textContent = "Payment successful! Unlimited searches unlocked.";
-            document.body.appendChild(toast);
-            setTimeout(() => toast.remove(), 5000);
-        });
-    </script>
-    {% endif %}
     {% if query and search_type == 'code' %}
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
@@ -1057,7 +1045,7 @@
     <script>
         document.addEventListener("DOMContentLoaded", () => {
             const toast = document.createElement("div");
-            toast.style.cssText = "position:fixed;top:1.5rem;left:50%;transform:translateX(-50%);background:var(--accent,#2563eb);color:#fff;padding:.75rem 1.5rem;border-radius:8px;font-weight:700;z-index:10000;animation:paywall-fade-in .3s ease";
+            toast.style.cssText = "position:fixed;top:1.5rem;left:50%;transform:translateX(-50%);background:var(--accent,#2563eb);color:#fff;padding:.75rem 1.5rem;border-radius:8px;font-weight:700;z-index:10000;animation:welcome-toast-in .3s ease";
             toast.textContent = "Welcome to abbiey.search, @{{ current_user.username if current_user else '' }}! 🎉";
             document.body.appendChild(toast);
             setTimeout(() => toast.remove(), 6000);

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     {% include 'includes/google_site_verification.html' %}
     <title>abbiey.search — Private Search Engine. No Tracking. No Logs.</title>
-    <meta name="description" content="A privacy-respecting search engine that never tracks you, never logs your queries, and never filters results. One-time $10, unlimited forever.">
+    <meta name="description" content="A privacy-respecting search engine that never tracks you, never logs your queries, and never filters results. Free to use.">
     <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png">
     <link rel="shortcut icon" href="/favicon.ico">
     <style>
@@ -421,11 +421,9 @@
     <a href="/search" class="nav-logo">abbiey.<span>search</span></a>
     <div class="nav-links">
         <a href="#features" class="nav-link">Features</a>
-        <a href="#pricing" class="nav-link">Pricing</a>
+        <a href="#about" class="nav-link">About</a>
         <a href="/search" class="nav-link">Try it</a>
-        <form action="/create-checkout-session" method="POST" style="display:inline">
-            <button type="submit" class="nav-cta" style="border:none;cursor:pointer">Get Access — $10</button>
-        </form>
+        <a href="/search" class="nav-cta">Open search</a>
     </div>
 </nav>
 
@@ -436,14 +434,12 @@
         Zero tracking &middot; Zero logs &middot; Zero surveillance
     </div>
     <h1>Search the web like <span class="highlight">nobody's watching</span></h1>
-    <p>abbiey.search is a private search engine that never logs your queries, never tracks your clicks, and never sells your data. One-time payment. Unlimited forever.</p>
+    <p>abbiey.search is a private search engine that never logs your queries, never tracks your clicks, and never sells your data.</p>
     <div class="hero-actions">
-        <a href="/search" class="btn-primary">Try Free Searches</a>
-        <form action="/create-checkout-session" method="POST" style="display:inline">
-            <button type="submit" class="btn-secondary" style="border:none;cursor:pointer">Get Full Access — $10</button>
-        </form>
+        <a href="/search" class="btn-primary">Start searching</a>
+        <a href="#features" class="btn-secondary">See features</a>
     </div>
-    <p class="hero-note">2 free searches to start &middot; No account required &middot; No tracking ever</p>
+    <p class="hero-note">Free &middot; No account required &middot; No tracking ever</p>
 </section>
 
 <!-- TRUST BAR -->
@@ -452,7 +448,7 @@
     <div class="trust-item"><span class="trust-icon">&#128683;</span> No personal data stored</div>
     <div class="trust-item"><span class="trust-icon">&#127758;</span> 6 search tabs: Web, Images, News, Videos, Code, Deep Web</div>
     <div class="trust-item"><span class="trust-icon">&#129302;</span> AI summaries included</div>
-    <div class="trust-item"><span class="trust-icon">&#128176;</span> One-time $10, no subscription</div>
+    <div class="trust-item"><span class="trust-icon">&#128176;</span> Free — no paywall</div>
 </div>
 
 <!-- FEATURES -->
@@ -526,50 +522,26 @@
     </div>
 </section>
 
-<!-- PRICING -->
-<section id="pricing">
+<!-- ABOUT / NO PAYWALL -->
+<section id="about">
     <div class="container">
-        <div class="section-label">Pricing</div>
-        <h2 class="section-title">Simple, honest pricing</h2>
-        <p class="section-sub">No subscriptions. No ads. No data selling. Pay once, search forever.</p>
-        <div class="pricing-wrap">
-            <div class="pricing-card">
-                <div class="pricing-name">Free</div>
+        <div class="section-label">Free to use</div>
+        <h2 class="section-title">Everything included</h2>
+        <p class="section-sub">No subscriptions, no ads, no data selling — and no payment step. Use the full search experience anytime.</p>
+        <div class="pricing-wrap" style="justify-content:center">
+            <div class="pricing-card featured" style="max-width:420px;margin:0 auto">
+                <div class="pricing-name">abbiey.search</div>
                 <div class="pricing-price">$0</div>
-                <div class="pricing-period">2 free searches to try it</div>
+                <div class="pricing-period">all features &middot; unlimited searches</div>
                 <ul class="pricing-features">
-                    <li><span class="check">&#10003;</span> Web, Images, News</li>
-                    <li><span class="check">&#10003;</span> Search operators</li>
-                    <li><span class="check">&#10003;</span> Calculator &amp; unit conversion</li>
-                    <li><span class="cross">&#8212;</span> <span style="color:var(--muted)">Unlimited searches</span></li>
-                    <li><span class="cross">&#8212;</span> <span style="color:var(--muted)">AI summaries &amp; chat</span></li>
-                    <li><span class="cross">&#8212;</span> <span style="color:var(--muted)">Deep Web tab</span></li>
-                    <li><span class="cross">&#8212;</span> <span style="color:var(--muted)">Videos &amp; Code tabs</span></li>
-                </ul>
-                <a href="/search" class="pricing-btn secondary">Try Free</a>
-            </div>
-            <div class="pricing-card featured">
-                <div class="pricing-badge">Most Popular</div>
-                <div class="pricing-name">Unlimited</div>
-                <div class="pricing-price">$10</div>
-                <div class="pricing-period">one-time payment &middot; unlimited forever</div>
-                <ul class="pricing-features">
-                    <li><span class="check">&#10003;</span> Unlimited searches</li>
-                    <li><span class="check">&#10003;</span> All 6 search tabs</li>
+                    <li><span class="check">&#10003;</span> All 6 search tabs (Web, Images, News, Videos, Code, Deep Web)</li>
                     <li><span class="check">&#10003;</span> AI summaries &amp; research chat</li>
-                    <li><span class="check">&#10003;</span> Deep Web tab (.onion via Ahmia)</li>
-                    <li><span class="check">&#10003;</span> Entity intelligence cards</li>
-                    <li><span class="check">&#10003;</span> Weather, knowledge panels</li>
-                    <li><span class="check">&#10003;</span> Zero tracking, forever</li>
+                    <li><span class="check">&#10003;</span> Search operators, calculator, units, knowledge cards</li>
+                    <li><span class="check">&#10003;</span> Zero tracking, zero logs</li>
                 </ul>
-                <form action="/create-checkout-session" method="POST">
-                    <button type="submit" class="pricing-btn primary" style="width:100%;cursor:pointer">Get Full Access — $10</button>
-                </form>
+                <a href="/search" class="pricing-btn primary" style="display:block;text-align:center;text-decoration:none">Open search</a>
             </div>
         </div>
-        <p style="text-align:center;margin-top:2rem;font-size:.85rem;color:var(--muted)">
-            Secure payment via Stripe &middot; Instant access &middot; No account required
-        </p>
     </div>
 </section>
 
@@ -594,8 +566,8 @@
     <p>
         <a href="/search">abbiey.search</a> &nbsp;&middot;&nbsp;
         <a href="/search">Search</a> &nbsp;&middot;&nbsp;
-        <a href="#pricing">Pricing</a> &nbsp;&middot;&nbsp;
-        <a href="#pricing">Get Access</a>
+        <a href="#about">About</a> &nbsp;&middot;&nbsp;
+        <a href="#features">Features</a>
     </p>
     <p style="margin-top:.5rem">Privacy-respecting search. No tracking. No logs. No subscriptions.</p>
 </footer>

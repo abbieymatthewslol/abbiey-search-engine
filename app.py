@@ -3,8 +3,6 @@ abbiey.search - A privacy-respecting, non-judgmental search engine.
 No tracking. No filtering. No logs. Just results.
 """
 
-import hashlib
-import hmac
 import json
 import logging
 import os
@@ -22,10 +20,9 @@ from urllib.parse import parse_qs, quote_plus, unquote, urlparse
 
 import feedparser
 import httpx
-import stripe
 from cachetools import TTLCache
 from ddgs import DDGS
-from flask import Flask, render_template, request, jsonify, redirect, session, url_for, flash, Response, make_response
+from flask import Flask, render_template, request, jsonify, redirect, session, url_for, flash, Response
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -75,17 +72,8 @@ def _load_google_site_verification() -> str:
 
 _GOOGLE_SITE_VERIFICATION = _load_google_site_verification()
 
-# ---------------------------------------------------------------------------
-# Stripe configuration
-# ---------------------------------------------------------------------------
-stripe.api_key = os.environ.get("STRIPE_SECRET_KEY", "")
-_STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
-_STRIPE_PRICE_ID       = os.environ.get("STRIPE_PRICE_ID", "")
-_BASE_URL              = os.environ.get("BASE_URL", "http://localhost:8000")
-
 # On Vercel the filesystem is read-only except /tmp; use /tmp when running there.
 _DB_DIR       = "/tmp" if os.environ.get("VERCEL") else os.path.dirname(__file__)
-_PAYMENTS_DB  = os.path.join(_DB_DIR, "payments.db")
 _WAITLIST_DB  = os.path.join(_DB_DIR, "waitlist.db")
 _ANALYTICS_DB = os.path.join(_DB_DIR, "analytics.db")
 _USERS_DB     = os.path.join(_DB_DIR, "users.db")
@@ -263,16 +251,6 @@ def _init_pg_tables():
         );
         CREATE INDEX IF NOT EXISTS idx_ush_user ON user_search_history(user_id);
 
-        CREATE TABLE IF NOT EXISTS payments (
-            id           SERIAL PRIMARY KEY,
-            session_id   TEXT UNIQUE NOT NULL,
-            email        TEXT,
-            amount_total INTEGER,
-            currency     TEXT,
-            status       TEXT DEFAULT 'paid',
-            created_at   TIMESTAMPTZ DEFAULT NOW()
-        );
-
         CREATE TABLE IF NOT EXISTS waitlist (
             id         SERIAL PRIMARY KEY,
             email      TEXT UNIQUE NOT NULL,
@@ -346,24 +324,6 @@ def _init_waitlist_db():
 
 
 _init_waitlist_db()
-
-
-def _init_payments_db():
-    with sqlite3.connect(_PAYMENTS_DB) as con:
-        con.execute(
-            "CREATE TABLE IF NOT EXISTS payments ("
-            "  id INTEGER PRIMARY KEY,"
-            "  session_id TEXT UNIQUE NOT NULL,"
-            "  email TEXT,"
-            "  amount_total INTEGER,"
-            "  currency TEXT,"
-            "  status TEXT DEFAULT 'paid',"
-            "  created_at TEXT DEFAULT (datetime('now'))"
-            ")"
-        )
-
-
-_init_payments_db()
 
 
 # ---------------------------------------------------------------------------
@@ -466,18 +426,6 @@ def _users_execute(sql: str, args: list = None, return_id: bool = False) -> list
         cur = con.execute(sql, args or [])
         if return_id:
             return [{"id": cur.lastrowid}]
-        if cur.description:
-            return [dict(r) for r in cur.fetchall()]
-        return []
-
-
-def _payments_execute(sql: str, args: list = None) -> list:
-    """Route SQL to Supabase or payments.db SQLite."""
-    if _SUPABASE_DB_URL:
-        return _pg_execute(sql, args)
-    with sqlite3.connect(_PAYMENTS_DB) as con:
-        con.row_factory = sqlite3.Row
-        cur = con.execute(sql, args or [])
         if cur.description:
             return [dict(r) for r in cur.fetchall()]
         return []
@@ -852,36 +800,6 @@ def _expand_query(query: str) -> "tuple[str, list[str]]":
         return query, []
     expansion = " OR ".join(f'"{s}"' for s in added[:3])
     return f"{query} {expansion}", added
-
-
-def _record_payment(session_id: str, email: str = "", amount_total: int = 0, currency: str = "usd"):
-    """Persist a confirmed payment. Safe to call multiple times (UPSERT)."""
-    try:
-        _payments_execute(
-            "INSERT OR IGNORE INTO payments (session_id, email, amount_total, currency) VALUES (?,?,?,?)",
-            [session_id, email, amount_total, currency],
-        )
-    except Exception as exc:
-        logger.error("Failed to record payment %s: %s", session_id, exc)
-
-
-def _make_access_token(session_id: str) -> str:
-    """Create a short HMAC token tied to the Stripe session_id."""
-    secret = app.config["SECRET_KEY"].encode()
-    return hmac.new(secret, session_id.encode(), hashlib.sha256).hexdigest()[:32]
-
-
-def _check_persistent_access() -> bool:
-    """Check abbiey_sid cookie directly against payments store. No HMAC — survives restarts."""
-    sid = request.cookies.get("abbiey_sid", "")
-    if not sid:
-        return False
-    try:
-        rows = _payments_execute("SELECT id FROM payments WHERE session_id = ?", [sid])
-        return len(rows) > 0
-    except Exception:
-        pass
-    return False
 
 
 @app.template_filter("domain")
@@ -1504,167 +1422,6 @@ def index():
 def landing():
     """Long-form marketing page."""
     return render_template("landing.html")
-
-
-@app.route("/create-checkout-session", methods=["POST"])
-@limiter.limit("10/minute")
-def create_checkout_session():
-    """Create a Stripe Checkout Session and redirect the user to it."""
-    if not stripe.api_key:
-        logger.error("STRIPE_SECRET_KEY not set")
-        return render_template(
-            "error.html", code=503, title="Payment Unavailable",
-            message="Payment is not configured yet. Please try again later."
-        ), 503
-
-    if not _STRIPE_PRICE_ID:
-        logger.error("STRIPE_PRICE_ID not set")
-        return render_template(
-            "error.html", code=503, title="Payment Unavailable",
-            message="Payment product not configured. Please contact support."
-        ), 503
-
-    try:
-        checkout_session = stripe.checkout.Session.create(
-            mode="payment",
-            line_items=[{"price": _STRIPE_PRICE_ID, "quantity": 1}],
-            success_url=_BASE_URL + "/payment-success?session_id={CHECKOUT_SESSION_ID}",
-            cancel_url=_BASE_URL + "/payment-cancel",
-            allow_promotion_codes=True,
-        )
-        return redirect(checkout_session.url, code=303)
-    except stripe.StripeError as exc:
-        logger.error("Stripe checkout error: %s", exc)
-        return render_template(
-            "error.html", code=502, title="Payment Error",
-            message="Could not start checkout. Please try again."
-        ), 502
-
-
-@app.route("/payment-success")
-def payment_success():
-    """
-    Stripe redirects here after successful payment.
-    Verify the session server-side, record it, and grant access via a signed token.
-    """
-    sid = request.args.get("session_id", "").strip()
-
-    if not sid:
-        # No session_id — could be a direct visit or old Payment Link redirect
-        # Grant session access anyway (legacy fallback)
-        session["paid"] = True
-        session["search_count"] = 0
-        return render_template("payment_success.html", verified=False, email="")
-
-    # Verify with Stripe if key is configured
-    verified = False
-    email = ""
-    amount = 0
-    currency = "usd"
-
-    if stripe.api_key:
-        try:
-            stripe_session = stripe.checkout.Session.retrieve(sid)
-            if stripe_session.payment_status == "paid":
-                verified = True
-                email = (stripe_session.customer_details or {}).get("email", "") or ""
-                amount = stripe_session.amount_total or 0
-                currency = stripe_session.currency or "usd"
-                _record_payment(sid, email, amount, currency)
-        except stripe.StripeError as exc:
-            logger.error("Stripe session verify failed for %s: %s", sid, exc)
-
-    # Grant access in server-side session
-    session["paid"] = True
-    session["search_count"] = 0
-    session["payment_session_id"] = sid
-
-    # Generate a client-side access token the browser can store in localStorage
-    access_token = _make_access_token(sid) if sid else ""
-
-    resp = make_response(render_template(
-        "payment_success.html",
-        verified=verified,
-        email=email,
-        access_token=access_token,
-    ))
-    if sid:
-        # Persistent session_id cookie — survives server restarts, 1 year
-        resp.set_cookie("abbiey_sid", sid, max_age=365 * 24 * 3600, samesite="Lax")
-    return resp
-
-
-@app.route("/admin/grant-access")
-def admin_grant_access():
-    """Admin-only: grant permanent paid access to the current browser session.
-    Usage: /admin/grant-access?token=ADMIN_TOKEN
-    Inserts a manual payment record and sets the persistent cookie.
-    """
-    token = request.args.get("token", "")
-    if not _ADMIN_TOKEN or token != _ADMIN_TOKEN:
-        return "Forbidden", 403
-    # Create a stable manual session_id for this grant
-    manual_sid = "manual_" + hashlib.sha256(token.encode()).hexdigest()[:16]
-    _record_payment(manual_sid, email="admin", amount_total=1000, currency="usd")
-    access_token = _make_access_token(manual_sid)
-    session["paid"] = True
-    session["search_count"] = 0
-    resp = make_response(
-        "<html><body style='font-family:sans-serif;padding:2rem'>"
-        "<h2>✓ Access granted</h2>"
-        "<p>Permanent paid access has been set for this browser.</p>"
-        "<script>"
-        f"localStorage.setItem('abbiey_access_token','{access_token}');"
-        "localStorage.setItem('abbiey_paid','true');"
-        "</script>"
-        "<a href='/'>Go to search engine</a></body></html>"
-    )
-    resp.set_cookie("abbiey_sid", manual_sid, max_age=365 * 24 * 3600, samesite="Lax")
-    return resp
-
-
-@app.route("/payment-cancel")
-def payment_cancel():
-    """User cancelled checkout — return them to the landing page."""
-    return render_template("payment_cancel.html")
-
-
-@app.route("/webhook", methods=["POST"])
-def stripe_webhook():
-    """
-    Stripe webhook endpoint.
-    Handles checkout.session.completed as a reliable server-side backup.
-    Register this URL in your Stripe Dashboard → Webhooks.
-    """
-    payload = request.get_data()
-    sig_header = request.headers.get("Stripe-Signature", "")
-
-    if not _STRIPE_WEBHOOK_SECRET:
-        logger.warning("Stripe webhook received but STRIPE_WEBHOOK_SECRET not set — skipping verification")
-        return jsonify({"received": True})
-
-    try:
-        event = stripe.Webhook.construct_event(payload, sig_header, _STRIPE_WEBHOOK_SECRET)
-    except stripe.errors.SignatureVerificationError:
-        logger.warning("Invalid Stripe webhook signature")
-        return jsonify({"error": "Invalid signature"}), 400
-    except Exception as exc:
-        logger.error("Webhook parse error: %s", exc)
-        return jsonify({"error": "Parse error"}), 400
-
-    if event["type"] == "checkout.session.completed":
-        s = event["data"]["object"]
-        if s.get("payment_status") == "paid":
-            email = (s.get("customer_details") or {}).get("email", "") or ""
-            _record_payment(
-                session_id=s["id"],
-                email=email,
-                amount_total=s.get("amount_total", 0),
-                currency=s.get("currency", "usd"),
-            )
-            logger.info("Payment confirmed via webhook: %s (%s)", s["id"], email)
-
-    return jsonify({"received": True})
 
 
 @app.route("/search")
@@ -2817,13 +2574,11 @@ You are an expert in every aspect of this project. You are direct, insightful, a
   - analytics.db / search_logs table: query, type, region, result_count, latency_ms, hour, day_of_week, created_at
   - analytics.db / error_logs table: route, level, message, created_at
   - users.db: users, user_bookmarks, user_search_history
-  - payments.db: payments
 - Caching: TTLCache (1000 entries, 300s TTL) + threading.Lock; _in_flight dict deduplicates concurrent identical queries
 - HTTP client: httpx connection pool (100 max, 20 keepalive); singleton via _get_http()
 - Compression: flask-compress (Brotli preferred, gzip fallback), min_size=500 bytes
 - Rate limiting: flask-limiter (30 searches/min, 5 breach-checks/min)
 - Auth: Werkzeug password hashing (pbkdf2), Flask sessions
-- Payments: Stripe Checkout + webhook
 - Live dashboard: SSE /admin/api/stream pushes search events in real-time; _sse_broadcast() called from _log_search()
 
 == SEARCH FLOW ==
@@ -2842,8 +2597,8 @@ You are an expert in every aspect of this project. You are direct, insightful, a
 7. HTML rendered via index.html (standalone, ~970 lines, does NOT extend base.html)
 
 == KEY ROUTES ==
-/ — Homepage: search bar, recent-searches chips, install banner, onboarding modal
-/search — Results page (same index.html template, different render path)
+/ — Redirects to /search (main search UI)
+/search — Search UI and results (index.html)
 /login /signup /profile — Auth pages (extend base.html)
 /admin?token= — THIS dashboard
 /admin/analytics?token= — Legacy analytics (still works)
@@ -2854,7 +2609,6 @@ You are an expert in every aspect of this project. You are direct, insightful, a
 /manifest.json — PWA web app manifest
 /robots.txt /sitemap.xml — SEO crawlability
 /breach-check — HaveIBeenPwned email checker (XposedOrNot API)
-/admin/grant-access?token= — Manually grant premium access
 
 == DEPLOYMENT ==
 The old deploy hook (api.vercel.com/v1/integrations/deploy/...) NEVER worked — it redeploys an old snapshot.
@@ -2890,7 +2644,7 @@ Performance: Increase TTLCache size, add Redis/Upstash for persistent cache, CDN
 Growth: Submit sitemap to Google Search Console, add to browser extension directories, post on Product Hunt
 Reliability: Add Sentry error tracking, health check endpoint /health, Vercel function logs
 Features to build: image search results in grid, dark/light theme sync across devices, search history export, API for developers, browser extension
-Monetisation: Premium features (currently Stripe integrated), API access tiers, white-label
+Monetisation: API access tiers, white-label (search is free)
 
 Always answer as if you have full context of what's happening right now on the platform. Be specific, actionable, and opinionated. If you see data from the dashboard, analyse it and give real insights."""
 
@@ -3035,7 +2789,6 @@ def _abbiey_bot_fallback(msg: str, ctx: str = "") -> str:
             "**Data storage:**\n"
             "- `analytics.db` → search_logs, error_logs (grows ~1KB per 10 searches)\n"
             "- `users.db` → users table\n"
-            "- `payments.db` → Stripe payment records\n"
             "⚠️ All SQLite files live in `/tmp` on Vercel — **ephemeral, wiped on cold start**.\n"
             "For production persistence, migrate to: Turso (SQLite-compatible), Supabase (PostgreSQL), or PlanetScale."
         )
