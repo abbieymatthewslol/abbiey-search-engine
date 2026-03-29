@@ -403,9 +403,17 @@
         footer a { color: var(--muted); text-decoration: none; }
         footer a:hover { color: var(--text); }
 
+        .nav-link.nav-dev {
+            font-size: .78rem;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            font-weight: 600;
+            opacity: .9;
+        }
+
         /* RESPONSIVE */
         @media (max-width: 600px) {
-            .nav-links .nav-link { display: none; }
+            .nav-links .nav-link:not(.nav-dev) { display: none; }
             .hero-actions { flex-direction: column; align-items: stretch; }
             .btn-primary, .btn-secondary { text-align: center; }
         }
@@ -420,6 +428,7 @@
         <a href="#features" class="nav-link">Features</a>
         <a href="#about" class="nav-link">About</a>
         <a href="/search" class="nav-link">Try it</a>
+        <a href="https://buy.stripe.com/5kQ7sK9wgboE26GfFlb7y0c" class="nav-link nav-dev" target="_blank" rel="noopener noreferrer" title="Purchase API keys">Developer</a>
         <a href="/search" class="nav-cta">Open search</a>
     </div>
 </nav>

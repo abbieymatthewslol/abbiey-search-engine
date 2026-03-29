@@ -205,6 +205,25 @@ body:not(.has-results) header {
   color: #fafaf9 !important;
 }
 
+.header-dev-btn {
+  padding: .35rem .65rem;
+  border-radius: var(--radius-sm);
+  font-size: .72rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border: 1px solid transparent;
+  text-decoration: none;
+  transition: color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+  white-space: nowrap;
+}
+.header-dev-btn:hover {
+  color: var(--text);
+  border-color: var(--border);
+  background: var(--bg-hover);
+}
+
 .user-avatar-chip {
   display: inline-flex;
   align-items: center;
