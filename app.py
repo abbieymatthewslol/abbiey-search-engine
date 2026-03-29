@@ -61,6 +61,14 @@ def _get_deploy_hash() -> str:
         return "unknown"
 
 DEPLOY_HASH = _get_deploy_hash()
+# Default: Google Search Console HTML-tag verification (override with GOOGLE_SITE_VERIFICATION).
+_GOOGLE_SITE_VERIFICATION = (
+    os.environ.get(
+        "GOOGLE_SITE_VERIFICATION",
+        "iUMaOvsVzVceHScuX-0i35fWbUJxEfZKM9QH8l3mPM8",
+    )
+    .strip()
+)
 
 # ---------------------------------------------------------------------------
 # Stripe configuration
@@ -553,7 +561,10 @@ def _get_user_by_login(identifier: str) -> "dict | None":
 @app.context_processor
 def _inject_current_user():
     uid = session.get("user_id")
-    ctx = {"deploy_hash": DEPLOY_HASH}
+    ctx = {
+        "deploy_hash": DEPLOY_HASH,
+        "google_site_verification": _GOOGLE_SITE_VERIFICATION,
+    }
     if uid:
         user = _get_user_by_id(uid)
         if user:

@@ -18,6 +18,17 @@ class TestRoutes:
         resp = client.get("/")
         assert resp.status_code == 200
         assert b"abbiey.search" in resp.data
+        assert b'name="google-site-verification"' in resp.data
+        assert b"iUMaOvsVzVceHScuX-0i35fWbUJxEfZKM9QH8l3mPM8" in resp.data
+
+    def test_google_site_verification_meta_when_configured(self, client):
+        import app as app_module
+
+        with patch.object(app_module, "_GOOGLE_SITE_VERIFICATION", "gsc-test-token"):
+            resp = client.get("/")
+        assert resp.status_code == 200
+        assert b'name="google-site-verification"' in resp.data
+        assert b'content="gsc-test-token"' in resp.data
 
     def test_search_empty_query_shows_index(self, client):
         resp = client.get("/search?q=")
