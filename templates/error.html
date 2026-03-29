@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ code }} - abbiey.search</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=deploy_hash) }}">
     <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='icon-192.png') }}">
     <link rel="shortcut icon" href="{{ url_for('favicon_ico') }}">
 </head>
@@ -22,7 +22,17 @@
             <span class="error-code">{{ code }}</span>
             <h1 class="error-title">{{ title }}</h1>
             <p class="error-message">{{ message }}</p>
-            <a href="/search" class="error-home-btn">Back to Search</a>
+            <a href="/search" class="error-home-btn">Back to search</a>
+            {% if extra_help %}
+            <div class="error-help" style="margin-top:2rem;padding-top:1.5rem;border-top:1px solid var(--border,#333);text-align:left;max-width:28rem;margin-left:auto;margin-right:auto">
+                <p style="font-size:.85rem;color:var(--text-dim,#888);margin:0 0 .75rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em">You still have options</p>
+                <ul style="margin:0;padding-left:1.2rem;font-size:.9rem;color:var(--text-dim,#a3a3a3);line-height:1.7">
+                    <li><a href="/search" style="color:var(--accent,#e7e5e4)">Main search</a> — try another tab (Images, News, Deep Web).</li>
+                    <li><a href="/api/access-resources" style="color:var(--accent,#e7e5e4)">Access resources (JSON)</a> — Tor, archives, independent indexes.</li>
+                    <li><a href="/landing" style="color:var(--accent,#e7e5e4)">About / features</a></li>
+                </ul>
+            </div>
+            {% endif %}
         </div>
     </main>
 

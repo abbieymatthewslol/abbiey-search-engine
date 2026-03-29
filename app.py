@@ -79,6 +79,24 @@ _ANALYTICS_DB = os.path.join(_DB_DIR, "analytics.db")
 _USERS_DB     = os.path.join(_DB_DIR, "users.db")
 _ADMIN_TOKEN  = os.environ.get("ADMIN_TOKEN", "")
 
+
+def _env_truthy(key: str) -> bool:
+    return os.environ.get(key, "").strip().lower() in ("1", "true", "yes", "on")
+
+
+# Self-host only: disables all Flask-Limiter rules (public deployments should leave this off).
+ABBIEY_OPEN_ACCESS = _env_truthy("ABBIEY_OPEN_ACCESS")
+
+
+def _max_query_length() -> int:
+    raw = os.environ.get("ABBIEY_MAX_QUERY_LENGTH", "8000").strip()
+    try:
+        n = int(raw)
+    except ValueError:
+        n = 8000
+    return max(500, min(50000, n))
+
+
 OLLAMA_MODEL    = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 
@@ -532,12 +550,35 @@ def _inject_current_user():
 
 
 @app.after_request
-def _html_no_store_cache(resp):
-    """Avoid stale HTML/CSS after deploys (CDN/browser kept old marketing shell)."""
+def _response_policy_headers(resp):
+    """HTML: avoid stale shells after deploy. APIs: permissive CORS so clients are not stranded."""
     ct = (resp.headers.get("Content-Type") or "").lower()
     if "text/html" in ct:
         resp.headers["Cache-Control"] = "private, max-age=0, must-revalidate"
+    if request.path.startswith("/api/"):
+        resp.headers.setdefault("Access-Control-Allow-Origin", "*")
+        resp.headers.setdefault("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        resp.headers.setdefault(
+            "Access-Control-Allow-Headers",
+            "Content-Type, X-Requested-With, Accept, Authorization",
+        )
     return resp
+
+
+@app.before_request
+def _api_cors_preflight():
+    if request.method != "OPTIONS" or not request.path.startswith("/api/"):
+        return None
+    return Response(
+        "",
+        status=204,
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, X-Requested-With, Accept, Authorization",
+            "Access-Control-Max-Age": "86400",
+        },
+    )
 
 
 def _get_client_ip_from_request(req) -> str:
@@ -821,7 +862,7 @@ def domain_filter(url):
 
 RESULTS_PER_PAGE = 20
 MAX_PAGE = 50
-MAX_QUERY_LENGTH = 2000
+MAX_QUERY_LENGTH = _max_query_length()
 ALLOWED_TYPES = {"text", "images", "news", "videos", "code", "onion", "saved", "prices", "alts"}
 
 # Price extraction
@@ -869,6 +910,11 @@ limiter = Limiter(
     default_limits=[],
     storage_uri="memory://",
 )
+if ABBIEY_OPEN_ACCESS:
+    limiter.enabled = False
+    logging.getLogger(__name__).warning(
+        "ABBIEY_OPEN_ACCESS is on: rate limiting disabled (intended for trusted self-hosts only)."
+    )
 
 # ---------------------------------------------------------------------------
 # TTL cache for search results — fixes pagination instability
@@ -908,23 +954,36 @@ def error_400(e):
 
 @app.errorhandler(404)
 def error_404(e):
-    return render_template("error.html", code=404, title="Not Found",
-                           message="The page you're looking for doesn't exist."), 404
+    return render_template(
+        "error.html", code=404, title="Not Found",
+        message="That path is not on this server. You can still search or use the access resources below.",
+        extra_help=True,
+    ), 404
 
 
 @app.errorhandler(429)
 def error_429(e):
     if request.headers.get("X-Requested-With") == "XMLHttpRequest" or \
        request.accept_mimetypes.best == "application/json":
-        return jsonify({"error": "rate_limited", "message": "Too many requests. Please slow down."}), 429
-    return render_template("error.html", code=429, title="Too Many Requests",
-                           message="You're sending requests too fast. Please wait a moment and try again."), 429
+        return jsonify({
+            "error": "rate_limited",
+            "message": "Too many requests from this network. Wait briefly or use other tools listed in /api/access-resources.",
+            "resources": "/api/access-resources",
+        }), 429
+    return render_template(
+        "error.html", code=429, title="Too Many Requests",
+        message="You hit a temporary limit so the service stays up for everyone. Wait a minute, try again, or use the links below — you are not out of options.",
+        extra_help=True,
+    ), 429
 
 
 @app.errorhandler(500)
 def error_500(e):
-    return render_template("error.html", code=500, title="Server Error",
-                           message="Something went wrong on our end. Please try again."), 500
+    return render_template(
+        "error.html", code=500, title="Server Error",
+        message="Something failed on our side. Please retry; if it persists, use the open-web resources below.",
+        extra_help=True,
+    ), 500
 
 
 # ---------------------------------------------------------------------------
@@ -1433,8 +1492,41 @@ def landing():
     return render_template("landing.html")
 
 
+ACCESS_RESOURCES_JSON = {
+    "about": (
+        "abbiey.search is built so a single outage or limit does not leave you with nowhere to go. "
+        "We stack multiple engines, publish open JSON helpers, and allow generous limits so research "
+        "and access are not artificially cramped."
+    ),
+    "this_site": {
+        "search": "/search",
+        "deep_web_tab": "/search?type=onion",
+        "access_json": "/api/access-resources",
+    },
+    "privacy_tools": {
+        "tor_browser": "https://www.torproject.org/download/",
+        "ahmia_clearnet_index": "https://ahmia.fi",
+        "internet_archive": "https://web.archive.org",
+        "marginalia_search": "https://search.marginalia.nu",
+        "searx_public_directory": "https://searx.space",
+    },
+    "tips": [
+        "If one tab (e.g. News) is empty, try All or Web — backends differ.",
+        "For .onion sites, use Tor Browser; Ahmia on the Deep Web tab works from the clearnet.",
+        "Long queries are allowed (see ABBIEY_MAX_QUERY_LENGTH) for power users and pasted context.",
+    ],
+}
+
+
+@app.route("/api/access-resources")
+@limiter.exempt
+def api_access_resources():
+    """Always-available JSON: mirrors, Tor, and archives so users are never philosophically 'stuck'."""
+    return jsonify(ACCESS_RESOURCES_JSON)
+
+
 @app.route("/search")
-@limiter.limit("30/minute")
+@limiter.limit("120/minute")
 def search():
     query = request.args.get("q", "").strip()
     page = max(1, min(request.args.get("page", 1, type=int), MAX_PAGE))
@@ -1463,8 +1555,14 @@ def search():
                                time_filter="")
 
     if len(query) > MAX_QUERY_LENGTH:
-        return render_template("error.html", code=400, title="Query Too Long",
-                               message=f"Query must be under {MAX_QUERY_LENGTH} characters."), 400
+        return render_template(
+            "error.html", code=400, title="Query Too Long",
+            message=(
+                f"This query exceeds the current limit ({MAX_QUERY_LENGTH} characters). "
+                "Shorten it, split into two searches, or self-host with a higher ABBIEY_MAX_QUERY_LENGTH."
+            ),
+            extra_help=True,
+        ), 400
 
     # Parse search operators
     clean_query, operators = _parse_operators(query)
@@ -1609,7 +1707,7 @@ def search():
 
 
 @app.route("/api/suggestions")
-@limiter.limit("60/minute")
+@limiter.limit("200/minute")
 def api_suggestions():
     """Proxy DuckDuckGo autocomplete to avoid CORS."""
     query = request.args.get("q", "").strip()
@@ -1632,7 +1730,7 @@ def api_suggestions():
 
 
 @app.route("/api/entity")
-@limiter.limit("30/minute")
+@limiter.limit("120/minute")
 def api_entity():
     """API endpoint: detect entities in a query."""
     query = request.args.get("q", "").strip()
@@ -1655,7 +1753,7 @@ def api_entity():
 # ---------------------------------------------------------------------------
 
 @app.route("/api/related")
-@limiter.limit("30/minute")
+@limiter.limit("120/minute")
 def api_related():
     """Return related search suggestions for a query."""
     query = request.args.get("q", "").strip()
@@ -1719,7 +1817,7 @@ def api_related():
 # ---------------------------------------------------------------------------
 
 @app.route("/api/onion-proxy")
-@limiter.limit("10/minute")
+@limiter.limit("60/minute")
 def api_onion_proxy():
     """Proxy .onion URLs through local Tor SOCKS5 (if running on port 9050)."""
     url = request.args.get("url", "").strip()
@@ -1811,7 +1909,7 @@ def _check_single_onion(url):
 
 
 @app.route("/api/onion-check", methods=["POST"])
-@limiter.limit("20/minute")
+@limiter.limit("80/minute")
 def api_onion_check():
     """Check reachability of .onion URLs via Tor2web gateway."""
     data = request.get_json(silent=True) or {}
@@ -1863,7 +1961,7 @@ def _is_private_ip(hostname):
 
 
 @app.route("/api/preview")
-@limiter.limit("30/minute")
+@limiter.limit("120/minute")
 def api_preview():
     """Fetch a page preview (title + description + text excerpt)."""
     url = request.args.get("url", "").strip()
@@ -2025,7 +2123,7 @@ def _extractive_research(question, results):
 
 
 @app.route("/api/chat", methods=["POST"])
-@limiter.limit("20/minute")
+@limiter.limit("80/minute")
 def api_chat():
     """AI research assistant that studies search results and answers questions."""
     data = request.get_json() or {}
@@ -2095,7 +2193,7 @@ def api_chat():
 
 
 @app.route("/api/ai-summary")
-@limiter.limit("20/minute")
+@limiter.limit("80/minute")
 def api_ai_summary():
     """Generate a 2-3 sentence AI summary with citations for a query."""
     query = request.args.get("q", "").strip()
@@ -2154,7 +2252,7 @@ def api_ai_summary():
 
 
 @app.route("/api/waitlist", methods=["POST"])
-@limiter.limit("5/minute")
+@limiter.limit("40/minute")
 def api_waitlist():
     """Store an email address for the waitlist/update notifications."""
     data = request.get_json(silent=True) or {}
@@ -2176,7 +2274,7 @@ def api_waitlist():
 # Analytics & Trends API
 # ---------------------------------------------------------------------------
 @app.route("/api/privacy-stats")
-@limiter.limit("60/minute")
+@limiter.limit("200/minute")
 def api_privacy_stats():
     """Returns real, server-confirmed privacy stats. All zeros reflect genuine policy."""
     total_queries = 0
@@ -2195,7 +2293,7 @@ def api_privacy_stats():
 
 # ---------------------------------------------------------------------------
 @app.route("/api/trends")
-@limiter.limit("30/minute")
+@limiter.limit("120/minute")
 def api_trends():
     """Public endpoint — returns top 10 trending queries from the last 24 h."""
     try:
@@ -4494,7 +4592,7 @@ def _require_login():
 
 
 @app.route("/signup", methods=["GET", "POST"])
-@limiter.limit("20/hour")
+@limiter.limit("100/hour")
 def signup():
     if session.get("user_id"):
         return redirect(url_for("profile"))
@@ -4545,7 +4643,7 @@ def signup():
 
 
 @app.route("/login", methods=["GET", "POST"])
-@limiter.limit("30/hour")
+@limiter.limit("120/hour")
 def login():
     if session.get("user_id"):
         return redirect(url_for("profile"))
@@ -4686,7 +4784,7 @@ def api_user_recent_searches():
 
 
 @app.route("/api/user/bookmarks", methods=["POST"])
-@limiter.limit("200/day")
+@limiter.limit("1000/day")
 def api_user_bookmarks_save():
     if not session.get("user_id"):
         return jsonify({"error": "Not authenticated"}), 401
@@ -4722,7 +4820,7 @@ def api_user_bookmarks_delete(bid: int):
 
 
 @app.route("/api/user/bookmarks/sync", methods=["POST"])
-@limiter.limit("20/hour")
+@limiter.limit("100/hour")
 def api_user_bookmarks_sync():
     """Accept a list of localStorage bookmarks and upsert them server-side."""
     if not session.get("user_id"):
@@ -4873,7 +4971,7 @@ def breach_check():
 
 
 @app.route("/api/breach-check", methods=["POST"])
-@limiter.limit("5 per minute")
+@limiter.limit("40 per minute")
 def api_breach_check():
     """Check an email address against the XposedOrNot breach database."""
     body = request.get_json(silent=True) or {}
@@ -4940,7 +5038,7 @@ def _mask_email(email: str) -> str:
 
 
 @app.route("/api/password-check")
-@limiter.limit("20 per minute")
+@limiter.limit("100 per minute")
 def api_password_check():
     """Proxy the HIBP k-anonymity range API. Receives only a 5-char SHA-1 prefix."""
     prefix = request.args.get("prefix", "").upper()

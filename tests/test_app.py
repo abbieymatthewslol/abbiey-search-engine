@@ -58,6 +58,14 @@ class TestRoutes:
         assert resp.status_code == 200
         assert b"abbiey.search" in resp.data
 
+    def test_access_resources_json(self, client):
+        resp = client.get("/api/access-resources")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert "about" in data
+        assert "privacy_tools" in data
+        assert "tor_browser" in data["privacy_tools"]
+
     def test_search_with_query(self, client, mock_ddg):
         resp = client.get("/search?q=python")
         assert resp.status_code == 200
