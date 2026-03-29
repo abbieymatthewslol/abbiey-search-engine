@@ -1162,17 +1162,23 @@ article.result.code-result { font-size: .9rem; }
 .home-logo span {
   color: var(--text);
 }
+.home-hero .home-taglines {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  margin: .85rem auto 0;
+  max-width: 24rem;
+}
 .home-hero .home-tagline {
   text-align: center;
-  margin: .85rem 0 0;
+  margin: 0;
   font-size: 1rem;
   font-weight: 400;
   letter-spacing: 0.01em;
   text-transform: none;
   color: var(--text-dim);
   max-width: 22rem;
-  margin-left: auto;
-  margin-right: auto;
   line-height: 1.55;
 }
 
