@@ -18,13 +18,13 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed, wait as _futures_wait
 from itertools import zip_longest
 from dataclasses import asdict
-from urllib.parse import parse_qs, quote_plus, unquote, urlparse
+from urllib.parse import parse_qs, quote_plus, unquote, urlparse, urlencode
 
 import feedparser
 import httpx
 from cachetools import TTLCache
 from ddgs import DDGS
-from flask import Flask, render_template, request, jsonify, redirect, session, url_for, flash, Response
+from flask import Flask, render_template, request, jsonify, redirect, session, url_for, flash, Response, has_request_context
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -1509,6 +1509,15 @@ _TEMPLATE_DEFAULTS = dict(
     entities=[], primary_entity=None, entity_results=[], operators={},
     region="", lang="", dictionary=None, calculator=None, color=None,
     unit_convert=None, knowledge=None, weather=None, qr=None, time_filter="",
+    image_search_advanced=False,
+    img_ov_license="",
+    img_ov_license_type="",
+    img_ov_aspect="",
+    img_ov_size="",
+    img_ov_ext="",
+    img_ov_src="",
+    img_src_checked=["ddg", "openverse", "commons"],
+    img_scroll_extras="",
 )
 
 
@@ -1575,16 +1584,43 @@ def search():
     if search_type not in ALLOWED_TYPES:
         search_type = "text"
 
+    image_opts = _parse_image_search_options() if search_type == "images" else None
+
     if not query:
         return render_template("index.html", **_TEMPLATE_DEFAULTS)
 
     if search_type == "saved":
-        return render_template("index.html", query=query, results=[], search_type="saved",
-                               has_more=False, page=1, entities=[], primary_entity=None,
-                               entity_results=[], operators={}, region=region or "",
-                               lang=lang or "", dictionary=None, calculator=None, color=None,
-                               unit_convert=None, knowledge=None, weather=None, qr=None,
-                               time_filter="")
+        return render_template(
+            "index.html",
+            query=query,
+            results=[],
+            search_type="saved",
+            has_more=False,
+            page=1,
+            entities=[],
+            primary_entity=None,
+            entity_results=[],
+            operators={},
+            region=region or "",
+            lang=lang or "",
+            dictionary=None,
+            calculator=None,
+            color=None,
+            unit_convert=None,
+            knowledge=None,
+            weather=None,
+            qr=None,
+            time_filter="",
+            image_search_advanced=False,
+            img_ov_license="",
+            img_ov_license_type="",
+            img_ov_aspect="",
+            img_ov_size="",
+            img_ov_ext="",
+            img_ov_src="",
+            img_src_checked=[],
+            img_scroll_extras="",
+        )
 
     if len(query) > MAX_QUERY_LENGTH:
         return render_template(
@@ -1629,14 +1665,34 @@ def search():
 
     if request.headers.get("X-Requested-With") == "XMLHttpRequest":
         _t_ajax = time.perf_counter()
-        results = _fetch_results(clean_query, page, search_type, region, lang, operators, time_filter=time_filter, safesearch=safesearch)
+        results = _fetch_results(
+            clean_query,
+            page,
+            search_type,
+            region,
+            lang,
+            operators,
+            time_filter=time_filter,
+            safesearch=safesearch,
+            image_opts=image_opts,
+        )
         _ajax_ms = int((time.perf_counter() - _t_ajax) * 1000)
         if page == 1:
             _log_search(query, search_type, region or "", len(results.get("results", [])), _ajax_ms, request=request)
         return jsonify(results)
 
     _t0 = time.perf_counter()
-    results = _fetch_results(clean_query, 1, search_type, region, lang, operators, time_filter=time_filter, safesearch=safesearch)
+    results = _fetch_results(
+        clean_query,
+        1,
+        search_type,
+        region,
+        lang,
+        operators,
+        time_filter=time_filter,
+        safesearch=safesearch,
+        image_opts=image_opts,
+    )
     _latency_ms = int((time.perf_counter() - _t0) * 1000)
 
     # Log search analytics (non-blocking, never fails)
@@ -1713,6 +1769,7 @@ def search():
         elif _want_knowledge:
             knowledge = _try_knowledge_panel(query)
 
+    img_extras = _image_search_url_extras(image_opts)
     return render_template(
         "index.html",
         query=query,
@@ -1735,6 +1792,15 @@ def search():
         weather=weather,
         time_filter=time_filter,
         expansion_terms=expansion_terms,
+        image_search_advanced=bool(image_opts),
+        img_ov_license=(image_opts or {}).get("license", ""),
+        img_ov_license_type=(image_opts or {}).get("license_type", ""),
+        img_ov_aspect=(image_opts or {}).get("aspect", ""),
+        img_ov_size=(image_opts or {}).get("size", ""),
+        img_ov_ext=(image_opts or {}).get("extension", ""),
+        img_ov_src=",".join((image_opts or {}).get("sources") or []),
+        img_src_checked=list((image_opts or {}).get("sources") or ["ddg", "openverse", "commons"]),
+        img_scroll_extras=img_extras,
     )
 
 
@@ -3243,30 +3309,211 @@ def _try_ddg_instant(query):
 
 # ---- Image fallback layers ----
 
-def _try_openverse(query):
-    """Search Openverse (Creative Commons media) for images. No API key needed."""
+def _try_openverse(query, max_results=20, filters=None):
+    """Search Openverse (open catalogue, CC licenses). Optional filters: license, license_type, aspect_ratio, size, extension."""
+    filters = filters or {}
     results = []
     try:
+        params = {
+            "q": query,
+            "page_size": min(max(int(max_results or 20), 1), 50),
+            "page": 1,
+        }
+        for src_key, api_key in (
+            ("license", "license"),
+            ("license_type", "license_type"),
+            ("aspect_ratio", "aspect_ratio"),
+            ("size", "size"),
+            ("extension", "extension"),
+        ):
+            v = filters.get(src_key)
+            if v:
+                params[api_key] = v
         resp = _get_http().get(
             "https://api.openverse.org/v1/images/",
-            params={"q": query, "page_size": 20},
+            params=params,
             headers={"User-Agent": "abbiey.search/1.0", "Accept": "application/json"},
+            timeout=12.0,
         )
         resp.raise_for_status()
         data = resp.json()
         for r in data.get("results", []):
+            lic = r.get("license") or ""
+            prov = r.get("provider") or r.get("source") or "openverse"
             results.append({
                 "title": r.get("title", ""),
                 "url": r.get("foreign_landing_url", r.get("url", "")),
                 "image": r.get("url", ""),
                 "thumbnail": r.get("thumbnail", r.get("url", "")),
-                "source": r.get("source", "Openverse"),
+                "source": f"Openverse · {prov}" if prov else "Openverse",
+                "license": lic,
+                "attribution": (r.get("attribution") or "")[:280],
             })
         if results:
-            logger.info("Openverse fallback: %d image results", len(results))
+            logger.info("Openverse: %d image results (filters=%s)", len(results), bool(filters))
     except Exception:
-        logger.warning("Openverse fallback failed", exc_info=True)
+        logger.warning("Openverse image search failed", exc_info=True)
     return results
+
+
+def _norm_image_dedupe_key(url: str) -> str:
+    if not url:
+        return ""
+    try:
+        p = urlparse(url.strip())
+        return f"{p.netloc.lower()}{p.path.lower()}"[:800]
+    except Exception:
+        return url.strip().lower()[:400]
+
+
+def _interleave_image_buckets(buckets: dict, order: list) -> list:
+    """Round-robin merge; dedupe by image / landing URL."""
+    seen = set()
+    out = []
+    max_len = max((len(buckets.get(k, [])) for k in order), default=0)
+    for i in range(max_len):
+        for k in order:
+            row_list = buckets.get(k) or []
+            if i >= len(row_list):
+                continue
+            r = row_list[i]
+            key = _norm_image_dedupe_key(r.get("image") or r.get("thumbnail") or "")
+            if not key:
+                key = _norm_image_dedupe_key(r.get("url") or "")
+            if key:
+                if key in seen:
+                    continue
+                seen.add(key)
+            out.append(r)
+    return out
+
+
+def _fetch_images_multi_source(
+    query: str,
+    max_results: int,
+    region,
+    time_filter,
+    safesearch: str,
+    opts: dict,
+) -> list:
+    """Blend DuckDuckGo with open catalogues (Openverse, Wikimedia Commons, Internet Archive)."""
+    sources = list(opts.get("sources") or ["ddg", "openverse", "commons"])
+    allowed = {"ddg", "openverse", "commons", "archive"}
+    sources = [s for s in sources if s in allowed]
+    if not sources:
+        sources = ["ddg", "openverse", "commons"]
+
+    ov_filters = {}
+    if opts.get("license"):
+        ov_filters["license"] = opts["license"]
+    if opts.get("license_type"):
+        ov_filters["license_type"] = opts["license_type"]
+    if opts.get("aspect"):
+        ov_filters["aspect_ratio"] = opts["aspect"]
+    if opts.get("size"):
+        ov_filters["size"] = opts["size"]
+    if opts.get("extension"):
+        ov_filters["extension"] = opts["extension"]
+
+    buckets = {k: [] for k in allowed}
+    with ThreadPoolExecutor(max_workers=4) as _pool:
+        futs = {}
+        if "ddg" in sources:
+            futs["ddg"] = _pool.submit(
+                _try_ddg, query, max_results, "images", region, time_filter, safesearch
+            )
+        if "openverse" in sources:
+            futs["openverse"] = _pool.submit(_try_openverse, query, min(40, max_results), ov_filters)
+        if "commons" in sources:
+            futs["commons"] = _pool.submit(_try_wikimedia_commons, query)
+        if "archive" in sources:
+            futs["archive"] = _pool.submit(_try_internet_archive_images, query, max_results)
+        for name, fut in futs.items():
+            try:
+                buckets[name] = fut.result(timeout=12) or []
+            except Exception:
+                logger.warning("multi-source images: %s failed", name, exc_info=True)
+                buckets[name] = []
+
+    order = [k for k in ("ddg", "openverse", "commons", "archive") if k in sources]
+    merged = _interleave_image_buckets(buckets, order)
+    if not merged:
+        try:
+            merged = _try_ddg(query, max_results, "images", region, time_filter, safesearch) or []
+        except Exception:
+            merged = []
+    return merged
+
+
+def _parse_image_search_options():
+    """Parse ?img_adv=1 and Openverse-compatible filters from the query string."""
+    if not has_request_context():
+        return None
+    flag = request.args.get("img_adv", "").strip().lower()
+    if flag not in ("1", "true", "yes", "on"):
+        return None
+
+    lic = request.args.get("img_license", "").strip().lower()
+    if lic not in {"", "cc0", "pdm", "by", "by-sa", "by-nc", "by-nc-sa", "by-nd", "by-nc-nd"}:
+        lic = ""
+
+    lt = request.args.get("img_license_type", "").strip().lower()
+    if lt not in {"", "commercial", "modification"}:
+        lt = ""
+
+    aspect = request.args.get("img_aspect", "").strip().lower()
+    if aspect not in {"", "tall", "wide", "square"}:
+        aspect = ""
+
+    size = request.args.get("img_size", "").strip().lower()
+    if size not in {"", "small", "medium", "large"}:
+        size = ""
+
+    ext = request.args.get("img_ext", "").strip().lower()
+    if ext == "jpeg":
+        ext = "jpg"
+    if ext not in {"", "jpg", "png", "gif", "svg", "webp"}:
+        ext = ""
+
+    allow = {"ddg", "openverse", "commons", "archive"}
+    src_list = request.args.getlist("img_src")
+    if src_list:
+        sources = [p.strip().lower() for p in src_list if p.strip().lower() in allow]
+    else:
+        raw_src = request.args.get("img_src", "ddg,openverse,commons").strip().lower()
+        parts = [p.strip() for p in raw_src.split(",") if p.strip()]
+        sources = [p for p in parts if p in allow]
+    if not sources:
+        sources = ["ddg", "openverse", "commons"]
+
+    return {
+        "license": lic,
+        "license_type": lt,
+        "aspect": aspect,
+        "size": size,
+        "extension": ext,
+        "sources": sources,
+    }
+
+
+def _image_search_url_extras(opts: dict | None) -> str:
+    """Query string fragment (no leading ?) for links & infinite scroll."""
+    if not opts:
+        return ""
+    pairs = [("img_adv", "1")]
+    if opts.get("license"):
+        pairs.append(("img_license", opts["license"]))
+    if opts.get("license_type"):
+        pairs.append(("img_license_type", opts["license_type"]))
+    if opts.get("aspect"):
+        pairs.append(("img_aspect", opts["aspect"]))
+    if opts.get("size"):
+        pairs.append(("img_size", opts["size"]))
+    if opts.get("extension"):
+        pairs.append(("img_ext", opts["extension"]))
+    for s in opts.get("sources") or []:
+        pairs.append(("img_src", s))
+    return urlencode(pairs, doseq=True)
 
 
 def _try_wikimedia_commons(query):
@@ -4381,12 +4628,25 @@ def _try_onion_ddg(query, max_results=30):
 
 # ---- Orchestrator ----
 
-def _fetch_results(query, page, search_type, region=None, lang=None, operators=None, time_filter=None, safesearch="off"):
+def _fetch_results(
+    query,
+    page,
+    search_type,
+    region=None,
+    lang=None,
+    operators=None,
+    time_filter=None,
+    safesearch="off",
+    image_opts=None,
+):
     """Fetch results with caching. Returns paginated slice."""
     operators = operators or {}
     # Include operators in cache key to prevent cross-contamination
     ops_str = "&".join(f"{k}={','.join(v)}" for k, v in sorted(operators.items())) if operators else ""
-    cache_key = f"{query}|{search_type}|{region or ''}|{lang or ''}|{ops_str}|{time_filter or ''}|{safesearch or 'off'}"
+    img_seg = ""
+    if image_opts and search_type == "images":
+        img_seg = "|img:" + json.dumps(image_opts, sort_keys=True, separators=(",", ":"))
+    cache_key = f"{query}|{search_type}|{region or ''}|{lang or ''}|{ops_str}|{time_filter or ''}|{safesearch or 'off'}{img_seg}"
 
     # Check cache
     with _cache_lock:
@@ -4466,13 +4726,24 @@ def _fetch_results(query, page, search_type, region=None, lang=None, operators=N
             logger.info("AlternativeTo empty, falling back to DDG alternatives search")
             results = _try_alternatives_ddg(effective_query, max_results)
     else:
-        # Layer 1: DDG multi-backend (with timeout guard)
-        try:
-            with ThreadPoolExecutor(max_workers=1) as _ddg_pool:
-                _ddg_fut = _ddg_pool.submit(_try_ddg, effective_query, max_results, search_type, region, time_filter, safesearch)
-                results = _ddg_fut.result(timeout=5)
-        except Exception:
-            logger.exception("DDG failed/timed out for query=%s type=%s", query, search_type)
+        results = []
+        skip_ddg = False
+        if search_type == "images" and image_opts:
+            results = _fetch_images_multi_source(
+                effective_query, max_results, region, time_filter, safesearch, image_opts
+            )
+            skip_ddg = bool(results)
+
+        if not skip_ddg:
+            # Layer 1: DDG multi-backend (with timeout guard)
+            try:
+                with ThreadPoolExecutor(max_workers=1) as _ddg_pool:
+                    _ddg_fut = _ddg_pool.submit(
+                        _try_ddg, effective_query, max_results, search_type, region, time_filter, safesearch
+                    )
+                    results = _ddg_fut.result(timeout=5)
+            except Exception:
+                logger.exception("DDG failed/timed out for query=%s type=%s", query, search_type)
 
         # Text: parallel multi-source enrichment — always blend deeper sources alongside DDG
         if search_type == "text":

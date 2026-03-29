@@ -1014,6 +1014,8 @@ document.addEventListener("DOMContentLoaded", () => {
     if (regionVal) scrollUrl += `&region=${encodeURIComponent(regionVal)}`;
     if (langVal) scrollUrl += `&lang=${encodeURIComponent(langVal)}`;
     if (dfVal) scrollUrl += `&df=${encodeURIComponent(dfVal)}`;
+    const imgExtra = sentinel.dataset.imgExtra;
+    if (type === "images" && imgExtra) scrollUrl += `&${imgExtra}`;
     fetch(scrollUrl, {
       headers: { "X-Requested-With": "XMLHttpRequest" },
     })
@@ -1032,7 +1034,9 @@ document.addEventListener("DOMContentLoaded", () => {
             el.dataset.full = r.image || r.thumbnail;
             el.dataset.title = r.title;
             el.dataset.source = r.source || "";
-            el.innerHTML = `<img src="${esc(r.thumbnail || r.image)}" alt="${esc(r.title)}" loading="lazy"><div class="image-card-info"><span class="image-title">${esc(r.title)}</span>${r.source ? `<span class="image-source">${esc(r.source)}</span>` : ""}</div>`;
+            el.dataset.license = r.license || "";
+            const lic = r.license ? `<span class="image-license" title="License">${esc(r.license)}</span>` : "";
+            el.innerHTML = `<img src="${esc(r.thumbnail || r.image)}" alt="${esc(r.title)}" loading="lazy"><div class="image-card-info"><span class="image-title">${esc(r.title)}</span>${r.source ? `<span class="image-source">${esc(r.source)}</span>` : ""}${lic}</div>`;
           } else if (type === "videos") {
             el.className = "result video-result";
             el.innerHTML = `${r.thumbnail ? `<a href="${esc(r.url)}" target="_blank" rel="noopener" class="video-thumb"><img src="${esc(r.thumbnail)}" alt="${esc(r.title)}" loading="lazy">${r.duration ? `<span class="duration">${esc(r.duration)}</span>` : ""}</a>` : ""}<div class="result-text"><a href="${esc(r.url)}" target="_blank" rel="noopener" class="result-title">${esc(r.title)}</a>${faviconImg(r.url)}<cite class="result-url">${esc(r.publisher || "")}</cite><p class="result-snippet">${esc(r.description || "")}</p></div>`;
@@ -1072,6 +1076,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const lightboxImg = document.getElementById("lightbox-img");
   const lightboxTitle = document.getElementById("lightbox-title");
   const lightboxSource = document.getElementById("lightbox-source");
+  const lightboxTools = document.getElementById("lightbox-tools");
   const lightboxClose = document.getElementById("lightbox-close");
 
   let openLightbox = null;
@@ -1082,6 +1087,15 @@ document.addEventListener("DOMContentLoaded", () => {
       lightboxImg.alt = card.dataset.title;
       lightboxTitle.textContent = card.dataset.title;
       lightboxSource.href = card.dataset.url;
+      if (lightboxTools) {
+        const u = card.dataset.full;
+        if (u) {
+          lightboxTools.href = "https://imgops.com/" + encodeURIComponent(u);
+          lightboxTools.hidden = false;
+        } else {
+          lightboxTools.hidden = true;
+        }
+      }
       requestAnimationFrame(() => { lightbox.classList.add("active"); document.body.style.overflow = "hidden"; });
     };
     function closeLightbox() {

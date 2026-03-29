@@ -424,7 +424,7 @@
 
             <nav class="search-tabs">
                 <a href="/search?q={{ query|urlencode }}&type=text{% if region %}&region={{ region }}{% endif %}" class="tab {% if search_type == 'text' %}active{% endif %}">All</a>
-                <a href="/search?q={{ query|urlencode }}&type=images{% if region %}&region={{ region }}{% endif %}" class="tab {% if search_type == 'images' %}active{% endif %}">Images</a>
+                <a href="/search?q={{ query|urlencode }}&type=images{% if region %}&region={{ region }}{% endif %}{% if time_filter %}&df={{ time_filter|urlencode }}{% endif %}{% if img_scroll_extras %}&amp;{{ img_scroll_extras }}{% endif %}" class="tab {% if search_type == 'images' %}active{% endif %}">Images</a>
                 <a href="/search?q={{ query|urlencode }}&type=news{% if region %}&region={{ region }}{% endif %}" class="tab {% if search_type == 'news' %}active{% endif %}">News</a>
                 <a href="/search?q={{ query|urlencode }}&type=videos{% if region %}&region={{ region }}{% endif %}" class="tab {% if search_type == 'videos' %}active{% endif %}">Videos</a>
                 <a href="/search?q={{ query|urlencode }}&type=code{% if region %}&region={{ region }}{% endif %}" class="tab {% if search_type == 'code' %}active{% endif %}">Code</a>
@@ -491,6 +491,81 @@
                 </div>
                 {% endif %}
             </div>
+
+            {% if search_type == 'images' %}
+            <section class="img-adv-section" aria-label="Advanced image search">
+                <details class="img-adv-details" {% if image_search_advanced %}open{% endif %}>
+                    <summary class="img-adv-summary">
+                        <span class="img-adv-summary-title">Advanced image search</span>
+                        <span class="img-adv-badge">Openverse · Commons · Archive</span>
+                    </summary>
+                    <p class="img-adv-lead">Fuse web results with open catalogues using the <a href="https://api.openverse.org/v1/images/" target="_blank" rel="noopener noreferrer">Openverse API</a> (open index), <a href="https://commons.wikimedia.org/" target="_blank" rel="noopener noreferrer">Wikimedia Commons</a>, and the <a href="https://archive.org/" target="_blank" rel="noopener noreferrer">Internet Archive</a>. Filters map to Openverse where applicable.</p>
+                    <div class="img-adv-controls">
+                        <label class="img-adv-toggle">
+                            <input type="checkbox" name="img_adv" value="1" form="search-form" {% if image_search_advanced %}checked{% endif %}>
+                            Enable fusion &amp; filters
+                        </label>
+                        <div class="img-adv-grid">
+                            <label class="img-adv-field">License
+                                <select name="img_license" form="search-form" class="img-adv-select">
+                                    <option value="" {% if not img_ov_license %}selected{% endif %}>Any</option>
+                                    <option value="cc0" {% if img_ov_license == 'cc0' %}selected{% endif %}>CC0</option>
+                                    <option value="pdm" {% if img_ov_license == 'pdm' %}selected{% endif %}>Public domain mark</option>
+                                    <option value="by" {% if img_ov_license == 'by' %}selected{% endif %}>CC BY</option>
+                                    <option value="by-sa" {% if img_ov_license == 'by-sa' %}selected{% endif %}>CC BY-SA</option>
+                                    <option value="by-nc" {% if img_ov_license == 'by-nc' %}selected{% endif %}>CC BY-NC</option>
+                                    <option value="by-nc-sa" {% if img_ov_license == 'by-nc-sa' %}selected{% endif %}>CC BY-NC-SA</option>
+                                    <option value="by-nd" {% if img_ov_license == 'by-nd' %}selected{% endif %}>CC BY-ND</option>
+                                    <option value="by-nc-nd" {% if img_ov_license == 'by-nc-nd' %}selected{% endif %}>CC BY-NC-ND</option>
+                                </select>
+                            </label>
+                            <label class="img-adv-field">Use type
+                                <select name="img_license_type" form="search-form" class="img-adv-select">
+                                    <option value="" {% if not img_ov_license_type %}selected{% endif %}>Any</option>
+                                    <option value="commercial" {% if img_ov_license_type == 'commercial' %}selected{% endif %}>Commercial use</option>
+                                    <option value="modification" {% if img_ov_license_type == 'modification' %}selected{% endif %}>Modifiable</option>
+                                </select>
+                            </label>
+                            <label class="img-adv-field">Aspect
+                                <select name="img_aspect" form="search-form" class="img-adv-select">
+                                    <option value="" {% if not img_ov_aspect %}selected{% endif %}>Any</option>
+                                    <option value="square" {% if img_ov_aspect == 'square' %}selected{% endif %}>Square</option>
+                                    <option value="tall" {% if img_ov_aspect == 'tall' %}selected{% endif %}>Tall</option>
+                                    <option value="wide" {% if img_ov_aspect == 'wide' %}selected{% endif %}>Wide</option>
+                                </select>
+                            </label>
+                            <label class="img-adv-field">Size
+                                <select name="img_size" form="search-form" class="img-adv-select">
+                                    <option value="" {% if not img_ov_size %}selected{% endif %}>Any</option>
+                                    <option value="small" {% if img_ov_size == 'small' %}selected{% endif %}>Small</option>
+                                    <option value="medium" {% if img_ov_size == 'medium' %}selected{% endif %}>Medium</option>
+                                    <option value="large" {% if img_ov_size == 'large' %}selected{% endif %}>Large</option>
+                                </select>
+                            </label>
+                            <label class="img-adv-field">Format
+                                <select name="img_ext" form="search-form" class="img-adv-select">
+                                    <option value="" {% if not img_ov_ext %}selected{% endif %}>Any</option>
+                                    <option value="jpg" {% if img_ov_ext == 'jpg' %}selected{% endif %}>JPEG</option>
+                                    <option value="png" {% if img_ov_ext == 'png' %}selected{% endif %}>PNG</option>
+                                    <option value="gif" {% if img_ov_ext == 'gif' %}selected{% endif %}>GIF</option>
+                                    <option value="svg" {% if img_ov_ext == 'svg' %}selected{% endif %}>SVG</option>
+                                    <option value="webp" {% if img_ov_ext == 'webp' %}selected{% endif %}>WebP</option>
+                                </select>
+                            </label>
+                        </div>
+                        <fieldset class="img-adv-sources">
+                            <legend class="img-adv-legend">Sources</legend>
+                            <label class="img-adv-check"><input type="checkbox" name="img_src" value="ddg" form="search-form" {% if 'ddg' in img_src_checked %}checked{% endif %}> Web (DuckDuckGo)</label>
+                            <label class="img-adv-check"><input type="checkbox" name="img_src" value="openverse" form="search-form" {% if 'openverse' in img_src_checked %}checked{% endif %}> Openverse</label>
+                            <label class="img-adv-check"><input type="checkbox" name="img_src" value="commons" form="search-form" {% if 'commons' in img_src_checked %}checked{% endif %}> Wikimedia Commons</label>
+                            <label class="img-adv-check"><input type="checkbox" name="img_src" value="archive" form="search-form" {% if 'archive' in img_src_checked %}checked{% endif %}> Internet Archive</label>
+                        </fieldset>
+                        <button type="submit" form="search-form" class="img-adv-submit">Apply with search</button>
+                    </div>
+                </details>
+            </section>
+            {% endif %}
+
             {% endif %}
         </div>
 
@@ -834,11 +909,12 @@
             {% elif results %}
                 {% for r in results %}
                     {% if search_type == 'images' %}
-                    <div class="image-card" data-full="{{ r.image or r.thumbnail }}" data-title="{{ r.title }}" data-source="{{ r.source or '' }}" data-url="{{ r.url }}">
+                    <div class="image-card" data-full="{{ r.image or r.thumbnail }}" data-title="{{ r.title }}" data-source="{{ r.source or '' }}" data-url="{{ r.url }}" data-license="{{ r.license or '' }}">
                         <img src="{{ r.thumbnail or r.image }}" alt="{{ r.title }}" loading="lazy">
                         <div class="image-card-info">
                             <span class="image-title">{{ r.title }}</span>
                             {% if r.source %}<span class="image-source">{{ r.source }}</span>{% endif %}
+                            {% if r.license %}<span class="image-license" title="License">{{ r.license }}</span>{% endif %}
                         </div>
                     </div>
                     {% elif search_type == 'videos' %}
@@ -919,7 +995,7 @@
         <div id="trending-searches" class="trending-searches" style="display:none"></div>
 
         {% if has_more %}
-        <div id="scroll-sentinel" data-page="1" data-query="{{ query }}" data-type="{{ search_type }}" data-has-more="true">
+        <div id="scroll-sentinel" data-page="1" data-query="{{ query }}" data-type="{{ search_type }}" data-has-more="true" data-img-extra="{{ img_scroll_extras or '' }}">
             <div class="scroll-loader">
                 <div class="spinner"></div>
             </div>
@@ -1008,6 +1084,7 @@
             <div class="lightbox-info">
                 <p class="lightbox-title" id="lightbox-title"></p>
                 <a class="lightbox-source" id="lightbox-source" href="" target="_blank" rel="noopener">View source</a>
+                <a class="lightbox-tools" id="lightbox-tools" href="#" target="_blank" rel="noopener noreferrer">Image tools (reverse search &amp; metadata)</a>
             </div>
         </div>
     </div>

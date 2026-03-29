@@ -90,6 +90,13 @@ class TestRoutes:
         resp = client.get("/search?q=cats&type=images")
         assert resp.status_code == 200
 
+    def test_images_advanced_search_panel(self, client, mock_ddg):
+        """Advanced image UI + img_adv=1 still returns results."""
+        resp = client.get("/search?q=cats&type=images&img_adv=1&img_license=cc0")
+        assert resp.status_code == 200
+        assert b"Advanced image search" in resp.data
+        assert b"Openverse" in resp.data
+
     def test_search_news(self, client, mock_ddg):
         resp = client.get("/search?q=tech&type=news")
         assert resp.status_code == 200

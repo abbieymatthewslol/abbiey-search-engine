@@ -1055,7 +1055,139 @@ article.result.code-result { font-size: .9rem; }
   overflow: hidden;
 }
 .image-source { display: block; font-size: .625rem; color: rgba(255,255,255,.7); }
+.image-license {
+  display: inline-block;
+  margin-top: .2rem;
+  font-size: .58rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,.95);
+  background: rgba(0,0,0,.35);
+  padding: .1rem .35rem;
+  border-radius: 4px;
+}
 .image-overlay { display: none; }
+
+/* Advanced image search (Openverse + Commons + Archive) */
+.img-adv-section {
+  margin-top: 1rem;
+  width: 100%;
+  max-width: 720px;
+}
+.img-adv-details {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-surface);
+  overflow: hidden;
+}
+.img-adv-summary {
+  list-style: none;
+  cursor: pointer;
+  padding: .65rem 1rem;
+  font-size: .8125rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .5rem;
+}
+.img-adv-summary::-webkit-details-marker { display: none; }
+.img-adv-summary-title { color: var(--text); }
+.img-adv-badge {
+  font-size: .65rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: .2rem .5rem;
+  border-radius: 99px;
+  border: 1px solid var(--border);
+  background: var(--bg-surface-2);
+}
+.img-adv-lead {
+  margin: 0 1rem .75rem;
+  font-size: .75rem;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+.img-adv-lead a { color: var(--accent); font-weight: 500; }
+.img-adv-controls { padding: 0 1rem 1rem; display: flex; flex-direction: column; gap: .75rem; }
+.img-adv-toggle {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  font-size: .8125rem;
+  color: var(--text);
+  cursor: pointer;
+}
+.img-adv-toggle input { accent-color: var(--accent); }
+.img-adv-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: .5rem;
+}
+.img-adv-field {
+  display: flex;
+  flex-direction: column;
+  gap: .25rem;
+  font-size: .68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+.img-adv-select {
+  font-size: .8125rem;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  padding: .4rem .5rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+}
+.img-adv-sources {
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  padding: .5rem .65rem;
+  margin: 0;
+}
+.img-adv-legend {
+  font-size: .68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  padding: 0 .25rem;
+}
+.img-adv-check {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  margin-right: .75rem;
+  margin-top: .35rem;
+  font-size: .78rem;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.img-adv-check input { accent-color: var(--accent); }
+.img-adv-submit {
+  align-self: flex-start;
+  padding: .45rem 1rem;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: var(--accent);
+  color: var(--bg);
+  font-size: .8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+.img-adv-submit:hover { opacity: .9; }
+[data-theme="light"] .img-adv-submit { color: #fafaf9; }
 
 /* No results */
 .no-results {
@@ -2200,7 +2332,16 @@ article.result.code-result { font-size: .9rem; }
 }
 .lightbox-info { text-align: center; }
 .lightbox-title, .lightbox-caption { font-size: .875rem; color: rgba(255,255,255,.7); margin-bottom: .25rem; }
-.lightbox-source { font-size: .8125rem; color: var(--accent); }
+.lightbox-source { font-size: .8125rem; color: var(--accent); display: inline-block; margin-right: .75rem; }
+.lightbox-tools {
+  display: block;
+  margin-top: .5rem;
+  font-size: .75rem;
+  color: rgba(255,255,255,.55);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.lightbox-tools:hover { color: rgba(255,255,255,.85); }
 
 /* ===== 16. AUTH PAGES ===== */
 /* Aliases for older deployed templates that use auth-page/auth-card naming */
