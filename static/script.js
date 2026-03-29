@@ -1,6 +1,175 @@
 document.addEventListener("DOMContentLoaded", () => {
   const html = document.documentElement;
 
+  // ===== Soft paywall: 7 free searches, Stripe $7, or 24h wait (client-side) =====
+  (function initPaywall() {
+    const LS = {
+      count: "abbiey_search_count",
+      unlocked: "abbiey_unlocked",
+      resume: "abbiey_paywall_resume_at",
+      sessUrl: "abbiey_counted_search_url",
+    };
+    const FREE_LIMIT = 7;
+    const DAY_MS = 24 * 60 * 60 * 1000;
+
+    function unlocked() {
+      return localStorage.getItem(LS.unlocked) === "1";
+    }
+    function getCount() {
+      return parseInt(localStorage.getItem(LS.count) || "0", 10) || 0;
+    }
+    function setCount(n) {
+      localStorage.setItem(LS.count, String(Math.max(0, n)));
+    }
+    function getResume() {
+      return parseInt(localStorage.getItem(LS.resume) || "0", 10) || 0;
+    }
+    function setResume(ts) {
+      localStorage.setItem(LS.resume, String(ts));
+    }
+    function clearQuotaState() {
+      localStorage.removeItem(LS.count);
+      localStorage.removeItem(LS.resume);
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("unlocked") === "1" || params.get("paid") === "1") {
+      localStorage.setItem(LS.unlocked, "1");
+      clearQuotaState();
+      params.delete("unlocked");
+      params.delete("paid");
+      const qs = params.toString();
+      const nu = window.location.pathname + (qs ? "?" + qs : "") + window.location.hash;
+      window.history.replaceState({}, "", nu);
+    }
+
+    const resumeAt = getResume();
+    if (resumeAt && Date.now() >= resumeAt) {
+      clearQuotaState();
+    }
+
+    const overlay = document.getElementById("paywall-overlay");
+    const titleEl = document.getElementById("paywall-title");
+    const subEl = document.getElementById("paywall-subtitle");
+    const closeBtn = document.getElementById("paywall-close");
+    const waitBtn = document.getElementById("paywall-wait-24h");
+    if (!overlay || !titleEl || !subEl) return;
+
+    function formatWait() {
+      const r = getResume();
+      if (!r || Date.now() >= r) return "";
+      const h = Math.ceil((r - Date.now()) / 3600000);
+      return h < 1 ? "less than an hour" : `about ${h} hour${h === 1 ? "" : "s"}`;
+    }
+
+    function showPaywall(cooldownOnly) {
+      overlay.hidden = false;
+      overlay.setAttribute("aria-hidden", "false");
+      document.body.style.overflow = "hidden";
+      if (cooldownOnly) {
+        titleEl.textContent = "Almost there";
+        subEl.textContent = `Your free searches reset in ${formatWait()}. You can still unlock unlimited anytime with a one-time $7 payment.`;
+      } else {
+        titleEl.textContent = "Whoops! You've run out of free searches.";
+        subEl.textContent = "Make a one-time payment for unlimited searches, or wait 24 hours for your free quota to reset.";
+      }
+    }
+
+    function hidePaywall() {
+      overlay.hidden = true;
+      overlay.setAttribute("aria-hidden", "true");
+      document.body.style.overflow = "";
+    }
+
+    /** Same logical search across pagination should count once (infinite scroll uses ?page=). */
+    function normalizeSearchUrlKey() {
+      try {
+        const u = new URL(window.location.href);
+        u.searchParams.delete("page");
+        const p = u.searchParams;
+        if (typeof p.sort === "function") p.sort();
+        const qs = p.toString();
+        return u.pathname + (qs ? "?" + qs : "");
+      } catch (_) {
+        return window.location.pathname + window.location.search;
+      }
+    }
+
+    if (closeBtn) closeBtn.addEventListener("click", hidePaywall);
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) hidePaywall();
+    });
+    if (waitBtn) {
+      waitBtn.addEventListener("click", () => {
+        setResume(Date.now() + DAY_MS);
+        hidePaywall();
+      });
+    }
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !overlay.hidden) hidePaywall();
+    });
+
+    const qFromPage =
+      typeof window.__searchQuery !== "undefined" && window.__searchQuery
+        ? String(window.__searchQuery).trim()
+        : "";
+    if (qFromPage && !unlocked()) {
+      const r = getResume();
+      if (!r || Date.now() >= r) {
+        const urlKey = normalizeSearchUrlKey();
+        if (sessionStorage.getItem(LS.sessUrl) !== urlKey) {
+          sessionStorage.setItem(LS.sessUrl, urlKey);
+          setCount(getCount() + 1);
+        }
+      }
+    }
+
+    function mustBlockNavigation() {
+      if (unlocked()) return false;
+      const r = getResume();
+      if (r && Date.now() < r) return true;
+      return getCount() >= FREE_LIMIT;
+    }
+
+    function isCooldownOnly() {
+      const r = getResume();
+      return !!(r && Date.now() < r);
+    }
+
+    const form = document.getElementById("search-form");
+    if (form) {
+      form.addEventListener(
+        "submit",
+        (e) => {
+          const input = document.getElementById("search-input");
+          const qq = input && input.value.trim();
+          if (!qq) return;
+          if (!mustBlockNavigation()) return;
+          e.preventDefault();
+          e.stopPropagation();
+          showPaywall(isCooldownOnly());
+        },
+        true
+      );
+    }
+
+    const tabs = document.querySelector(".search-tabs");
+    if (tabs) {
+      tabs.addEventListener(
+        "click",
+        (e) => {
+          const a = e.target.closest("a[href]");
+          if (!a || !a.getAttribute("href") || !a.getAttribute("href").includes("/search")) return;
+          if (!mustBlockNavigation()) return;
+          e.preventDefault();
+          e.stopPropagation();
+          showPaywall(isCooldownOnly());
+        },
+        true
+      );
+    }
+  })();
+
   // ===== Search loading indicator =====
   const searchForm = document.getElementById("search-form");
   const searchBtn = document.querySelector(".search-btn");

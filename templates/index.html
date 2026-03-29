@@ -1007,6 +1007,21 @@
         </div>
     </div>
 
+    {# ===== Subtle paywall (client-side quota; Stripe Payment Link) ===== #}
+    <div id="paywall-overlay" class="paywall-overlay" hidden aria-hidden="true">
+        <div class="paywall-card" role="dialog" aria-modal="true" aria-labelledby="paywall-title">
+            <button type="button" class="paywall-close" id="paywall-close" aria-label="Close">&times;</button>
+            <h2 id="paywall-title" class="paywall-title">Whoops! You&rsquo;ve run out of free searches.</h2>
+            <p id="paywall-subtitle" class="paywall-subtitle">Make a one-time payment for unlimited searches, or wait 24 hours for your free quota to reset.</p>
+            <p class="paywall-hint">Pay securely with a card or PayPal &mdash; handled by Stripe.</p>
+            <div class="paywall-actions">
+                <a href="https://buy.stripe.com/28E7sKbEo0K07r0al1b7y0b" class="paywall-btn paywall-btn-primary" id="paywall-stripe-link" target="_blank" rel="noopener noreferrer">Unlock &mdash; $7 one-time</a>
+                <button type="button" class="paywall-btn paywall-btn-ghost" id="paywall-wait-24h">Wait 24 hours</button>
+            </div>
+            <p class="paywall-footnote">No subscription. After checkout, come back to this site &mdash; your unlock applies automatically when you land from Stripe.</p>
+        </div>
+    </div>
+
     <footer>
         <p>abbiey.search &mdash; Search with clarity.</p>
     </footer>
