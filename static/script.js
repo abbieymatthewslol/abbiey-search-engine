@@ -341,6 +341,51 @@ document.addEventListener("DOMContentLoaded", () => {
         if (rSelect) rSelect.value = savedReg;
       }
     }
+
+    const _LP = {
+      previewW: "abbiey_preview_panel_w",
+      previewDocked: "abbiey_preview_docked",
+      chatW: "abbiey_chat_w",
+      chatH: "abbiey_chat_h",
+    };
+    const _pw = localStorage.getItem(_LP.previewW);
+    if (_pw) {
+      const n = parseInt(_pw, 10);
+      if (!Number.isNaN(n) && n >= 240 && n <= 560) {
+        html.style.setProperty("--preview-panel-width", `${n}px`);
+      }
+    }
+    const _cw = localStorage.getItem(_LP.chatW);
+    if (_cw) {
+      const n = parseInt(_cw, 10);
+      if (!Number.isNaN(n) && n >= 280 && n <= 520) {
+        html.style.setProperty("--chat-panel-width", `${n}px`);
+      }
+    }
+    const _ch = localStorage.getItem(_LP.chatH);
+    const _chatEl = document.getElementById("chat-panel");
+    if (_ch && _chatEl) {
+      const n = parseInt(_ch, 10);
+      if (!Number.isNaN(n) && n >= 220 && n <= 720) {
+        html.style.setProperty("--chat-panel-height", `${n}px`);
+        _chatEl.classList.add("chat-user-sized");
+      }
+    }
+    const _appL = document.querySelector(".app-layout");
+    if (localStorage.getItem(_LP.previewDocked) === "1" && _appL) {
+      _appL.classList.add("preview-docked-hidden");
+      const _prt = document.getElementById("preview-restore-tab");
+      if (_prt) _prt.hidden = false;
+    }
+
+    if (sessionStorage.getItem("abbiey_ai_summary_session_hide") === "1") {
+      const _aic = document.getElementById("ai-summary-card");
+      if (_aic && gs("aiSummary") === "true") {
+        _aic.style.display = "none";
+        const _air = document.getElementById("ai-summary-restore-wrap");
+        if (_air) _air.hidden = false;
+      }
+    }
   }
 
   applyAllSettings();
@@ -545,6 +590,9 @@ document.addEventListener("DOMContentLoaded", () => {
   wireToggle("ai-summary-toggle", "aiSummary", (checked) => {
     const c = document.getElementById("ai-summary-card");
     if (c) c.style.display = checked ? "" : "none";
+    const w = document.getElementById("ai-summary-restore-wrap");
+    if (w) w.hidden = true;
+    if (checked) sessionStorage.removeItem("abbiey_ai_summary_session_hide");
   });
   wireToggle("autocomplete-toggle", "autocomplete", null);
   wireToggle("persist-region-toggle", "persistRegion", null);
@@ -721,6 +769,22 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       })
       .catch(() => { aiCard.classList.add("ai-hidden"); });
+  }
+
+  const aiDismiss = document.getElementById("ai-summary-dismiss");
+  const aiRestoreWrap = document.getElementById("ai-summary-restore-wrap");
+  const aiRestoreBtn = document.getElementById("ai-summary-restore-tab");
+  if (aiDismiss && aiCard && aiRestoreWrap && aiRestoreBtn) {
+    aiDismiss.addEventListener("click", () => {
+      sessionStorage.setItem("abbiey_ai_summary_session_hide", "1");
+      aiCard.style.display = "none";
+      aiRestoreWrap.hidden = false;
+    });
+    aiRestoreBtn.addEventListener("click", () => {
+      sessionStorage.removeItem("abbiey_ai_summary_session_hide");
+      aiCard.style.display = "";
+      aiRestoreWrap.hidden = true;
+    });
   }
 
   // ===== Rotating placeholder =====
@@ -1178,11 +1242,101 @@ document.addEventListener("DOMContentLoaded", () => {
   const _previewLink = document.getElementById("preview-link");
 
   if (previewPanel && previewClose) {
+    const layoutRoot = document.querySelector(".app-layout");
+    const gutter = document.getElementById("layout-gutter-preview");
+    const previewDockBtn = document.getElementById("preview-dock-btn");
+    const previewRestoreTab = document.getElementById("preview-restore-tab");
+    const LP_PREVIEW_W = "abbiey_preview_panel_w";
+    const LP_PREVIEW_DOCKED = "abbiey_preview_docked";
+
+    function undockPreviewIfNeeded() {
+      if (!layoutRoot || !layoutRoot.classList.contains("preview-docked-hidden")) return;
+      layoutRoot.classList.remove("preview-docked-hidden");
+      localStorage.removeItem(LP_PREVIEW_DOCKED);
+      if (previewRestoreTab) previewRestoreTab.hidden = true;
+    }
+
     previewClose.addEventListener("click", () => {
       previewPanel.classList.remove("open");
       previewOpen = false;
       clearResultHighlight();
     });
+
+    if (previewDockBtn && layoutRoot) {
+      previewDockBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        layoutRoot.classList.add("preview-docked-hidden");
+        localStorage.setItem(LP_PREVIEW_DOCKED, "1");
+        previewPanel.classList.remove("open");
+        previewOpen = false;
+        clearResultHighlight();
+        activeResultIdx = -1;
+        if (previewRestoreTab) previewRestoreTab.hidden = false;
+      });
+    }
+    if (previewRestoreTab && layoutRoot) {
+      previewRestoreTab.addEventListener("click", () => {
+        layoutRoot.classList.remove("preview-docked-hidden");
+        localStorage.removeItem(LP_PREVIEW_DOCKED);
+        previewRestoreTab.hidden = true;
+      });
+    }
+
+    function clampPreviewWidth(px) {
+      const minW = 240;
+      const maxW = Math.min(560, Math.max(minW, window.innerWidth - 400));
+      return Math.round(Math.max(minW, Math.min(maxW, px)));
+    }
+
+    function persistPreviewWidth(w) {
+      html.style.setProperty("--preview-panel-width", `${w}px`);
+      localStorage.setItem(LP_PREVIEW_W, String(w));
+    }
+
+    if (gutter) {
+      let dragPrev = false;
+      function onMove(clientX) {
+        const w = clampPreviewWidth(window.innerWidth - clientX);
+        persistPreviewWidth(w);
+        gutter.setAttribute("aria-valuenow", String(w));
+      }
+      gutter.addEventListener("mousedown", (e) => {
+        if (window.innerWidth <= 1100) return;
+        dragPrev = true;
+        e.preventDefault();
+        document.body.style.cursor = "col-resize";
+        document.body.style.userSelect = "none";
+        onMove(e.clientX);
+      });
+      document.addEventListener("mousemove", (e) => {
+        if (!dragPrev) return;
+        onMove(e.clientX);
+      });
+      document.addEventListener("mouseup", () => {
+        if (!dragPrev) return;
+        dragPrev = false;
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+      });
+      gutter.addEventListener("keydown", (e) => {
+        if (window.innerWidth <= 1100) return;
+        if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+        e.preventDefault();
+        const cur = parseInt(
+          getComputedStyle(html).getPropertyValue("--preview-panel-width").trim() || "340",
+          10,
+        ) || 340;
+        const next = clampPreviewWidth(cur + (e.key === "ArrowRight" ? 12 : -12));
+        persistPreviewWidth(next);
+        gutter.setAttribute("aria-valuenow", String(next));
+      });
+      gutter.addEventListener("dblclick", () => {
+        if (window.innerWidth <= 1100) return;
+        html.style.removeProperty("--preview-panel-width");
+        localStorage.removeItem(LP_PREVIEW_W);
+        gutter.setAttribute("aria-valuenow", "340");
+      });
+    }
 
     // Cached result elements — invalidated on DOM changes
     let _cachedResults = null;
@@ -1223,6 +1377,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function loadPreview(url) {
       if (!url || !url.startsWith("http")) return;
+
+      undockPreviewIfNeeded();
 
       // Show panel if not open
       if (!previewOpen) {
@@ -1364,17 +1520,122 @@ document.addEventListener("DOMContentLoaded", () => {
     let chatHistory = [];
     const searchQuery = window.__searchQuery || "";
     let chatOpen = false;
+    const chatPeek = document.getElementById("chat-peek");
+    const LP_CHAT_W = "abbiey_chat_w";
+    const LP_CHAT_H = "abbiey_chat_h";
 
     function toggleChat() {
       chatOpen = !chatOpen;
       chatPanel.classList.toggle("open", chatOpen);
+      if (!chatOpen) chatPanel.classList.remove("collapsed");
       chatFab.classList.toggle("hidden", chatOpen);
       if (chatOpen && chatInput) chatInput.focus();
     }
 
     chatFab.addEventListener("click", toggleChat);
-    chatToggle.addEventListener("click", toggleChat);
-    chatNew.addEventListener("click", () => { chatHistory = []; chatMessages.innerHTML = ""; chatWelcome.style.display = ""; });
+    if (chatToggle) {
+      chatToggle.addEventListener("click", (e) => {
+        e.stopPropagation();
+        toggleChat();
+      });
+    }
+    if (chatPeek) {
+      chatPeek.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (!chatOpen) return;
+        chatPanel.classList.toggle("collapsed");
+      });
+    }
+    if (chatNew) {
+      chatNew.addEventListener("click", (e) => {
+        e.stopPropagation();
+        chatHistory = [];
+        chatMessages.innerHTML = "";
+        chatWelcome.style.display = "";
+      });
+    }
+
+    const resizeN = document.getElementById("chat-resize-n");
+    const resizeW = document.getElementById("chat-resize-w");
+    function clampChatW(w) {
+      return Math.round(Math.max(280, Math.min(520, w)));
+    }
+    function clampChatH(h) {
+      return Math.round(Math.max(220, Math.min(720, h)));
+    }
+    let chatDragN = false;
+    let chatDragW = false;
+    let chatResizeStartY = 0;
+    let chatResizeStartH = 0;
+    let chatResizeStartX = 0;
+    let chatResizeStartW = 0;
+    if (resizeN) {
+      resizeN.addEventListener("mousedown", (e) => {
+        if (window.innerWidth <= 768 || !chatPanel.classList.contains("open")) return;
+        e.preventDefault();
+        e.stopPropagation();
+        chatDragN = true;
+        chatResizeStartY = e.clientY;
+        chatResizeStartH = chatPanel.getBoundingClientRect().height;
+        document.body.style.userSelect = "none";
+        document.body.style.cursor = "ns-resize";
+      });
+    }
+    if (resizeW) {
+      resizeW.addEventListener("mousedown", (e) => {
+        if (window.innerWidth <= 768 || !chatPanel.classList.contains("open")) return;
+        e.preventDefault();
+        e.stopPropagation();
+        chatDragW = true;
+        chatResizeStartX = e.clientX;
+        chatResizeStartW = chatPanel.getBoundingClientRect().width;
+        document.body.style.userSelect = "none";
+        document.body.style.cursor = "ew-resize";
+      });
+    }
+    document.addEventListener("mousemove", (e) => {
+      if (chatDragN) {
+        const nh = clampChatH(chatResizeStartH + (chatResizeStartY - e.clientY));
+        html.style.setProperty("--chat-panel-height", `${nh}px`);
+        chatPanel.classList.add("chat-user-sized");
+      } else if (chatDragW) {
+        const nw = clampChatW(chatResizeStartW + (chatResizeStartX - e.clientX));
+        html.style.setProperty("--chat-panel-width", `${nw}px`);
+      }
+    });
+    document.addEventListener("mouseup", () => {
+      if (chatDragN) {
+        chatDragN = false;
+        document.body.style.userSelect = "";
+        document.body.style.cursor = "";
+        const h = chatPanel.getBoundingClientRect().height;
+        localStorage.setItem(LP_CHAT_H, String(clampChatH(Math.round(h))));
+      }
+      if (chatDragW) {
+        chatDragW = false;
+        document.body.style.userSelect = "";
+        document.body.style.cursor = "";
+        const w = chatPanel.getBoundingClientRect().width;
+        localStorage.setItem(LP_CHAT_W, String(clampChatW(Math.round(w))));
+      }
+    });
+    if (resizeN) {
+      resizeN.addEventListener("dblclick", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        chatPanel.classList.remove("chat-user-sized");
+        html.style.removeProperty("--chat-panel-height");
+        localStorage.removeItem(LP_CHAT_H);
+      });
+    }
+    if (resizeW) {
+      resizeW.addEventListener("dblclick", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        html.style.removeProperty("--chat-panel-width");
+        localStorage.removeItem(LP_CHAT_W);
+      });
+    }
 
     function sendMessage() {
       const msg = chatInput.value.trim();

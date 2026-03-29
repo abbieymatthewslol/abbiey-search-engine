@@ -575,8 +575,13 @@
         {% if search_type == 'text' %}
         <div class="ai-summary-card" id="ai-summary-card">
             <div class="ai-summary-header">
-                <svg class="ai-sparkle" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.09 6.26L20 10l-5.91 1.74L12 18l-2.09-6.26L4 10l5.91-1.74L12 2z"/></svg>
-                <span class="ai-summary-label">Summary</span>
+                <div class="ai-summary-header-left">
+                    <svg class="ai-sparkle" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.09 6.26L20 10l-5.91 1.74L12 18l-2.09-6.26L4 10l5.91-1.74L12 2z"/></svg>
+                    <span class="ai-summary-label">Summary</span>
+                </div>
+                <button type="button" class="ai-summary-dismiss" id="ai-summary-dismiss" aria-label="Hide summary for this visit" title="Hide for this visit">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 15l-6-6-6 6"/></svg>
+                </button>
             </div>
             <div class="ai-summary-body" id="ai-summary-body">
                 <div class="ai-skeleton">
@@ -586,6 +591,9 @@
                 </div>
             </div>
             <div class="ai-summary-sources" id="ai-summary-sources"></div>
+        </div>
+        <div class="ai-summary-restore-wrap" id="ai-summary-restore-wrap" hidden>
+            <button type="button" class="ai-summary-restore-btn" id="ai-summary-restore-tab">Show AI summary</button>
         </div>
         {% endif %}
 
@@ -1012,12 +1020,18 @@
 
     {# ===== RESULT PREVIEW PANEL ===== #}
     {% if query and search_type in ('text', 'news', 'code', 'onion', 'videos', 'images') %}
+    <div class="layout-gutter-preview" id="layout-gutter-preview" role="separator" aria-orientation="vertical" aria-label="Resize preview panel" tabindex="0"></div>
     <aside class="preview-panel" id="preview-panel">
         <div class="preview-header">
             <span class="preview-header-title">Preview</span>
-            <button class="preview-close-btn" id="preview-close" aria-label="Close preview">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
-            </button>
+            <div class="preview-header-actions">
+                <button type="button" class="preview-dock-btn" id="preview-dock-btn" aria-label="Hide preview column" title="Hide preview column">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 17l-5-5 5-5"/><path d="M18 17l-5-5 5-5"/></svg>
+                </button>
+                <button type="button" class="preview-close-btn" id="preview-close" aria-label="Close preview">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                </button>
+            </div>
         </div>
         <div class="preview-body" id="preview-body">
             <div class="preview-empty" id="preview-empty">
@@ -1041,16 +1055,21 @@
     {# ===== AI RESEARCH CHAT PANEL ===== #}
     {% if query %}
     <aside class="chat-panel" id="chat-panel">
+        <div class="chat-resize-handle chat-resize-n" id="chat-resize-n" aria-hidden="true"></div>
+        <div class="chat-resize-handle chat-resize-w" id="chat-resize-w" aria-hidden="true"></div>
         <div class="chat-header">
             <div class="chat-header-left">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
                 <span>Research Assistant</span>
             </div>
             <div class="chat-header-right">
-                <button class="chat-new-btn" id="chat-new" title="New research" aria-label="New research">
+                <button type="button" class="chat-new-btn" id="chat-new" title="New research" aria-label="New research">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
                 </button>
-                <button class="chat-toggle-btn" id="chat-toggle" aria-label="Toggle chat">
+                <button type="button" class="chat-peek-btn" id="chat-peek" title="Minimize to strip" aria-label="Minimize chat">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                </button>
+                <button type="button" class="chat-toggle-btn" id="chat-toggle" aria-label="Toggle chat">
                     <svg class="chevron-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
                 </button>
             </div>
@@ -1075,6 +1094,10 @@
     </button>
     {% endif %}
     </div>{# end .app-layout #}
+
+    {% if query %}
+    <button type="button" class="panel-restore-tab panel-restore-tab-preview" id="preview-restore-tab" hidden aria-label="Show preview column" title="Show preview column">&#8249;</button>
+    {% endif %}
 
     {# ===== IMAGE LIGHTBOX ===== #}
     <div class="lightbox-overlay" id="lightbox">
