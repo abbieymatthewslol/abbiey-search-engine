@@ -1496,12 +1496,14 @@ _TEMPLATE_DEFAULTS = dict(
 
 @app.route("/")
 def index():
-    return render_template("index.html", **_TEMPLATE_DEFAULTS)
+    """Marketing home; full search UI lives at /search (empty q shows the same UI)."""
+    return render_template("landing.html")
 
 
 @app.route("/landing")
 def landing():
-    return render_template("landing.html")
+    """Legacy URL — canonical home is /."""
+    return redirect("/", code=301)
 
 
 @app.route("/create-checkout-session", methods=["POST"])
@@ -5030,7 +5032,7 @@ def manifest():
         "name": "abbiey.search",
         "short_name": "abbiey",
         "description": "Private, fast, no-tracking search engine",
-        "start_url": "/",
+        "start_url": "/search",
         "display": "standalone",
         "background_color": "#000000",
         "theme_color": "#000000",
@@ -5041,9 +5043,9 @@ def manifest():
         ],
         "categories": ["search", "productivity", "utilities"],
         "shortcuts": [
-            {"name": "Web Search", "url": "/?type=text", "description": "Search the web privately"},
-            {"name": "Image Search", "url": "/?type=images", "description": "Search images privately"},
-            {"name": "News Search", "url": "/?type=news", "description": "Search news privately"}
+            {"name": "Web Search", "url": "/search?type=text", "description": "Search the web privately"},
+            {"name": "Image Search", "url": "/search?type=images", "description": "Search images privately"},
+            {"name": "News Search", "url": "/search?type=news", "description": "Search news privately"}
         ]
     })
 
@@ -5071,6 +5073,11 @@ def sitemap():
     <loc>https://www.abbieysearch.com/</loc>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://www.abbieysearch.com/search</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.95</priority>
   </url>
   <url>
     <loc>https://www.abbieysearch.com/login</loc>

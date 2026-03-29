@@ -22,6 +22,20 @@ class TestRoutes:
         assert b'name="google-site-verification"' in resp.data
         assert _GSC_DEFAULT_VERIFICATION.encode() in resp.data
 
+    def test_root_is_marketing_landing_not_search_ui(self, client):
+        """Homepage is the marketing page; full search UI is at /search."""
+        resp = client.get("/")
+        assert resp.status_code == 200
+        assert b"nobody's watching" in resp.data
+        assert b"install-banner" not in resp.data
+
+    def test_landing_path_redirects_to_root(self, client):
+        first = client.get("/landing", follow_redirects=False)
+        assert first.status_code == 301
+        final = client.get("/landing", follow_redirects=True)
+        assert final.status_code == 200
+        assert b"nobody's watching" in final.data
+
     def test_google_site_verification_meta_when_configured(self, client):
         import app as app_module
 
@@ -760,12 +774,12 @@ class TestPrivacyBadge:
     """Test privacy badge rendering in HTML."""
 
     def test_privacy_badge_on_homepage(self, client):
-        resp = client.get("/")
+        resp = client.get("/search?q=")
         assert b"privacy-badge" in resp.data
         assert b"0 trackers" in resp.data
 
     def test_privacy_popover_on_homepage(self, client):
-        resp = client.get("/")
+        resp = client.get("/search?q=")
         assert b"privacy-popover" in resp.data
         assert b"cookies set" in resp.data
         assert b"searches logged" in resp.data
@@ -776,11 +790,11 @@ class TestPrivacyBadge:
         assert b"privacy-badge" in resp.data
 
     def test_privacy_google_comparison(self, client):
-        resp = client.get("/")
+        resp = client.get("/search?q=")
         assert b"Google collects" in resp.data
 
     def test_privacy_tagline(self, client):
-        resp = client.get("/")
+        resp = client.get("/search?q=")
         assert b"Your privacy is our priority" in resp.data
 
 
