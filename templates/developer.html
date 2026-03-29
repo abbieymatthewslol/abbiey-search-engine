@@ -88,7 +88,11 @@
         <h2 class="dev-card-title">Using your key</h2>
         <p class="dev-card-text">Send the key on each request:</p>
         <pre class="dev-code-sample" translate="no"><code>Authorization: Bearer &lt;your_secret_key&gt;</code></pre>
-        <p class="dev-card-hint">Public JSON endpoints are listed at <a href="/api/access-resources">/api/access-resources</a>. Full API documentation may expand over time.</p>
+        <p class="dev-card-text">Verify authentication:</p>
+        <pre class="dev-code-sample" translate="no"><code>curl -s -H &quot;Authorization: Bearer YOUR_KEY&quot; \
+  https://www.abbieysearch.com/api/user/me</code></pre>
+        <p class="dev-card-text">Same header works for signed-in APIs such as <code>GET /api/user/bookmarks</code>, <code>POST /api/user/bookmarks</code>, <code>GET /api/user/recent-searches</code>, and <code>POST /api/user/history</code> (invalid keys return 401).</p>
+        <p class="dev-card-hint">Public JSON endpoints (no key required) are listed at <a href="/api/access-resources">/api/access-resources</a>.</p>
     </section>
 </main>
 {% endblock %}

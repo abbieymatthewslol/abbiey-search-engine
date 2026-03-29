@@ -869,6 +869,105 @@ class TestAdminQueryLog:
             assert isinstance(data["rows"], list)
 
 
+class TestApiKeyAuth:
+    """Bearer API keys authenticate /api/user/* the same as a browser session."""
+
+    def test_api_user_me_with_valid_bearer(self, client):
+        import uuid
+
+        from app import (
+            ABBIEY_API_KEY_PREFIX,
+            _hash_api_key,
+            _users_execute,
+        )
+        from werkzeug.security import generate_password_hash
+
+        suffix = uuid.uuid4().hex[:10]
+        email = f"keytest_{suffix}@example.com"
+        username = f"keyuser_{suffix}"
+        rows = _users_execute(
+            "INSERT INTO users (username, email, password_hash) VALUES (?,?,?)",
+            [username, email, generate_password_hash("testpass123")],
+            return_id=True,
+        )
+        uid = rows[0]["id"]
+        token = ABBIEY_API_KEY_PREFIX + __import__("secrets").token_urlsafe(28)
+        _users_execute(
+            "INSERT INTO api_keys (user_id, label, key_last_four, key_hash) VALUES (?,?,?,?)",
+            [uid, "pytest", token[-4:], _hash_api_key(token)],
+        )
+        r = client.get(
+            "/api/user/me",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert r.status_code == 200
+        data = r.get_json()
+        assert data["id"] == uid
+        assert data["username"] == username
+
+    def test_api_user_me_invalid_bearer_401(self, client):
+        r = client.get(
+            "/api/user/me",
+            headers={"Authorization": "Bearer abb_sk_live_not_a_real_key_xxxxxxxx"},
+        )
+        assert r.status_code == 401
+
+    def test_bookmarks_get_with_bearer(self, client):
+        import uuid
+
+        from app import ABBIEY_API_KEY_PREFIX, _hash_api_key, _users_execute
+        from werkzeug.security import generate_password_hash
+
+        suffix = uuid.uuid4().hex[:10]
+        rows = _users_execute(
+            "INSERT INTO users (username, email, password_hash) VALUES (?,?,?)",
+            [f"bm_{suffix}", f"bm_{suffix}@ex.com", generate_password_hash("x")],
+            return_id=True,
+        )
+        uid = rows[0]["id"]
+        token = ABBIEY_API_KEY_PREFIX + __import__("secrets").token_urlsafe(28)
+        _users_execute(
+            "INSERT INTO api_keys (user_id, label, key_last_four, key_hash) VALUES (?,?,?,?)",
+            [uid, "k", token[-4:], _hash_api_key(token)],
+        )
+        r = client.get(
+            "/api/user/bookmarks",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert r.status_code == 200
+        assert r.get_json() == {"bookmarks": []}
+
+    def test_revoked_api_key_returns_401(self, client):
+        import uuid
+
+        from app import ABBIEY_API_KEY_PREFIX, _hash_api_key, _users_execute
+        from werkzeug.security import generate_password_hash
+
+        suffix = uuid.uuid4().hex[:10]
+        rows = _users_execute(
+            "INSERT INTO users (username, email, password_hash) VALUES (?,?,?)",
+            [f"rv_{suffix}", f"rv_{suffix}@ex.com", generate_password_hash("x")],
+            return_id=True,
+        )
+        uid = rows[0]["id"]
+        token = ABBIEY_API_KEY_PREFIX + __import__("secrets").token_urlsafe(28)
+        kr = _users_execute(
+            "INSERT INTO api_keys (user_id, label, key_last_four, key_hash) VALUES (?,?,?,?)",
+            [uid, "k", token[-4:], _hash_api_key(token)],
+            return_id=True,
+        )
+        kid = kr[0]["id"]
+        _users_execute(
+            "UPDATE api_keys SET revoked_at=datetime('now') WHERE id=?",
+            [kid],
+        )
+        r = client.get(
+            "/api/user/me",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert r.status_code == 401
+
+
 class TestDeveloperPage:
     """Developer hub: API keys UI + Stripe billing link."""
 

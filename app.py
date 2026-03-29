@@ -4711,6 +4711,45 @@ def _hash_api_key(raw: str) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
+def _user_id_from_api_key(token: str) -> int | None:
+    """Resolve a raw secret key to user id, or None if unknown/revoked."""
+    if not token or not token.startswith(ABBIEY_API_KEY_PREFIX):
+        return None
+    if len(token) < len(ABBIEY_API_KEY_PREFIX) + 8:
+        return None
+    digest = _hash_api_key(token)
+    rows = _users_execute(
+        "SELECT user_id FROM api_keys WHERE key_hash=? AND revoked_at IS NULL LIMIT 1",
+        [digest],
+    )
+    if not rows:
+        return None
+    try:
+        return int(rows[0]["user_id"])
+    except (TypeError, ValueError, KeyError):
+        return None
+
+
+def _api_auth_user():
+    """
+    Resolve the account for this request: valid Bearer API key, or session.
+
+    Returns (user_id, error_response) where error_response is a Flask (response, status)
+    tuple only when Authorization: Bearer was sent but invalid (must return 401).
+    If no Bearer, error_response is None and user_id may be None (caller decides 401 vs soft fail).
+    """
+    auth = (request.headers.get("Authorization") or "").strip()
+    if auth.lower().startswith("bearer "):
+        token = auth[7:].strip()
+        if not token:
+            return None, (jsonify({"error": "Invalid API key"}), 401)
+        uid = _user_id_from_api_key(token)
+        if uid is None:
+            return None, (jsonify({"error": "Invalid or revoked API key"}), 401)
+        return uid, None
+    return session.get("user_id"), None
+
+
 def _list_api_keys_for_user(uid: int) -> list:
     return _users_execute(
         "SELECT id, label, key_last_four, created_at FROM api_keys "
@@ -4861,13 +4900,34 @@ def profile_avatar():
     return redirect(url_for("profile"))
 
 
-# ---- Bookmarks API (server-side, requires login) ----------------------------
+# ---- Bookmarks API (session or Bearer API key) ------------------------------
+
+@app.route("/api/user/me", methods=["GET"])
+def api_user_me():
+    uid, bearer_err = _api_auth_user()
+    if bearer_err:
+        return bearer_err
+    if not uid:
+        return jsonify({"error": "Not authenticated"}), 401
+    user = _get_user_by_id(uid)
+    if not user:
+        return jsonify({"error": "Not authenticated"}), 401
+    return jsonify(
+        {
+            "id": user["id"],
+            "username": user["username"],
+            "display_name": user.get("display_name"),
+        }
+    )
+
 
 @app.route("/api/user/bookmarks", methods=["GET"])
 def api_user_bookmarks_get():
-    if not session.get("user_id"):
+    uid, bearer_err = _api_auth_user()
+    if bearer_err:
+        return bearer_err
+    if not uid:
         return jsonify({"error": "Not authenticated"}), 401
-    uid = session["user_id"]
     rows = _users_execute(
         "SELECT id, url, title, snippet, saved_at FROM user_bookmarks"
         " WHERE user_id=? ORDER BY saved_at DESC",
@@ -4878,9 +4938,11 @@ def api_user_bookmarks_get():
 
 @app.route("/api/user/recent-searches", methods=["GET"])
 def api_user_recent_searches():
-    if not session.get("user_id"):
+    uid, bearer_err = _api_auth_user()
+    if bearer_err:
+        return bearer_err
+    if not uid:
         return jsonify([]), 401
-    uid = session["user_id"]
     rows = _users_execute(
         "SELECT query, search_type FROM user_search_history"
         " WHERE user_id=? ORDER BY searched_at DESC LIMIT 5",
@@ -4898,9 +4960,11 @@ def api_user_recent_searches():
 @app.route("/api/user/bookmarks", methods=["POST"])
 @limiter.limit("1000/day")
 def api_user_bookmarks_save():
-    if not session.get("user_id"):
+    uid, bearer_err = _api_auth_user()
+    if bearer_err:
+        return bearer_err
+    if not uid:
         return jsonify({"error": "Not authenticated"}), 401
-    uid  = session["user_id"]
     data = request.get_json(silent=True) or {}
     url     = (data.get("url") or "").strip()[:2000]
     title   = (data.get("title") or "").strip()[:300]
@@ -4922,9 +4986,11 @@ def api_user_bookmarks_save():
 
 @app.route("/api/user/bookmarks/<int:bid>", methods=["DELETE"])
 def api_user_bookmarks_delete(bid: int):
-    if not session.get("user_id"):
+    uid, bearer_err = _api_auth_user()
+    if bearer_err:
+        return bearer_err
+    if not uid:
         return jsonify({"error": "Not authenticated"}), 401
-    uid = session["user_id"]
     _users_execute(
         "DELETE FROM user_bookmarks WHERE id=? AND user_id=?", [bid, uid]
     )
@@ -4935,9 +5001,11 @@ def api_user_bookmarks_delete(bid: int):
 @limiter.limit("100/hour")
 def api_user_bookmarks_sync():
     """Accept a list of localStorage bookmarks and upsert them server-side."""
-    if not session.get("user_id"):
+    uid, bearer_err = _api_auth_user()
+    if bearer_err:
+        return bearer_err
+    if not uid:
         return jsonify({"error": "Not authenticated"}), 401
-    uid   = session["user_id"]
     items = (request.get_json(silent=True) or {}).get("bookmarks", [])
     saved = 0
     for item in items[:500]:
@@ -4961,9 +5029,11 @@ def api_user_bookmarks_sync():
 @app.route("/api/user/history", methods=["POST"])
 def api_user_history_add():
     """Record a search query for the logged-in user."""
-    if not session.get("user_id"):
-        return jsonify({"ok": False}), 200  # silent, not an error
-    uid  = session["user_id"]
+    uid, bearer_err = _api_auth_user()
+    if bearer_err:
+        return bearer_err
+    if not uid:
+        return jsonify({"ok": False}), 200  # silent when anonymous (no Bearer)
     data = request.get_json(silent=True) or {}
     q    = (data.get("query") or "").strip()[:500]
     st   = (data.get("search_type") or "text")[:20]
