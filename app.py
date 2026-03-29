@@ -531,6 +531,15 @@ def _inject_current_user():
     return {**ctx, "current_user": None}
 
 
+@app.after_request
+def _html_no_store_cache(resp):
+    """Avoid stale HTML/CSS after deploys (CDN/browser kept old marketing shell)."""
+    ct = (resp.headers.get("Content-Type") or "").lower()
+    if "text/html" in ct:
+        resp.headers["Cache-Control"] = "private, max-age=0, must-revalidate"
+    return resp
+
+
 def _get_client_ip_from_request(req) -> str:
     """Best-effort client IP (honours X-Forwarded-For when behind a proxy)."""
     if req is None:

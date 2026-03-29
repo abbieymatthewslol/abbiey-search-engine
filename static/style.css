@@ -2616,45 +2616,6 @@ footer {
   }
 }
 
-/* ===== Install Banner ===== */
-.install-banner {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  padding: .65rem 1.25rem;
-  background: var(--bg-surface);
-  border-bottom: 1px solid var(--border);
-  font-size: .875rem;
-}
-.install-banner-icon { font-size: 1.25rem; flex-shrink: 0; }
-.install-banner-text { flex: 1; }
-.install-banner-text strong { display: block; color: var(--text); font-weight: 600; }
-.install-banner-text span { color: var(--text-dim); }
-.install-banner-btn {
-  padding: .35rem .75rem;
-  background: var(--accent);
-  color: #fff;
-  border-radius: var(--radius-sm);
-  font-size: .8125rem;
-  font-weight: 600;
-  white-space: nowrap;
-  flex-shrink: 0;
-  transition: background var(--dur-fast) var(--ease-out);
-}
-.install-banner-btn:hover { background: var(--accent-dim); }
-.install-banner-close {
-  width: 28px; height: 28px;
-  border-radius: var(--radius-sm);
-  color: var(--text-muted);
-  font-size: 1.2rem;
-  flex-shrink: 0;
-  display: flex; align-items: center; justify-content: center;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-}
-.install-banner-close:hover { background: var(--bg-hover); color: var(--text); }
-
 /* ===== Share Search Button ===== */
 .share-search-btn {
   display: inline-flex;

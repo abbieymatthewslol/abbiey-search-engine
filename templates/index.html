@@ -18,7 +18,7 @@
             if (ff) document.documentElement.setAttribute('data-font', ff);
         })();
     </script>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=deploy_hash) }}">
     <meta name="deploy-hash" content="{{ deploy_hash }}">
     {% include 'includes/google_site_verification.html' %}
     <!-- SEO meta tags -->
@@ -31,7 +31,7 @@
     <meta name="description" content="abbiey.search — A private, fast search engine. No tracking, no data collection, no judgment.">
     <meta property="og:title" content="abbiey.search — Private Search Engine">
     <meta property="og:description" content="Search the web without being tracked. No logs. No profiling. No judgment.">
-    <meta property="og:url" content="https://www.abbieysearch.com/">
+    <meta property="og:url" content="https://www.abbieysearch.com/search">
     {% endif %}
     <meta name="keywords" content="private search engine, no tracking search, privacy search, anonymous search">
     <meta name="author" content="abbiey.search">
@@ -47,7 +47,7 @@
     <meta name="twitter:description" content="Search the web without being tracked. No logs. No profiling. No judgment.">
     {% endif %}
     <meta name="twitter:image" content="https://www.abbieysearch.com/static/og-image.png">
-    {% if not query %}<link rel="canonical" href="https://www.abbieysearch.com/">{% endif %}
+    {% if not query %}<link rel="canonical" href="https://www.abbieysearch.com/search">{% endif %}
     <!-- PWA -->
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#000000">
@@ -66,7 +66,7 @@
       "@context": "https://schema.org",
       "@type": "WebSite",
       "name": "abbiey.search",
-      "url": "https://www.abbieysearch.com",
+      "url": "https://www.abbieysearch.com/search",
       "description": "Private search engine. No tracking. No profiling. No judgment.",
       "potentialAction": {
         "@type": "SearchAction",
@@ -148,16 +148,6 @@
             {% endif %}
         </div>
     </header>
-    <!-- Install banner -->
-    <div id="install-banner" class="install-banner" style="display:none">
-      <span class="install-banner-icon">🔍</span>
-      <div class="install-banner-text">
-        <strong>Set as default search engine</strong>
-        <span>Click the address bar → manage search engines → add abbiey.search</span>
-      </div>
-      <a href="/opensearch.xml" class="install-banner-btn" target="_blank">Add to browser</a>
-      <button class="install-banner-close" id="install-banner-close" aria-label="Dismiss">×</button>
-    </div>
     <div class="settings-overlay" id="settings-overlay" hidden>
         <div class="settings-modal" id="settings-modal" role="dialog" aria-label="Settings">
             <div class="settings-modal-header">
@@ -180,16 +170,16 @@
                         <span class="settings-row-label">Accent color</span>
                         <div class="settings-accent-row">
                             <div class="theme-color-presets" id="color-presets">
-                                <button class="color-swatch" data-color="#2563eb" style="background:#2563eb" title="Blue"></button>
-                                <button class="color-swatch" data-color="#1e40af" style="background:#1e40af" title="Navy"></button>
+                                <button class="color-swatch" data-color="#e7e5e4" style="background:#e7e5e4;border:1px solid #444" title="Stone"></button>
+                                <button class="color-swatch" data-color="#d6d3d1" style="background:#d6d3d1;border:1px solid #444" title="Mist"></button>
+                                <button class="color-swatch" data-color="#a8a29e" style="background:#a8a29e" title="Warm gray"></button>
+                                <button class="color-swatch" data-color="#475569" style="background:#475569" title="Slate"></button>
                                 <button class="color-swatch" data-color="#0f766e" style="background:#0f766e" title="Teal"></button>
                                 <button class="color-swatch" data-color="#15803d" style="background:#15803d" title="Green"></button>
-                                <button class="color-swatch" data-color="#b45309" style="background:#b45309" title="Amber"></button>
+                                <button class="color-swatch" data-color="#2563eb" style="background:#2563eb" title="Blue"></button>
                                 <button class="color-swatch" data-color="#7c3aed" style="background:#7c3aed" title="Violet"></button>
-                                <button class="color-swatch" data-color="#be123c" style="background:#be123c" title="Red"></button>
-                                <button class="color-swatch" data-color="#475569" style="background:#475569" title="Slate"></button>
                             </div>
-                            <input type="color" id="custom-color" value="#2563eb" title="Custom color" class="settings-color-picker">
+                            <input type="color" id="custom-color" value="#e7e5e4" title="Custom color" class="settings-color-picker">
                         </div>
                     </div>
                     <div class="settings-row">
@@ -1045,8 +1035,8 @@
     <script>
         document.addEventListener("DOMContentLoaded", () => {
             const toast = document.createElement("div");
-            toast.style.cssText = "position:fixed;top:1.5rem;left:50%;transform:translateX(-50%);background:var(--accent,#2563eb);color:#fff;padding:.75rem 1.5rem;border-radius:8px;font-weight:700;z-index:10000;animation:welcome-toast-in .3s ease";
-            toast.textContent = "Welcome to abbiey.search, @{{ current_user.username if current_user else '' }}! 🎉";
+            toast.style.cssText = "position:fixed;top:1.5rem;left:50%;transform:translateX(-50%);background:var(--bg-elevated);color:var(--text);border:1px solid var(--border);padding:.75rem 1.5rem;border-radius:8px;font-weight:600;z-index:10000;box-shadow:var(--shadow-lg)";
+            toast.textContent = "Welcome to abbiey.search, @{{ current_user.username if current_user else '' }}.";
             document.body.appendChild(toast);
             setTimeout(() => toast.remove(), 6000);
         });
@@ -1065,12 +1055,12 @@
             <div class="settings-modal-body">
                 <p style="margin:0 0 1rem;color:var(--text-dim);font-size:.9rem">Pick a category to get started, or just type in the search box.</p>
                 <div class="welcome-chips">
-                    <button class="welcome-chip" data-type="text">🔍 Web</button>
-                    <button class="welcome-chip" data-type="news">📰 News</button>
-                    <button class="welcome-chip" data-type="images">🖼️ Images</button>
-                    <button class="welcome-chip" data-type="code">💻 Code</button>
-                    <button class="welcome-chip" data-type="videos">🎬 Videos</button>
-                    <button class="welcome-chip" data-type="onion">🌐 Tor/Onion</button>
+                    <button class="welcome-chip" data-type="text">Web</button>
+                    <button class="welcome-chip" data-type="news">News</button>
+                    <button class="welcome-chip" data-type="images">Images</button>
+                    <button class="welcome-chip" data-type="code">Code</button>
+                    <button class="welcome-chip" data-type="videos">Videos</button>
+                    <button class="welcome-chip" data-type="onion">Deep web</button>
                 </div>
                 <p style="margin:1rem 0 0;text-align:center"><a href="/search" class="welcome-skip">Skip</a></p>
             </div>
@@ -1100,27 +1090,11 @@
     </script>
     {% endif %}
 
-    <script src="{{ url_for('static', filename='script.js') }}"></script>
+    <script src="{{ url_for('static', filename='script.js', v=deploy_hash) }}"></script>
     {% if query and search_type == 'onion' %}
-    <script src="{{ url_for('static', filename='onion-rewriter.js') }}"></script>
+    <script src="{{ url_for('static', filename='onion-rewriter.js', v=deploy_hash) }}"></script>
     {% endif %}
     <script>
-    // Install banner
-    (function() {
-      if (window.location.search) return;
-      if (localStorage.getItem('abbiey_banner_dismissed')) return;
-      setTimeout(() => {
-        const banner = document.getElementById('install-banner');
-        if (banner) banner.style.display = 'flex';
-      }, 3000);
-      const closeBtn = document.getElementById('install-banner-close');
-      if (closeBtn) {
-        closeBtn.addEventListener('click', () => {
-          document.getElementById('install-banner').style.display = 'none';
-          localStorage.setItem('abbiey_banner_dismissed', '1');
-        });
-      }
-    })();
     // Share button
     const shareBtn = document.getElementById('share-search-btn');
     if (shareBtn) {
@@ -1132,7 +1106,7 @@
         }
         try {
           await navigator.clipboard.writeText(url);
-          shareBtn.textContent = '✓ Copied!';
+          shareBtn.textContent = 'Copied';
           setTimeout(() => { shareBtn.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg> Share'; }, 2000);
         } catch(e) {}
       });
