@@ -3,6 +3,7 @@ abbiey.search - A privacy-respecting, non-judgmental search engine.
 No tracking. No filtering. No logs. Just results.
 """
 
+import hashlib
 import json
 import logging
 import os
@@ -12,6 +13,7 @@ import sqlite3
 import subprocess
 import threading
 import time
+import secrets
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed, wait as _futures_wait
 from itertools import zip_longest
@@ -78,6 +80,14 @@ _WAITLIST_DB  = os.path.join(_DB_DIR, "waitlist.db")
 _ANALYTICS_DB = os.path.join(_DB_DIR, "analytics.db")
 _USERS_DB     = os.path.join(_DB_DIR, "users.db")
 _ADMIN_TOKEN  = os.environ.get("ADMIN_TOKEN", "")
+
+# Developer / API keys — Stripe Payment Link for purchasing access (override in env).
+STRIPE_API_KEYS_CHECKOUT_URL = os.environ.get(
+    "STRIPE_API_KEYS_CHECKOUT_URL",
+    "https://buy.stripe.com/5kQ7sK9wgboE26GfFlb7y0c",
+)
+ABBIEY_API_KEY_PREFIX = "abb_sk_live_"
+_MAX_API_KEYS_PER_USER = 10
 
 
 def _env_truthy(key: str) -> bool:
@@ -268,6 +278,17 @@ def _init_pg_tables():
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         );
         CREATE INDEX IF NOT EXISTS idx_ush_user ON user_search_history(user_id);
+
+        CREATE TABLE IF NOT EXISTS api_keys (
+            id            SERIAL PRIMARY KEY,
+            user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            label         TEXT NOT NULL DEFAULT '',
+            key_last_four TEXT NOT NULL,
+            key_hash      TEXT NOT NULL,
+            created_at    TIMESTAMPTZ DEFAULT NOW(),
+            revoked_at    TIMESTAMPTZ
+        );
+        CREATE INDEX IF NOT EXISTS idx_api_keys_user ON api_keys(user_id);
 
         CREATE TABLE IF NOT EXISTS waitlist (
             id         SERIAL PRIMARY KEY,
@@ -497,6 +518,17 @@ def _init_users_db():
             );
             CREATE INDEX IF NOT EXISTS idx_ub_user  ON user_bookmarks(user_id);
             CREATE INDEX IF NOT EXISTS idx_ush_user ON user_search_history(user_id);
+            CREATE TABLE IF NOT EXISTS api_keys (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id       INTEGER NOT NULL,
+                label         TEXT NOT NULL DEFAULT '',
+                key_last_four TEXT NOT NULL,
+                key_hash      TEXT NOT NULL,
+                created_at    TEXT DEFAULT (datetime('now')),
+                revoked_at    TEXT,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_api_keys_user ON api_keys(user_id);
         """)
 
 
@@ -4673,6 +4705,86 @@ def login():
 def logout():
     session.pop("user_id", None)
     return redirect(url_for("index"))
+
+
+def _hash_api_key(raw: str) -> str:
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _list_api_keys_for_user(uid: int) -> list:
+    return _users_execute(
+        "SELECT id, label, key_last_four, created_at FROM api_keys "
+        "WHERE user_id=? AND revoked_at IS NULL ORDER BY created_at DESC",
+        [uid],
+    )
+
+
+def _count_active_api_keys(uid: int) -> int:
+    rows = _users_execute(
+        "SELECT COUNT(*) AS n FROM api_keys WHERE user_id=? AND revoked_at IS NULL",
+        [uid],
+    )
+    if not rows:
+        return 0
+    return int(rows[0].get("n") or 0)
+
+
+@app.route("/developer")
+def developer():
+    uid = session.get("user_id")
+    keys = _list_api_keys_for_user(uid) if uid else []
+    reveal = session.pop("api_key_reveal_once", None)
+    err = session.pop("api_key_error", None)
+    return render_template(
+        "developer.html",
+        api_keys=keys,
+        reveal_key=reveal,
+        api_key_error=err,
+        stripe_api_checkout_url=STRIPE_API_KEYS_CHECKOUT_URL,
+    )
+
+
+@app.route("/developer/api-keys/create", methods=["POST"])
+@limiter.limit("30/hour")
+def developer_api_key_create():
+    if not session.get("user_id"):
+        return redirect(url_for("login", next=url_for("developer")))
+    uid = session["user_id"]
+    if _count_active_api_keys(uid) >= _MAX_API_KEYS_PER_USER:
+        session["api_key_error"] = (
+            f"You can have at most {_MAX_API_KEYS_PER_USER} active keys. "
+            "Revoke one to create another."
+        )
+        return redirect(url_for("developer"))
+    label = (request.form.get("label") or "").strip()[:60]
+    raw_suffix = secrets.token_urlsafe(28)
+    full_key = ABBIEY_API_KEY_PREFIX + raw_suffix
+    key_last_four = full_key[-4:]
+    key_hash = _hash_api_key(full_key)
+    try:
+        _users_execute(
+            "INSERT INTO api_keys (user_id, label, key_last_four, key_hash) VALUES (?,?,?,?)",
+            [uid, label, key_last_four, key_hash],
+        )
+    except Exception as exc:
+        logging.warning("api_keys insert failed: %s", exc)
+        session["api_key_error"] = "Could not create a key. Please try again."
+        return redirect(url_for("developer"))
+    session["api_key_reveal_once"] = full_key
+    return redirect(url_for("developer"))
+
+
+@app.route("/developer/api-keys/<int:key_id>/revoke", methods=["POST"])
+@limiter.limit("60/hour")
+def developer_api_key_revoke(key_id):
+    if not session.get("user_id"):
+        return redirect(url_for("login", next=url_for("developer")))
+    uid = session["user_id"]
+    _users_execute(
+        "UPDATE api_keys SET revoked_at=datetime('now') WHERE id=? AND user_id=? AND revoked_at IS NULL",
+        [key_id, uid],
+    )
+    return redirect(url_for("developer"))
 
 
 @app.route("/profile")

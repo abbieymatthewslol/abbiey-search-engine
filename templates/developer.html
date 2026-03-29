@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}Developer · API keys · abbiey.search{% endblock %}
+
+{% block content %}
+<main class="dev-page">
+    <header class="dev-page-header">
+        <h1 class="dev-page-title">Developer</h1>
+        <p class="dev-page-lead">Create API keys for programmatic access. Purchase access first, then generate keys below.</p>
+    </header>
+
+    <section class="dev-card dev-card-billing">
+        <h2 class="dev-card-title">Billing &amp; access</h2>
+        <p class="dev-card-text">API usage is billed as prepaid access. Complete checkout on Stripe to support your key usage; then create keys here and use them in the <code>Authorization</code> header when calling our APIs.</p>
+        <a href="{{ stripe_api_checkout_url }}" class="dev-stripe-btn" target="_blank" rel="noopener noreferrer">Buy API access</a>
+        <p class="dev-card-hint">Opens secure Stripe Checkout (card, Apple Pay, PayPal where enabled).</p>
+    </section>
+
+    {% if api_key_error %}
+    <div class="dev-flash dev-flash-error" role="alert">{{ api_key_error }}</div>
+    {% endif %}
+
+    {% if reveal_key %}
+    <div class="dev-key-reveal" role="alert">
+        <h2 class="dev-key-reveal-title">Save your secret key</h2>
+        <p class="dev-key-reveal-text">This is the only time we show the full key. Copy it and store it somewhere safe.</p>
+        <div class="dev-key-reveal-row">
+            <code class="dev-key-secret" id="dev-new-key-value">{{ reveal_key }}</code>
+            <button type="button" class="dev-copy-btn" id="dev-copy-new-key" aria-label="Copy secret key to clipboard">Copy</button>
+        </div>
+    </div>
+    {% endif %}
+
+    <section class="dev-card dev-card-keys">
+        <h2 class="dev-card-title">API keys</h2>
+
+        {% if current_user %}
+        <p class="dev-card-text">Active keys are listed with a short suffix so you can tell them apart. The full secret is never shown again after creation.</p>
+
+        <form class="dev-create-form" method="post" action="{{ url_for('developer_api_key_create') }}">
+            <label class="dev-label" for="key-label">Name <span class="dev-optional">(optional)</span></label>
+            <div class="dev-create-row">
+                <input type="text" id="key-label" name="label" class="dev-input" maxlength="60" placeholder="e.g. Production, Laptop, CI">
+                <button type="submit" class="dev-primary-btn">Create secret key</button>
+            </div>
+        </form>
+
+        {% if api_keys %}
+        <div class="dev-table-wrap">
+            <table class="dev-keys-table">
+                <thead>
+                    <tr>
+                        <th scope="col">Name</th>
+                        <th scope="col">Key</th>
+                        <th scope="col">Created</th>
+                        <th scope="col" class="dev-th-actions">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for k in api_keys %}
+                    <tr>
+                        <td>{{ k.label or "—" }}</td>
+                        <td><code class="dev-key-mask">abb_sk_live_••••••••{{ k.key_last_four }}</code></td>
+                        <td class="dev-muted">{{ (k.created_at|string)[:10] }}</td>
+                        <td class="dev-actions">
+                            <form method="post" action="{{ url_for('developer_api_key_revoke', key_id=k.id) }}" class="dev-revoke-form" onsubmit="return confirm('Revoke this key? Apps using it will stop working.');">
+                                <button type="submit" class="dev-revoke-btn">Revoke</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="dev-empty">No keys yet. When you&rsquo;re ready, create a secret key above.</p>
+        {% endif %}
+
+        {% else %}
+        <p class="dev-card-text">Sign in to create and manage secret keys.</p>
+        <div class="dev-auth-actions">
+            <a href="{{ url_for('login', next=url_for('developer')) }}" class="dev-primary-btn dev-primary-btn-inline">Sign in</a>
+            <a href="{{ url_for('signup') }}" class="dev-secondary-btn">Create account</a>
+        </div>
+        {% endif %}
+    </section>
+
+    <section class="dev-card dev-card-docs">
+        <h2 class="dev-card-title">Using your key</h2>
+        <p class="dev-card-text">Send the key on each request:</p>
+        <pre class="dev-code-sample" translate="no"><code>Authorization: Bearer &lt;your_secret_key&gt;</code></pre>
+        <p class="dev-card-hint">Public JSON endpoints are listed at <a href="/api/access-resources">/api/access-resources</a>. Full API documentation may expand over time.</p>
+    </section>
+</main>
+{% endblock %}
+
+{% block extra_scripts %}
+{% if reveal_key %}
+<script>
+(function() {
+  var btn = document.getElementById("dev-copy-new-key");
+  var el = document.getElementById("dev-new-key-value");
+  if (btn && el) {
+    btn.addEventListener("click", function() {
+      navigator.clipboard.writeText(el.textContent.trim()).then(function() {
+        btn.textContent = "Copied";
+        setTimeout(function() { btn.textContent = "Copy"; }, 2000);
+      });
+    });
+  }
+})();
+</script>
+{% endif %}
+{% endblock %}

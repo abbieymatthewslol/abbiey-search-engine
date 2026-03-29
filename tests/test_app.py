@@ -867,3 +867,32 @@ class TestAdminQueryLog:
             assert "rows" in data
             assert "total" in data
             assert isinstance(data["rows"], list)
+
+
+class TestDeveloperPage:
+    """Developer hub: API keys UI + Stripe billing link."""
+
+    def test_developer_get_ok(self, client):
+        r = client.get("/developer")
+        assert r.status_code == 200
+        assert b"Developer" in r.data
+        assert b"API keys" in r.data
+
+    def test_developer_includes_stripe_checkout_link(self, client):
+        r = client.get("/developer")
+        assert r.status_code == 200
+        assert b"buy.stripe.com" in r.data
+
+    def test_create_api_key_redirects_unauthenticated(self, client):
+        r = client.post(
+            "/developer/api-keys/create",
+            data={"label": "test"},
+            follow_redirects=False,
+        )
+        assert r.status_code == 302
+        assert "/login" in r.headers.get("Location", "")
+
+    def test_revoke_api_key_redirects_unauthenticated(self, client):
+        r = client.post("/developer/api-keys/999/revoke", follow_redirects=False)
+        assert r.status_code == 302
+        assert "/login" in r.headers.get("Location", "")
