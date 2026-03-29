@@ -940,7 +940,7 @@
     </main>
 
     {# ===== RESULT PREVIEW PANEL ===== #}
-    {% if query and search_type in ('text', 'news', 'code', 'onion') %}
+    {% if query and search_type in ('text', 'news', 'code', 'onion', 'videos', 'images') %}
     <aside class="preview-panel" id="preview-panel">
         <div class="preview-header">
             <span class="preview-header-title">Preview</span>
@@ -950,6 +950,7 @@
         </div>
         <div class="preview-body" id="preview-body">
             <div class="preview-empty" id="preview-empty">
+                <p>Hover a result or press <kbd>j</kbd> / <kbd>k</kbd> to move focus and load a page preview.</p>
             </div>
             <div class="preview-content" id="preview-content" style="display:none">
                 <img class="preview-image" id="preview-image" src="" alt="" style="display:none">

@@ -6,7 +6,6 @@ from unittest.mock import patch, MagicMock
 import pytest
 
 from app import (
-    _GSC_DEFAULT_VERIFICATION,
     _try_calculator, _try_color_picker, _try_unit_convert,
     _try_knowledge_panel,
 )
@@ -15,32 +14,33 @@ from app import (
 class TestRoutes:
     """Test basic route behavior."""
 
-    def test_index_returns_200(self, client):
-        resp = client.get("/")
-        assert resp.status_code == 200
-        assert b"abbiey.search" in resp.data
-        assert b'name="google-site-verification"' in resp.data
-        assert _GSC_DEFAULT_VERIFICATION.encode() in resp.data
+    def test_index_redirects_to_search(self, client):
+        resp = client.get("/", follow_redirects=False)
+        assert resp.status_code == 301
+        assert "/search" in (resp.headers.get("Location") or "")
 
-    def test_root_is_marketing_landing_not_search_ui(self, client):
-        """Homepage is the marketing page; full search UI is at /search."""
-        resp = client.get("/")
+    def test_index_followed_shows_search_ui(self, client):
+        resp = client.get("/", follow_redirects=True)
+        assert resp.status_code == 200
+        assert b'id="search-input"' in resp.data
+        assert b"abbiey.search" in resp.data
+
+    def test_root_is_search_ui_not_marketing_landing(self, client):
+        """Root redirects to search UI; marketing page is at /landing."""
+        resp = client.get("/", follow_redirects=True)
+        assert resp.status_code == 200
+        assert b"nobody's watching" not in resp.data
+
+    def test_landing_path_renders_marketing(self, client):
+        resp = client.get("/landing")
         assert resp.status_code == 200
         assert b"nobody's watching" in resp.data
-        assert b"install-banner" not in resp.data
-
-    def test_landing_path_redirects_to_root(self, client):
-        first = client.get("/landing", follow_redirects=False)
-        assert first.status_code == 301
-        final = client.get("/landing", follow_redirects=True)
-        assert final.status_code == 200
-        assert b"nobody's watching" in final.data
 
     def test_google_site_verification_meta_when_configured(self, client):
         import app as app_module
 
         with patch.object(app_module, "_GOOGLE_SITE_VERIFICATION", "gsc-test-token"):
-            resp = client.get("/")
+            resp = client.get("/", follow_redirects=True)
         assert resp.status_code == 200
         assert b'name="google-site-verification"' in resp.data
         assert b'content="gsc-test-token"' in resp.data
@@ -49,7 +49,7 @@ class TestRoutes:
         import app as app_module
 
         with patch.object(app_module, "_GOOGLE_SITE_VERIFICATION", ""):
-            resp = client.get("/")
+            resp = client.get("/", follow_redirects=True)
         assert resp.status_code == 200
         assert b"google-site-verification" not in resp.data
 

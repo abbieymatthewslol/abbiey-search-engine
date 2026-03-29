@@ -1496,14 +1496,14 @@ _TEMPLATE_DEFAULTS = dict(
 
 @app.route("/")
 def index():
-    """Marketing home; full search UI lives at /search (empty q shows the same UI)."""
-    return render_template("landing.html")
+    """Root URL shows the main search UI (same as /search). Marketing copy lives at /landing."""
+    return redirect(url_for("search"), code=301)
 
 
 @app.route("/landing")
 def landing():
-    """Legacy URL — canonical home is /."""
-    return redirect("/", code=301)
+    """Long-form marketing page."""
+    return render_template("landing.html")
 
 
 @app.route("/create-checkout-session", methods=["POST"])
@@ -2809,7 +2809,7 @@ You are an expert in every aspect of this project. You are direct, insightful, a
 
 == ARCHITECTURE ==
 - Backend: Python Flask (~4200+ lines, app.py) served as a Vercel serverless function via api/index.py
-- Host: Vercel (abbieysearch.com → prj_NNB1SRC35VzeuKs5odeDOdS0amTe). Deploy with: vercel deploy --prod --token <token>
+- Host: Vercel (abbieysearch.com → prj_hGdLqDsNtQK2A57hWyZNxdZKMi3b). Deploy with: vercel deploy --prod --token <token>
 - Database (priority order — _analytics_execute() routes automatically):
   1. Supabase/PostgreSQL — set SUPABASE_DB_URL env var (pooler URL port 6543). Auto-creates tables. SQL translated via _adapt_sql_pg().
   2. Turso/libSQL — set LIBSQL_URL + LIBSQL_AUTH_TOKEN env vars. SQLite-compatible HTTP API.

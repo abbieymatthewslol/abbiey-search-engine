@@ -1005,7 +1005,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const _previewExcerpt = document.getElementById("preview-excerpt");
   const _previewLink = document.getElementById("preview-link");
 
-  if (previewPanel) {
+  if (previewPanel && previewClose) {
     previewClose.addEventListener("click", () => {
       previewPanel.classList.remove("open");
       previewOpen = false;
@@ -1017,22 +1017,28 @@ document.addEventListener("DOMContentLoaded", () => {
     const resultsEl = document.getElementById("results");
 
     function getResultElements() {
+      if (!resultsEl) return [];
       if (!_cachedResults) {
-        _cachedResults = resultsEl.querySelectorAll(":scope > .result");
+        const t = resultsEl.getAttribute("data-type");
+        _cachedResults = t === "images"
+          ? resultsEl.querySelectorAll(":scope > .image-card")
+          : resultsEl.querySelectorAll(":scope > .result");
       }
       return _cachedResults;
     }
 
     // Invalidate cache when infinite scroll adds results
     const resultObserver = new MutationObserver(() => { _cachedResults = null; });
-    resultObserver.observe(resultsEl, { childList: true });
+    if (resultsEl) resultObserver.observe(resultsEl, { childList: true });
 
     function clearResultHighlight() {
-      const prev = resultsEl.querySelector(".result.result-focused");
+      if (!resultsEl) return;
+      const prev = resultsEl.querySelector(".result-focused");
       if (prev) prev.classList.remove("result-focused");
     }
 
     function highlightResult(idx) {
+      if (!resultsEl) return;
       const results = getResultElements();
       clearResultHighlight();
       if (idx >= 0 && idx < results.length) {
@@ -1115,13 +1121,13 @@ document.addEventListener("DOMContentLoaded", () => {
     // Hover to preview
     let hoverTimer = null;
     document.addEventListener("mouseover", (e) => {
-      const result = e.target.closest("#results > .result");
+      const result = e.target.closest("#results > .result, #results > .image-card");
       if (!result || !result.dataset.url) return;
       clearTimeout(hoverTimer);
       hoverTimer = setTimeout(() => loadPreview(result.dataset.url), 300);
     }, { passive: true });
     document.addEventListener("mouseout", (e) => {
-      if (e.target.closest("#results > .result")) clearTimeout(hoverTimer);
+      if (e.target.closest("#results > .result, #results > .image-card")) clearTimeout(hoverTimer);
     }, { passive: true });
 
     // Keyboard navigation: j/k for results, o to open (inside previewPanel scope)
