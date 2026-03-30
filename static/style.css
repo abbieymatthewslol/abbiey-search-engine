@@ -189,23 +189,6 @@ body:not(.has-results) header {
   background: var(--bg-hover);
   border-color: var(--border-strong);
 }
-.header-signup-btn {
-  background: var(--accent);
-  color: var(--bg) !important;
-  border-color: var(--accent) !important;
-  font-weight: 600;
-}
-.header-signup-btn:hover {
-  background: var(--accent-dim);
-  border-color: var(--accent-dim) !important;
-  color: var(--bg) !important;
-}
-[data-theme="light"] .header-signup-btn {
-  color: #fafaf9 !important;
-}
-[data-theme="light"] .header-signup-btn:hover {
-  color: #fafaf9 !important;
-}
 
 .header-dev-btn {
   padding: .35rem .65rem;
