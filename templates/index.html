@@ -21,6 +21,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=deploy_hash) }}">
     <meta name="deploy-hash" content="{{ deploy_hash }}">
     {% include 'includes/google_site_verification.html' %}
+    {% include 'includes/google_analytics.html' %}
     <!-- SEO meta tags -->
     {% if query %}
     <meta name="description" content="Private search results for {{ query }} — no tracking, no profiling.">

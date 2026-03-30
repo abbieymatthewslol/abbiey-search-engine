@@ -81,6 +81,19 @@ def _load_google_site_verification() -> str:
 
 _GOOGLE_SITE_VERIFICATION = _load_google_site_verification()
 
+# Google Analytics 4 (gtag.js). If GOOGLE_ANALYTICS_ID is unset, the default is used.
+# Set to empty (GOOGLE_ANALYTICS_ID=) to omit the tag.
+_GA_DEFAULT_MEASUREMENT_ID = "G-FCV6CCHNPF"
+
+
+def _load_google_analytics_id() -> str:
+    if "GOOGLE_ANALYTICS_ID" in os.environ:
+        return os.environ["GOOGLE_ANALYTICS_ID"].strip()
+    return _GA_DEFAULT_MEASUREMENT_ID
+
+
+_GOOGLE_ANALYTICS_ID = _load_google_analytics_id()
+
 # On Vercel the filesystem is read-only except /tmp; use /tmp when running there.
 _DB_DIR       = "/tmp" if os.environ.get("VERCEL") else os.path.dirname(__file__)
 _WAITLIST_DB  = os.path.join(_DB_DIR, "waitlist.db")
@@ -622,6 +635,7 @@ def _inject_current_user():
     ctx = {
         "deploy_hash": DEPLOY_HASH,
         "google_site_verification": _GOOGLE_SITE_VERIFICATION,
+        "google_analytics_id": _GOOGLE_ANALYTICS_ID,
     }
     if uid:
         user = _get_user_by_id(uid)
@@ -1009,7 +1023,8 @@ def _security_headers(response):
     )
     csp = (
         "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; "
+        "script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com "
+        "https://www.googletagmanager.com https://www.google-analytics.com; "
         "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; "
         "img-src 'self' data: https: blob:; "
         "connect-src 'self' https: wss:; "

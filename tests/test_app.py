@@ -53,6 +53,23 @@ class TestRoutes:
         assert resp.status_code == 200
         assert b"google-site-verification" not in resp.data
 
+    def test_google_analytics_gtag_when_configured(self, client):
+        import app as app_module
+
+        with patch.object(app_module, "_GOOGLE_ANALYTICS_ID", "G-TESTID99"):
+            resp = client.get("/", follow_redirects=True)
+        assert resp.status_code == 200
+        assert b"googletagmanager.com/gtag/js" in resp.data
+        assert b"G-TESTID99" in resp.data
+
+    def test_google_analytics_omitted_when_disabled(self, client):
+        import app as app_module
+
+        with patch.object(app_module, "_GOOGLE_ANALYTICS_ID", ""):
+            resp = client.get("/", follow_redirects=True)
+        assert resp.status_code == 200
+        assert b"googletagmanager.com/gtag/js" not in resp.data
+
     def test_search_empty_query_shows_index(self, client):
         resp = client.get("/search?q=")
         assert resp.status_code == 200
