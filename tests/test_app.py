@@ -1046,6 +1046,17 @@ class TestApiKeyAuth:
         assert r.status_code == 401
 
 
+class TestPaymentReturn:
+    """Stripe Payment Link redirect: client-side resume to search or developer."""
+
+    def test_payment_return_get_ok(self, client):
+        r = client.get("/payment-return")
+        assert r.status_code == 200
+        assert b"abbiey_checkout_return" in r.data
+        assert b"/search" in r.data
+        assert b"/developer" in r.data
+
+
 class TestDeveloperPage:
     """Developer hub: API keys UI + Stripe billing link."""
 
@@ -1059,6 +1070,12 @@ class TestDeveloperPage:
         r = client.get("/developer")
         assert r.status_code == 200
         assert b"buy.stripe.com" in r.data
+
+    def test_developer_billing_success_message(self, client):
+        r = client.get("/developer?billing=success")
+        assert r.status_code == 200
+        assert b"Payment confirmed" in r.data
+        assert b"dev-api-keys" in r.data
 
     def test_create_api_key_redirects_unauthenticated(self, client):
         r = client.post(

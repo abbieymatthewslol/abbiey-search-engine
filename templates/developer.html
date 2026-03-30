@@ -8,7 +8,11 @@
         <p class="dev-page-lead">Create API keys for programmatic access. Purchase access first, then generate keys below.</p>
     </header>
 
-    <section class="dev-card dev-card-billing">
+    {% if billing_success %}
+    <div class="dev-flash dev-flash-success" role="status">Payment confirmed &mdash; you&rsquo;re back on the API key dashboard. Create a secret key below when you&rsquo;re ready.</div>
+    {% endif %}
+
+    <section class="dev-card dev-card-billing" id="dev-billing">
         <h2 class="dev-card-title">Billing &amp; access</h2>
         <p class="dev-card-text">API access is sold as prepaid usage. Complete checkout on Stripe first, then create keys here and send them in the <code>Authorization</code> header when you call our APIs.</p>
         <a href="{{ stripe_api_checkout_url }}" class="dev-stripe-btn" target="_blank" rel="noopener noreferrer">Buy API access</a>
@@ -30,7 +34,7 @@
     </div>
     {% endif %}
 
-    <section class="dev-card dev-card-keys">
+    <section class="dev-card dev-card-keys" id="dev-api-keys">
         <h2 class="dev-card-title">API keys</h2>
 
         {% if current_user %}

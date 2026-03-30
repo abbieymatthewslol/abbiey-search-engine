@@ -1637,6 +1637,12 @@ def landing():
     return render_template("landing.html")
 
 
+@app.route("/payment-return")
+def payment_return():
+    """Stripe Payment Link redirect target: sends users back to search (with unlock) or /developer."""
+    return render_template("payment_return.html")
+
+
 ACCESS_RESOURCES_JSON = {
     "about": (
         "abbiey.search is built so a single outage or limit does not leave you with nowhere to go. "
@@ -5176,11 +5182,13 @@ def developer():
     keys = _list_api_keys_for_user(uid) if uid else []
     reveal = session.pop("api_key_reveal_once", None)
     err = session.pop("api_key_error", None)
+    billing_success = request.args.get("billing", "").strip().lower() == "success"
     return render_template(
         "developer.html",
         api_keys=keys,
         reveal_key=reveal,
         api_key_error=err,
+        billing_success=billing_success,
         stripe_api_checkout_url=STRIPE_API_KEYS_CHECKOUT_URL,
     )
 

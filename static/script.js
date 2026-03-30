@@ -175,6 +175,51 @@ document.addEventListener("DOMContentLoaded", () => {
         true
       );
     }
+
+    const payStripe = document.getElementById("paywall-stripe-link");
+    if (payStripe) {
+      payStripe.addEventListener(
+        "click",
+        () => {
+          try {
+            const u = new URL(window.location.href);
+            const input = document.getElementById("search-input");
+            const pending = input && input.value.trim() ? input.value.trim() : "";
+            if (pending && !u.searchParams.get("q")) {
+              u.searchParams.set("q", pending);
+            }
+            u.searchParams.delete("page");
+            const p = u.searchParams;
+            if (typeof p.sort === "function") p.sort();
+            const qs = p.toString();
+            const path = u.pathname + (qs ? "?" + qs : "") + u.hash;
+            localStorage.setItem(
+              "abbiey_checkout_return",
+              JSON.stringify({ kind: "search", path })
+            );
+          } catch (_) {}
+        },
+        true
+      );
+    }
+  })();
+
+  // ===== After Stripe (API keys): remember return to developer dashboard =====
+  (function initApiCheckoutReturnCapture() {
+    document.querySelectorAll("a.dev-stripe-btn").forEach((a) => {
+      a.addEventListener(
+        "click",
+        () => {
+          try {
+            localStorage.setItem(
+              "abbiey_checkout_return",
+              JSON.stringify({ kind: "developer" })
+            );
+          } catch (_) {}
+        },
+        true
+      );
+    });
   })();
 
   // ===== Search loading indicator =====

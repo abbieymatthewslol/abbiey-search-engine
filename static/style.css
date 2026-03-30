@@ -2853,6 +2853,20 @@ article.result.code-result { font-size: .9rem; }
   font-size: .875rem;
   margin-bottom: 1.25rem;
 }
+.dev-flash-success {
+  padding: .875rem 1rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in srgb, #22c55e 35%, transparent);
+  background: color-mix(in srgb, #22c55e 10%, transparent);
+  color: #86efac;
+  font-size: .875rem;
+  margin-bottom: 1.25rem;
+}
+[data-theme="light"] .dev-flash-success {
+  color: #166534;
+  border-color: color-mix(in srgb, #22c55e 45%, transparent);
+  background: color-mix(in srgb, #22c55e 12%, transparent);
+}
 .dev-key-reveal {
   padding: 1.25rem 1.5rem;
   border-radius: var(--radius);
