@@ -367,14 +367,9 @@
     <main>
         <div class="search-container">
             {% if not query %}
-            {# ===== HOME HERO ===== #}
+            {# ===== HOME: title above search; supporting copy below bar ===== #}
             <div class="home-hero">
-                <div class="home-logo">abbiey.<span>search</span></div>
-                <div class="home-taglines">
-                    <p class="home-tagline">answers over obstacles</p>
-                    <p class="home-tagline">context over constraints</p>
-                    <p class="home-tagline">clarity over confusion:</p>
-                </div>
+                <h1 class="home-logo">abbiey.<span>search</span></h1>
             </div>
             {% endif %}
 
@@ -406,6 +401,13 @@
                 <input type="hidden" name="safesearch" id="safesearch-input" value="off">
             </form>
 
+            {% if not query %}
+            <div class="home-support">
+                <p class="home-support-line">answers over obstacles</p>
+                <p class="home-support-line">context over constraints</p>
+                <p class="home-support-line">clarity over confusion</p>
+            </div>
+            {% endif %}
 
             {% if not query %}
             <div class="home-recent-wrap">
