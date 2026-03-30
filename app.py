@@ -31,6 +31,13 @@ from flask_limiter.util import get_remote_address
 
 from entity_parser import detect_entities, build_search_queries, primary_entity
 
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+except ImportError:
+    pass
+
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", os.urandom(24).hex())
 app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 31536000  # 1-year cache for static files
@@ -157,11 +164,30 @@ def _turso_execute(sql: str, args: list = None, db: str = "analytics") -> list:
 
 # ---------------------------------------------------------------------------
 # Supabase / PostgreSQL persistent backend (alternative to Turso)
-# Set SUPABASE_DB_URL=postgresql://postgres:[password]@[host]:6543/postgres
-# (use the pooler URL from Supabase Project Settings → Database → Connection Pooling)
+#
+# This app uses PostgreSQL via psycopg2, NOT the Supabase REST/Data API keys
+# (sb_publishable_* / sb_secret_*). In Supabase Dashboard:
+#   Settings → Database → Connection string → URI (use "Transaction" pooler for
+#   serverless, port 6543, or direct connection port 5432).
+# Set either SUPABASE_DB_URL or DATABASE_URL to that postgres:// or postgresql:// URI.
 # ---------------------------------------------------------------------------
 _SUPABASE_DB_URL = os.environ.get("SUPABASE_DB_URL", "") or os.environ.get("DATABASE_URL", "")
 _pg_conn_lock = threading.Lock()
+
+
+def _db_url_host_for_log(db_url: str) -> str:
+    """Return host:port for logs and health JSON (never the password)."""
+    if not db_url:
+        return ""
+    try:
+        u = db_url.replace("postgresql+psycopg2://", "postgresql://", 1)
+        p = urlparse(u)
+        if not p.hostname:
+            return "(invalid URL)"
+        port = p.port or 5432
+        return f"{p.hostname}:{port}"
+    except Exception:
+        return "(unparseable URL)"
 
 
 def _adapt_sql_pg(sql: str) -> str:
@@ -305,9 +331,15 @@ def _init_pg_tables():
 if _SUPABASE_DB_URL:
     try:
         _init_pg_tables()
-        logging.info("Supabase/PostgreSQL analytics backend active")
+        _pg_execute("SELECT 1 AS ok")
+        _endpoint = _db_url_host_for_log(_SUPABASE_DB_URL)
+        logging.info("Supabase/PostgreSQL connected (%s) — users, analytics, waitlist use this DB", _endpoint)
     except Exception as _pg_init_err:
-        logging.warning("Supabase init failed: %s", _pg_init_err)
+        logging.warning(
+            "Supabase/PostgreSQL connection failed (%s): %s",
+            _db_url_host_for_log(_SUPABASE_DB_URL),
+            _pg_init_err,
+        )
 
 
 def _analytics_execute(sql: str, args: list = None):
@@ -2796,6 +2828,8 @@ def admin_api_health():
         "storage": _active_storage(),
         "live_sse_clients": len(_SSE_CLIENTS),
     }
+    if _SUPABASE_DB_URL:
+        health["db_endpoint"] = _db_url_host_for_log(_SUPABASE_DB_URL)
     # Test analytics DB
     try:
         _analytics_execute("SELECT 1 as ok")

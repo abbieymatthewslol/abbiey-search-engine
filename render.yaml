@@ -1,3 +1,5 @@
+# Optional: add SUPABASE_DB_URL (or DATABASE_URL) in the Render dashboard —
+# PostgreSQL URI from Supabase → Settings → Database (pooler :6543 recommended).
 services:
   - type: web
     name: abbieysearch

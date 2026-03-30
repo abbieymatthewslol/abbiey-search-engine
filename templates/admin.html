@@ -322,8 +322,9 @@ button{background:none;border:none;cursor:pointer;font:inherit;color:inherit}
             <div id="storage-info-users" style="margin-bottom:.8rem"></div>
             To enable persistent analytics, set ONE of these in Vercel env vars:<br><br>
             <strong style="color:var(--blue)">Option A — Supabase (PostgreSQL)</strong><br>
+            Use the <strong>Database</strong> connection URI, not the API Keys page (<code>sb_publishable_*</code> / <code>sb_secret_*</code> are for REST/JS only).<br>
             <code style="background:var(--bg-hov);padding:.2em .4em;border-radius:4px;font-size:.78rem;display:block;margin:.4rem 0">SUPABASE_DB_URL=postgresql://postgres:[password]@[host]:6543/postgres</code>
-            <a href="https://supabase.com/dashboard" target="_blank" style="color:var(--blue)">Get URL from Supabase → Project Settings → Database → Connection Pooling →</a><br><br>
+            <a href="https://supabase.com/dashboard" target="_blank" style="color:var(--blue)">Supabase → Project Settings → Database → Connection string (URI, pooler port 6543)</a><br><br>
             <strong style="color:var(--accent)">Option B — Turso (SQLite-compatible)</strong><br>
             <code style="background:var(--bg-hov);padding:.2em .4em;border-radius:4px;font-size:.78rem;display:block;margin:.4rem 0">LIBSQL_URL=https://your-db.turso.io<br>LIBSQL_AUTH_TOKEN=your-token</code>
             <a href="https://turso.tech" target="_blank" style="color:var(--accent)">Create free Turso DB →</a><br><br>

@@ -33,8 +33,13 @@ Privacy-respecting search engine with no tracking, filtering, or logs.
 ## Run
 ```bash
 cd path/to/abbiey-search-engine-2
+# First time + Supabase (only asks for your DB password):
+python scripts/setup_supabase_env.py
+pip install -r requirements.txt
+python scripts/verify_supabase_connection.py
 python app.py
 # Default port from env PORT or 8000 — http://127.0.0.1:8000
+# Windows: you can double-click setup_supabase.bat instead of the first line.
 ```
 
 ## Test
@@ -42,6 +47,11 @@ python app.py
 pytest tests/ -v
 # See tests/MANUAL_QA_LAYOUT.md for panel/layout checks not covered by pytest
 ```
+
+## Supabase (production database)
+- Set **`SUPABASE_DB_URL`** or **`DATABASE_URL`** to the **PostgreSQL URI** from the Supabase dashboard (**Settings → Database → Connection string**). Prefer the **pooler** (port **6543**, transaction mode) for serverless.
+- **Not** used: the dashboard **sb_publishable_*** / **sb_secret_*** keys (those target the Supabase REST API; this app uses `psycopg2` + SQL).
+- On success, startup logs: `Supabase/PostgreSQL connected (host:port)`. **`/admin/api/health?token=...`** returns `"storage": "supabase"` and `"analytics_db": "ok"`.
 
 ## Deploy
 ```bash
