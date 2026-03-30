@@ -304,6 +304,32 @@ class TestEntityDedup:
                         assert resp.status_code == 200
 
 
+class TestSecurityHeaders:
+    """Response headers from after_request."""
+
+    def test_html_get_includes_csp_and_nosniff(self, client):
+        resp = client.get("/", follow_redirects=True)
+        assert resp.status_code == 200
+        assert "content-security-policy" in resp.headers
+        assert resp.headers.get("X-Content-Type-Options") == "nosniff"
+        assert "strict-origin-when-cross-origin" in (resp.headers.get("Referrer-Policy") or "")
+
+
+class TestApiPreview:
+    """Page preview proxy."""
+
+    def test_preview_rejects_non_http_url(self, client):
+        resp = client.get("/api/preview?url=ftp://example.com/")
+        assert resp.status_code == 400
+
+    def test_preview_rejects_overlong_url(self, client):
+        from app import _MAX_PREVIEW_URL_LEN
+
+        long_url = "https://example.com/" + ("x" * (_MAX_PREVIEW_URL_LEN + 1))
+        resp = client.get("/api/preview", query_string={"url": long_url})
+        assert resp.status_code == 400
+
+
 class TestChatAPI:
     """Test the AI research assistant chat endpoint."""
 
@@ -343,11 +369,39 @@ class TestChatAPI:
         assert roles.count("user") >= 2
         assert "system" in roles  # context goes in system role
 
-    def test_chat_long_message(self, client):
+    def test_chat_message_exceeds_api_limit(self, client):
+        from app import _MAX_CHAT_MESSAGE_LEN
+
         resp = client.post("/api/chat", json={
             "query": "test",
-            "message": "a" * 2001,
+            "message": "a" * (_MAX_CHAT_MESSAGE_LEN + 1),
             "history": [],
+        })
+        assert resp.status_code == 400
+
+    def test_chat_query_too_long(self, client):
+        from app import MAX_QUERY_LENGTH
+
+        resp = client.post("/api/chat", json={
+            "query": "q" * (MAX_QUERY_LENGTH + 1),
+            "message": "hello",
+            "history": [],
+        })
+        assert resp.status_code == 400
+
+    def test_chat_invalid_history_type(self, client):
+        resp = client.post("/api/chat", json={
+            "query": "test",
+            "message": "hi",
+            "history": "not-a-list",
+        })
+        assert resp.status_code == 400
+
+    def test_chat_invalid_history_role(self, client, mock_ddg, mock_chat):
+        resp = client.post("/api/chat", json={
+            "query": "test",
+            "message": "hi",
+            "history": [{"role": "system", "content": "bad"}],
         })
         assert resp.status_code == 400
 

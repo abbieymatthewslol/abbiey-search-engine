@@ -1,3 +1,10 @@
+/**
+ * script.js — main client bundle (single file for simple deploy/caching).
+ * Logical regions (grep for "// ====="):
+ *   Paywall, loading bars, theme, settings modal, filters, infinite scroll,
+ *   lightbox, preview panel + layout gutter, "/" shortcut, chat, onion verify,
+ *   bookmarks, related/trending, voice, in-results filter, view mode, ripple, tabs.
+ */
 document.addEventListener("DOMContentLoaded", () => {
   const html = document.documentElement;
 
@@ -655,6 +662,26 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  const resetLayoutBtn = document.getElementById("reset-layout-btn");
+  if (resetLayoutBtn) {
+    resetLayoutBtn.addEventListener("click", () => {
+      ["abbiey_preview_panel_w", "abbiey_preview_docked", "abbiey_chat_w", "abbiey_chat_h"].forEach((k) => {
+        localStorage.removeItem(k);
+      });
+      html.style.removeProperty("--preview-panel-width");
+      html.style.removeProperty("--chat-panel-width");
+      html.style.removeProperty("--chat-panel-height");
+      document.querySelector(".app-layout")?.classList.remove("preview-docked-hidden");
+      const pr = document.getElementById("preview-restore-tab");
+      if (pr) pr.hidden = true;
+      document.getElementById("chat-panel")?.classList.remove("chat-user-sized");
+      const g = document.getElementById("layout-gutter-preview");
+      if (g) g.setAttribute("aria-valuenow", "340");
+      resetLayoutBtn.textContent = "Reset!";
+      setTimeout(() => { resetLayoutBtn.textContent = "Reset sizes & preview column"; }, 1500);
+    });
+  }
+
   // ===== Region selector =====
   const regionSelect = document.getElementById("region-select");
   const regionInput = document.getElementById("region-input");
@@ -1232,6 +1259,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let previewOpen = false;
   let previewCache = {};
   let activeResultIdx = -1;
+  let previewFocusFromKeyboard = false;
 
   // Cache preview element references once
   const _previewImg = document.getElementById("preview-image");
@@ -1248,6 +1276,17 @@ document.addEventListener("DOMContentLoaded", () => {
     const previewRestoreTab = document.getElementById("preview-restore-tab");
     const LP_PREVIEW_W = "abbiey_preview_panel_w";
     const LP_PREVIEW_DOCKED = "abbiey_preview_docked";
+    let scheduleKbFocusPending = false;
+
+    function schedulePreviewFocusFromKeyboard() {
+      if (!scheduleKbFocusPending) return;
+      scheduleKbFocusPending = false;
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          (previewDockBtn || previewClose)?.focus?.();
+        });
+      });
+    }
 
     function undockPreviewIfNeeded() {
       if (!layoutRoot || !layoutRoot.classList.contains("preview-docked-hidden")) return;
@@ -1295,29 +1334,38 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (gutter) {
       let dragPrev = false;
+      let gutterPtrId = null;
       function onMove(clientX) {
         const w = clampPreviewWidth(window.innerWidth - clientX);
         persistPreviewWidth(w);
         gutter.setAttribute("aria-valuenow", String(w));
       }
-      gutter.addEventListener("mousedown", (e) => {
-        if (window.innerWidth <= 1100) return;
+      function endGutterDrag(e) {
+        if (!dragPrev || (e && e.pointerId !== gutterPtrId)) return;
+        dragPrev = false;
+        gutterPtrId = null;
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+        try {
+          gutter.releasePointerCapture(e.pointerId);
+        } catch (_) { /* noop */ }
+      }
+      gutter.addEventListener("pointerdown", (e) => {
+        if (window.innerWidth <= 1100 || e.button !== 0) return;
         dragPrev = true;
+        gutterPtrId = e.pointerId;
         e.preventDefault();
+        gutter.setPointerCapture(e.pointerId);
         document.body.style.cursor = "col-resize";
         document.body.style.userSelect = "none";
         onMove(e.clientX);
       });
-      document.addEventListener("mousemove", (e) => {
-        if (!dragPrev) return;
+      gutter.addEventListener("pointermove", (e) => {
+        if (!dragPrev || e.pointerId !== gutterPtrId) return;
         onMove(e.clientX);
       });
-      document.addEventListener("mouseup", () => {
-        if (!dragPrev) return;
-        dragPrev = false;
-        document.body.style.cursor = "";
-        document.body.style.userSelect = "";
-      });
+      gutter.addEventListener("pointerup", endGutterDrag);
+      gutter.addEventListener("pointercancel", endGutterDrag);
       gutter.addEventListener("keydown", (e) => {
         if (window.innerWidth <= 1100) return;
         if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
@@ -1378,6 +1426,9 @@ document.addEventListener("DOMContentLoaded", () => {
     function loadPreview(url) {
       if (!url || !url.startsWith("http")) return;
 
+      scheduleKbFocusPending = previewFocusFromKeyboard;
+      previewFocusFromKeyboard = false;
+
       undockPreviewIfNeeded();
 
       // Show panel if not open
@@ -1407,11 +1458,12 @@ document.addEventListener("DOMContentLoaded", () => {
               previewLoading.style.display = "none";
               previewContent.style.display = "block";
               _previewTitle.textContent = "Preview unavailable";
-              _previewDesc.textContent = "Could not load page preview.";
+              _previewDesc.textContent = data.error || "Could not load page preview.";
               _previewExcerpt.textContent = "";
               _previewSite.textContent = "";
               _previewImg.style.display = "none";
               _previewLink.href = url;
+              schedulePreviewFocusFromKeyboard();
             });
             return;
           }
@@ -1422,6 +1474,7 @@ document.addEventListener("DOMContentLoaded", () => {
           requestAnimationFrame(() => {
             previewLoading.style.display = "none";
             previewEmpty.style.display = "block";
+            schedulePreviewFocusFromKeyboard();
           });
         });
     }
@@ -1443,6 +1496,7 @@ document.addEventListener("DOMContentLoaded", () => {
         _previewDesc.textContent = data.description || "";
         _previewExcerpt.textContent = data.excerpt || "";
         _previewLink.href = data.url;
+        schedulePreviewFocusFromKeyboard();
       });
     }
 
@@ -1451,6 +1505,7 @@ document.addEventListener("DOMContentLoaded", () => {
     document.addEventListener("mouseover", (e) => {
       const result = e.target.closest("#results > .result, #results > .image-card");
       if (!result || !result.dataset.url) return;
+      previewFocusFromKeyboard = false;
       clearTimeout(hoverTimer);
       hoverTimer = setTimeout(() => loadPreview(result.dataset.url), 300);
     }, { passive: true });
@@ -1475,10 +1530,12 @@ document.addEventListener("DOMContentLoaded", () => {
       if (e.key === "j") {
         e.preventDefault();
         activeResultIdx = Math.min(activeResultIdx + 1, results.length - 1);
+        previewFocusFromKeyboard = true;
         highlightResult(activeResultIdx);
       } else if (e.key === "k") {
         e.preventDefault();
         activeResultIdx = Math.max(activeResultIdx - 1, 0);
+        previewFocusFromKeyboard = true;
         highlightResult(activeResultIdx);
       } else if (e.key === "o" && activeResultIdx >= 0) {
         e.preventDefault();
@@ -1565,60 +1622,104 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     let chatDragN = false;
     let chatDragW = false;
+    let chatPtrN = null;
+    let chatPtrW = null;
     let chatResizeStartY = 0;
     let chatResizeStartH = 0;
     let chatResizeStartX = 0;
     let chatResizeStartW = 0;
+
+    function endChatDragN(e) {
+      if (!chatDragN || (e && e.pointerId !== chatPtrN)) return;
+      chatDragN = false;
+      chatPtrN = null;
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+      const h = chatPanel.getBoundingClientRect().height;
+      localStorage.setItem(LP_CHAT_H, String(clampChatH(Math.round(h))));
+      if (e && resizeN) {
+        try {
+          resizeN.releasePointerCapture(e.pointerId);
+        } catch (_) { /* noop */ }
+      }
+    }
+    function endChatDragW(e) {
+      if (!chatDragW || (e && e.pointerId !== chatPtrW)) return;
+      chatDragW = false;
+      chatPtrW = null;
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+      const w = chatPanel.getBoundingClientRect().width;
+      localStorage.setItem(LP_CHAT_W, String(clampChatW(Math.round(w))));
+      if (e && resizeW) {
+        try {
+          resizeW.releasePointerCapture(e.pointerId);
+        } catch (_) { /* noop */ }
+      }
+    }
+
     if (resizeN) {
-      resizeN.addEventListener("mousedown", (e) => {
-        if (window.innerWidth <= 768 || !chatPanel.classList.contains("open")) return;
+      resizeN.addEventListener("pointerdown", (e) => {
+        if (window.innerWidth <= 768 || !chatPanel.classList.contains("open") || e.button !== 0) return;
         e.preventDefault();
         e.stopPropagation();
         chatDragN = true;
+        chatPtrN = e.pointerId;
+        resizeN.setPointerCapture(e.pointerId);
         chatResizeStartY = e.clientY;
         chatResizeStartH = chatPanel.getBoundingClientRect().height;
         document.body.style.userSelect = "none";
         document.body.style.cursor = "ns-resize";
       });
+      resizeN.addEventListener("pointermove", (e) => {
+        if (!chatDragN || e.pointerId !== chatPtrN) return;
+        const nh = clampChatH(chatResizeStartH + (chatResizeStartY - e.clientY));
+        html.style.setProperty("--chat-panel-height", `${nh}px`);
+        chatPanel.classList.add("chat-user-sized");
+      });
+      resizeN.addEventListener("pointerup", endChatDragN);
+      resizeN.addEventListener("pointercancel", endChatDragN);
+      resizeN.addEventListener("keydown", (e) => {
+        if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+        if (!chatPanel.classList.contains("open") || window.innerWidth <= 768) return;
+        e.preventDefault();
+        const cur = Math.round(chatPanel.getBoundingClientRect().height);
+        const nh = clampChatH(cur + (e.key === "ArrowUp" ? 16 : -16));
+        html.style.setProperty("--chat-panel-height", `${nh}px`);
+        chatPanel.classList.add("chat-user-sized");
+        localStorage.setItem(LP_CHAT_H, String(nh));
+      });
     }
     if (resizeW) {
-      resizeW.addEventListener("mousedown", (e) => {
-        if (window.innerWidth <= 768 || !chatPanel.classList.contains("open")) return;
+      resizeW.addEventListener("pointerdown", (e) => {
+        if (window.innerWidth <= 768 || !chatPanel.classList.contains("open") || e.button !== 0) return;
         e.preventDefault();
         e.stopPropagation();
         chatDragW = true;
+        chatPtrW = e.pointerId;
+        resizeW.setPointerCapture(e.pointerId);
         chatResizeStartX = e.clientX;
         chatResizeStartW = chatPanel.getBoundingClientRect().width;
         document.body.style.userSelect = "none";
         document.body.style.cursor = "ew-resize";
       });
-    }
-    document.addEventListener("mousemove", (e) => {
-      if (chatDragN) {
-        const nh = clampChatH(chatResizeStartH + (chatResizeStartY - e.clientY));
-        html.style.setProperty("--chat-panel-height", `${nh}px`);
-        chatPanel.classList.add("chat-user-sized");
-      } else if (chatDragW) {
+      resizeW.addEventListener("pointermove", (e) => {
+        if (!chatDragW || e.pointerId !== chatPtrW) return;
         const nw = clampChatW(chatResizeStartW + (chatResizeStartX - e.clientX));
         html.style.setProperty("--chat-panel-width", `${nw}px`);
-      }
-    });
-    document.addEventListener("mouseup", () => {
-      if (chatDragN) {
-        chatDragN = false;
-        document.body.style.userSelect = "";
-        document.body.style.cursor = "";
-        const h = chatPanel.getBoundingClientRect().height;
-        localStorage.setItem(LP_CHAT_H, String(clampChatH(Math.round(h))));
-      }
-      if (chatDragW) {
-        chatDragW = false;
-        document.body.style.userSelect = "";
-        document.body.style.cursor = "";
-        const w = chatPanel.getBoundingClientRect().width;
-        localStorage.setItem(LP_CHAT_W, String(clampChatW(Math.round(w))));
-      }
-    });
+      });
+      resizeW.addEventListener("pointerup", endChatDragW);
+      resizeW.addEventListener("pointercancel", endChatDragW);
+      resizeW.addEventListener("keydown", (e) => {
+        if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+        if (!chatPanel.classList.contains("open") || window.innerWidth <= 768) return;
+        e.preventDefault();
+        const cur = Math.round(chatPanel.getBoundingClientRect().width);
+        const nw = clampChatW(cur + (e.key === "ArrowLeft" ? 16 : -16));
+        html.style.setProperty("--chat-panel-width", `${nw}px`);
+        localStorage.setItem(LP_CHAT_W, String(nw));
+      });
+    }
     if (resizeN) {
       resizeN.addEventListener("dblclick", (e) => {
         e.preventDefault();

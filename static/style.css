@@ -2102,6 +2102,11 @@ article.result.code-result { font-size: .9rem; }
   cursor: ew-resize;
 }
 .chat-panel.collapsed .chat-resize-handle { pointer-events: none; opacity: 0; }
+.chat-resize-handle:focus { outline: none; }
+.chat-resize-handle:focus-visible {
+  opacity: 1;
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 40%, transparent);
+}
 
 .chat-header {
   display: flex;
@@ -2375,6 +2380,30 @@ article.result.code-result { font-size: .9rem; }
   transition: background var(--dur-fast) var(--ease-out);
 }
 .settings-danger-btn:hover { background: color-mix(in srgb, #ef4444 12%, transparent); }
+
+.settings-secondary-btn {
+  font-size: .8125rem;
+  padding: .4rem .75rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-surface-2);
+  color: var(--text-dim);
+  cursor: pointer;
+  font-family: inherit;
+  transition: background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.settings-secondary-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+.settings-hint {
+  font-size: .75rem;
+  line-height: 1.55;
+  color: color-mix(in srgb, var(--text-muted) 88%, transparent);
+  margin: -.25rem 0 .75rem;
+  max-width: 42ch;
+}
 .settings-overlay.closing { animation: fadeOut 140ms var(--ease-out) forwards; }
 .settings-overlay.closing .settings-modal { animation: scaleDown 140ms var(--ease-out) forwards; }
 
@@ -3191,6 +3220,18 @@ footer {
   .knowledge-image { width: 100%; height: 180px; }
   .color-card-top { flex-direction: column; }
   .weather-forecast { gap: .5rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .preview-panel,
+  .chat-panel,
+  .chat-fab,
+  .panel-restore-tab,
+  .layout-gutter-preview,
+  .layout-gutter-preview::after {
+    transition: none !important;
+    animation: none !important;
+  }
 }
 
 @media (max-width: 480px) {

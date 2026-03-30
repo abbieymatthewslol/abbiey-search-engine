@@ -933,6 +933,40 @@ CACHE_FETCH_SIZE = 100  # Fetch enough results to serve multiple pages
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+_MAX_PREVIEW_URL_LEN = 4096
+_MAX_CHAT_HISTORY_TURNS = 12
+_MAX_CHAT_MESSAGE_LEN = 12_000
+
+
+def _log_event(event: str, **fields: object) -> None:
+    """Structured log lines without embedding raw user search text."""
+    parts = [event] + [f"{k}={v}" for k, v in sorted(fields.items()) if v is not None and v != ""]
+    logger.info(" | ".join(parts))
+
+
+@app.after_request
+def _security_headers(response):
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault(
+        "Permissions-Policy",
+        "camera=(), microphone=(), geolocation=(), payment=()",
+    )
+    csp = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; "
+        "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; "
+        "img-src 'self' data: https: blob:; "
+        "connect-src 'self' https: wss:; "
+        "font-src 'self' data:; "
+        "frame-ancestors 'self'; "
+        "base-uri 'self'; "
+        "form-action 'self'"
+    )
+    response.headers.setdefault("Content-Security-Policy", csp)
+    return response
+
+
 # ---------------------------------------------------------------------------
 # Rate limiter
 # ---------------------------------------------------------------------------
@@ -1416,7 +1450,7 @@ def _try_knowledge_panel(query):
                 "page_url": f"https://en.wikipedia.org/wiki/{quote_plus(page.get('title', q).replace(' ', '_'))}",
             }
     except Exception:
-        logger.warning("Wikipedia knowledge panel failed for query=%s", q)
+        _log_event("wikipedia_knowledge_panel_failed")
     return None
 
 
@@ -1497,7 +1531,7 @@ def _try_weather(location):
             "forecast": forecast,
         }
     except Exception:
-        logger.warning("Weather lookup failed for location=%s", location)
+        _log_event("weather_lookup_failed", backend="open_meteo")
     return None
 
 
@@ -2065,6 +2099,8 @@ def api_preview():
     url = request.args.get("url", "").strip()
     if not url or not url.startswith("http"):
         return jsonify({"error": "Invalid URL"}), 400
+    if len(url) > _MAX_PREVIEW_URL_LEN:
+        return jsonify({"error": "URL too long"}), 400
     parsed_preview = urlparse(url)
     if ".onion" in (parsed_preview.netloc or ""):
         return jsonify({"error": "Cannot preview .onion addresses without Tor Browser"}), 400
@@ -2075,7 +2111,7 @@ def api_preview():
     try:
         resp = httpx.get(
             url,
-            timeout=4.0,
+            timeout=httpx.Timeout(connect=2.0, read=4.0),
             follow_redirects=True,
             headers={"User-Agent": "Mozilla/5.0 (compatible; abbiey.search/1.0)"},
         )
@@ -2141,7 +2177,15 @@ def api_preview():
             "site_name": site_name,
             "url": url,
         })
+    except httpx.TimeoutException:
+        _log_event("preview_fetch_timeout")
+        return jsonify({"error": "Preview timed out — the site was too slow to respond."}), 504
+    except httpx.HTTPStatusError as e:
+        code = e.response.status_code if e.response is not None else "?"
+        _log_event("preview_fetch_http_error", status=code)
+        return jsonify({"error": f"Could not load page (HTTP {code})."}), 502
     except Exception:
+        logger.exception("preview_fetch_failed")
         return jsonify({"error": "Could not fetch preview"}), 502
 
 
@@ -2231,8 +2275,23 @@ def api_chat():
 
     if not query or not message:
         return jsonify({"error": "Missing query or message"}), 400
-    if len(message) > MAX_QUERY_LENGTH:
+    if len(query) > MAX_QUERY_LENGTH:
+        return jsonify({"error": "Query too long"}), 400
+    if len(message) > _MAX_CHAT_MESSAGE_LEN:
         return jsonify({"error": "Message too long"}), 400
+    if not isinstance(history, list):
+        return jsonify({"error": "Invalid history"}), 400
+    if len(history) > _MAX_CHAT_HISTORY_TURNS * 2:
+        history = history[-(_MAX_CHAT_HISTORY_TURNS * 2) :]
+    for h in history:
+        if not isinstance(h, dict):
+            return jsonify({"error": "Invalid history entry"}), 400
+        role = h.get("role", "")
+        content = h.get("content", "")
+        if role not in ("user", "assistant"):
+            return jsonify({"error": "Invalid history role"}), 400
+        if not isinstance(content, str) or len(content) > _MAX_CHAT_MESSAGE_LEN:
+            return jsonify({"error": "Invalid history content"}), 400
 
     # Fetch search results for context
     context_results = _fetch_results(query, 1, "text")
@@ -2286,7 +2345,7 @@ def api_chat():
         response = _extractive_research(message, all_results)
         return jsonify({"response": response})
     except Exception:
-        logger.exception("Chat fallback failed for query=%s", query)
+        logger.exception("chat_fallback_failed")
         return jsonify({"error": "Chat service temporarily unavailable. Please try again."}), 503
 
 
@@ -2335,7 +2394,7 @@ def api_ai_summary():
         if response:
             return jsonify({"summary": response, "sources": sources})
     except Exception:
-        logger.warning("AI summary failed for query=%s, trying extractive fallback", query)
+        _log_event("ai_summary_ollama_failed", fallback="extractive")
 
     # Fallback: extractive summary from first two results
     parts = []

@@ -14,8 +14,8 @@ Privacy-respecting search engine with no tracking, filtering, or logs.
 - Search tabs: All, Images, News, Videos, Code, Deep Web
 - Entity detection (phone, email, username, person, domain, IP, crypto, MAC, coordinates, hashtag, address, weather)
 - Infinite scroll pagination
-- Result preview panel (hover or j/k navigation)
-- AI Research Assistant chat panel
+- Result preview panel (hover or j/k navigation); **resizable gutter**, dock column, restore tab
+- AI Research Assistant chat panel (**resizable**, peek/minimize)
 - Autocomplete with search history
 - Theme toggle (dark/light), custom accent colors, density modes
 - Region selector
@@ -32,15 +32,15 @@ Privacy-respecting search engine with no tracking, filtering, or logs.
 
 ## Run
 ```bash
-cd C:\Users\61497\search-engine
+cd path/to/abbiey-search-engine-2
 python app.py
-# Runs on http://localhost:8000
+# Default port from env PORT or 8000 — http://127.0.0.1:8000
 ```
 
 ## Test
 ```bash
 pytest tests/ -v
-# 167 tests covering routes, entities, features, cards, and edge cases
+# See tests/MANUAL_QA_LAYOUT.md for panel/layout checks not covered by pytest
 ```
 
 ## Deploy
@@ -53,13 +53,13 @@ git push heroku main
 ```
 
 ## Structure
-- `app.py` — Main Flask app (routes, APIs, feature detection, search fallbacks)
+- `app.py` — Main Flask app (routes, APIs, feature detection, search fallbacks, security headers)
 - `entity_parser.py` — Entity detection logic (12 entity types including weather)
 - `templates/index.html` — Main template (all card types, popovers, panels)
 - `templates/error.html` — Error page
-- `static/script.js` — Frontend JS (AI summary fetch, autocomplete, copy buttons, popovers)
+- `static/script.js` — Frontend JS (single bundle; regions documented in file header)
 - `static/style.css` — Styles (all card/component styles, responsive, dark/light themes)
-- `tests/` — pytest suite (167 tests)
+- `tests/` — pytest suite + manual QA notes for layout
 
 ## Key APIs (no keys required)
 - `/api/ai-summary?q=...` — AI-generated summary with citations
