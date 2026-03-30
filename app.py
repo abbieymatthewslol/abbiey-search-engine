@@ -171,7 +171,30 @@ def _turso_execute(sql: str, args: list = None, db: str = "analytics") -> list:
 #   serverless, port 6543, or direct connection port 5432).
 # Set either SUPABASE_DB_URL or DATABASE_URL to that postgres:// or postgresql:// URI.
 # ---------------------------------------------------------------------------
-_SUPABASE_DB_URL = os.environ.get("SUPABASE_DB_URL", "") or os.environ.get("DATABASE_URL", "")
+
+
+def _normalize_supabase_db_url(db_url: str) -> str:
+    """Append sslmode=require for Supabase hosts when omitted (psycopg2 / some networks need it)."""
+    if not db_url:
+        return ""
+    db_url = db_url.strip()
+    try:
+        canonical = db_url.replace("postgresql+psycopg2://", "postgresql://", 1)
+        p = urlparse(canonical)
+        host = (p.hostname or "").lower()
+    except Exception:
+        return db_url
+    if not host or "supabase" not in host:
+        return db_url
+    if "sslmode=" in db_url.lower():
+        return db_url
+    sep = "&" if p.query else "?"
+    return db_url + sep + "sslmode=require"
+
+
+_SUPABASE_DB_URL = _normalize_supabase_db_url(
+    os.environ.get("SUPABASE_DB_URL", "") or os.environ.get("DATABASE_URL", "")
+)
 _pg_conn_lock = threading.Lock()
 
 
