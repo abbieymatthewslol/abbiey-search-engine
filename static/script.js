@@ -472,16 +472,22 @@ document.addEventListener("DOMContentLoaded", () => {
     const menu = document.getElementById("tab-more-menu");
     if (!btn || !menu) return;
     btn.addEventListener("click", (e) => {
+      e.preventDefault();
       e.stopPropagation();
-      const open = !menu.hasAttribute("hidden");
-      menu[open ? "setAttribute" : "removeAttribute"]("hidden", "");
-      btn.setAttribute("aria-expanded", String(!open));
-    });
-    document.addEventListener("click", (e) => {
-      if (!menu.hasAttribute("hidden") && !menu.contains(e.target) && e.target !== btn) {
+      const isOpen = !menu.hasAttribute("hidden");
+      if (isOpen) {
         menu.setAttribute("hidden", "");
         btn.setAttribute("aria-expanded", "false");
+      } else {
+        menu.removeAttribute("hidden");
+        btn.setAttribute("aria-expanded", "true");
       }
+    });
+    document.addEventListener("click", (e) => {
+      if (menu.hasAttribute("hidden")) return;
+      if (btn.contains(e.target) || menu.contains(e.target)) return;
+      menu.setAttribute("hidden", "");
+      btn.setAttribute("aria-expanded", "false");
     });
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") { menu.setAttribute("hidden", ""); btn.setAttribute("aria-expanded", "false"); }

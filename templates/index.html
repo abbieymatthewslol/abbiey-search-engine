@@ -428,13 +428,15 @@
             {% endif %}
 
             <nav class="search-tabs">
+                <div class="search-tabs-scroll">
                 <a href="/search?q={{ query|urlencode }}&type=text{% if region %}&region={{ region }}{% endif %}" class="tab {% if search_type == 'text' %}active{% endif %}">All</a>
                 <a href="/search?q={{ query|urlencode }}&type=images{% if region %}&region={{ region }}{% endif %}{% if time_filter %}&df={{ time_filter|urlencode }}{% endif %}{% if img_scroll_extras %}&amp;{{ img_scroll_extras }}{% endif %}" class="tab {% if search_type == 'images' %}active{% endif %}">Images</a>
                 <a href="/search?q={{ query|urlencode }}&type=news{% if region %}&region={{ region }}{% endif %}" class="tab {% if search_type == 'news' %}active{% endif %}">News</a>
                 <a href="/search?q={{ query|urlencode }}&type=videos{% if region %}&region={{ region }}{% endif %}" class="tab {% if search_type == 'videos' %}active{% endif %}">Videos</a>
                 <a href="/search?q={{ query|urlencode }}&type=code{% if region %}&region={{ region }}{% endif %}" class="tab {% if search_type == 'code' %}active{% endif %}">Code</a>
+                </div>
                 <div class="tab-more-wrap {% if search_type in ('onion', 'saved') %}has-active{% endif %}" id="tab-more-wrap">
-                    <button class="tab tab-more-btn {% if search_type in ('onion', 'saved') %}active{% endif %}" id="tab-more-btn" aria-haspopup="true" aria-expanded="false">
+                    <button type="button" class="tab tab-more-btn {% if search_type in ('onion', 'saved') %}active{% endif %}" id="tab-more-btn" aria-haspopup="true" aria-expanded="false" aria-controls="tab-more-menu">
                         {% if search_type == 'onion' %}Deep Web{% elif search_type == 'saved' %}Saved{% else %}More{% endif %}
                         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
                     </button>

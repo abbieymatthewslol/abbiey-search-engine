@@ -523,13 +523,11 @@ body.has-results .search-btn.search-btn-icon {
 /* ===== 7. SEARCH TABS ===== */
 .search-tabs {
   display: flex;
+  flex-direction: row;
   align-items: stretch;
   gap: 0;
   padding: 0;
   margin-top: 1rem;
-  overflow-x: auto;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
   position: relative;
   background: transparent;
   border: none;
@@ -538,7 +536,18 @@ body.has-results .search-btn.search-btn-icon {
   width: 100%;
   max-width: 100%;
 }
-.search-tabs::-webkit-scrollbar { display: none; }
+/* Scroll only the primary tabs — "More" dropdown sits outside so it is not clipped */
+.search-tabs-scroll {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.search-tabs-scroll::-webkit-scrollbar { display: none; }
 
 .tab {
   display: inline-flex;
@@ -581,6 +590,7 @@ body.has-results .search-btn.search-btn-icon {
   position: relative;
   display: inline-flex;
   align-self: stretch;
+  flex-shrink: 0;
 }
 .tab-more-menu {
   position: absolute;
