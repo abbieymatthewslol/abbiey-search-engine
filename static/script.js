@@ -16,11 +16,51 @@ document.addEventListener("DOMContentLoaded", () => {
       resume: "abbiey_paywall_resume_at",
       sessUrl: "abbiey_counted_search_url",
     };
+    const UNLOCK_COOKIE = "abbiey_search_unlocked";
+    /** ~10 years — paid search unlock is meant to persist (API key checkout uses /developer?billing= only, never paid=1). */
+    const UNLOCK_COOKIE_MAX_AGE = 315360000;
     const FREE_LIMIT = 7;
     const DAY_MS = 24 * 60 * 60 * 1000;
 
+    function hasUnlockCookie() {
+      try {
+        return document.cookie.split(";").some((c) => {
+          const t = c.trim();
+          const i = t.indexOf("=");
+          if (i === -1) return false;
+          const name = t.slice(0, i).trim();
+          const val = t.slice(i + 1).trim();
+          return name === UNLOCK_COOKIE && val === "1";
+        });
+      } catch (_) {
+        return false;
+      }
+    }
+
+    function setPaidUnlockPersistence() {
+      try {
+        localStorage.setItem(LS.unlocked, "1");
+      } catch (_) {}
+      try {
+        const secure = window.location.protocol === "https:";
+        document.cookie =
+          UNLOCK_COOKIE +
+          "=1; path=/; max-age=" +
+          UNLOCK_COOKIE_MAX_AGE +
+          "; samesite=lax" +
+          (secure ? "; secure" : "");
+      } catch (_) {}
+    }
+
     function unlocked() {
-      return localStorage.getItem(LS.unlocked) === "1";
+      if (localStorage.getItem(LS.unlocked) === "1") return true;
+      if (hasUnlockCookie()) {
+        try {
+          localStorage.setItem(LS.unlocked, "1");
+        } catch (_) {}
+        return true;
+      }
+      return false;
     }
     function getCount() {
       return parseInt(localStorage.getItem(LS.count) || "0", 10) || 0;
@@ -41,7 +81,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const params = new URLSearchParams(window.location.search);
     if (params.get("unlocked") === "1" || params.get("paid") === "1") {
-      localStorage.setItem(LS.unlocked, "1");
+      setPaidUnlockPersistence();
       clearQuotaState();
       params.delete("unlocked");
       params.delete("paid");
@@ -49,6 +89,8 @@ document.addEventListener("DOMContentLoaded", () => {
       const nu = window.location.pathname + (qs ? "?" + qs : "") + window.location.hash;
       window.history.replaceState({}, "", nu);
     }
+
+    unlocked();
 
     const resumeAt = getResume();
     if (resumeAt && Date.now() >= resumeAt) {
@@ -707,8 +749,19 @@ document.addEventListener("DOMContentLoaded", () => {
   const clearAllBtn = document.getElementById("clear-all-btn");
   if (clearAllBtn) {
     clearAllBtn.addEventListener("click", () => {
-      if (!confirm("Reset all data? This clears history, bookmarks and all settings.")) return;
+      if (
+        !confirm(
+          "Reset all data? This clears history, bookmarks and settings. Your one-time search unlock (if you purchased it) stays active on this browser."
+        )
+      )
+        return;
+      const paidSearchUnlock = localStorage.getItem("abbiey_unlocked");
       localStorage.clear();
+      if (paidSearchUnlock === "1") {
+        try {
+          localStorage.setItem("abbiey_unlocked", "1");
+        } catch (_) {}
+      }
       location.reload();
     });
   }
