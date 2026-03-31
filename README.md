@@ -1,1 +1,3 @@
-an unfiltered search engine to provide answers when basic search engines do not. 
+# abbiey.search
+
+Private, fast search with no query logging and no third-party trackers. Built with Python and Flask; see `CLAUDE.md` for the full stack, features, and how to run the app locally.

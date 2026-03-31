@@ -1,8 +1,9 @@
 """
 Entity detection for search queries.
-Detects names, phone numbers, emails, usernames, domains, IPs,
-crypto wallets, MAC addresses, coordinates, hashtags, street addresses
-and generates optimized search strategies.
+Applies synonym normalization and pattern understanding (see query_understanding), then detects
+names, phone numbers, emails, usernames, domains, IPs, crypto wallets, MAC addresses,
+coordinates, hashtags, street addresses, place categories, weather, and generates
+optimized search strategies.
 """
 
 import re
@@ -10,6 +11,8 @@ from dataclasses import dataclass, field
 from typing import List, Optional
 
 import phonenumbers
+
+from query_understanding import place_category_matches, preprocess_query
 
 
 @dataclass
@@ -109,10 +112,15 @@ PLATFORMS = [
 ]
 
 
-def detect_entities(query: str) -> List[Entity]:
-    """Detect all entities in a query string."""
+def detect_entities(query: str, _preprocessed=None) -> List[Entity]:
+    """Detect all entities in a query string.
+
+    Runs synonym normalization and pattern understanding first (see query_understanding).
+    Pass _preprocessed to avoid duplicate work when the caller already preprocessed.
+    """
     entities = []
-    q = query.strip()
+    prep = _preprocessed if _preprocessed is not None else preprocess_query(query)
+    q = prep.normalized.strip()
 
     # 0. Weather queries (high priority — return early)
     wm = _WEATHER_RE.search(q)
@@ -313,7 +321,29 @@ def detect_entities(query: str) -> List[Entity]:
             meta={},
         ))
 
-    # 11. Person names (only if no other strong entities found)
+    # 11. Place categories (canonical phrases after synonym normalization)
+    for i, pcm in enumerate(place_category_matches(q)):
+        meta = {
+            "category_key": pcm["category_key"],
+            "canonical_phrase": pcm["canonical_phrase"],
+        }
+        if i == 0:
+            meta["query_intent"] = prep.intent
+            if prep.pattern:
+                meta["pattern"] = prep.pattern.to_dict()
+            if prep.unknown_terms:
+                meta["unknown_place_terms"] = prep.unknown_terms
+        entities.append(
+            Entity(
+                type="place_category",
+                value=pcm["surface"],
+                normalized=pcm["category_key"],
+                confidence=0.78,
+                meta=meta,
+            )
+        )
+
+    # 12. Person names (only if no other strong entities found)
     if not any(e.confidence >= 0.90 for e in entities):
         for match in _NAME_RE.finditer(q):
             raw = match.group(1)
@@ -411,6 +441,11 @@ def build_search_queries(query: str, entities: List[Entity]) -> List[dict]:
             extra.append({"label": "Map lookup", "query": f'"{e.normalized}" map', "type": "text"})
             extra.append({"label": "Property info", "query": f'"{e.normalized}" property records', "type": "text"})
 
+        elif e.type == "place_category":
+            display = e.meta.get("canonical_phrase", e.value.replace("_", " "))
+            extra.append({"label": "Nearby", "query": f"{display} near me", "type": "text"})
+            extra.append({"label": "Hours & map", "query": f"{display} open now map", "type": "text"})
+
     return extra
 
 
@@ -419,7 +454,18 @@ def primary_entity(entities: List[Entity]) -> Optional[Entity]:
     if not entities:
         return None
     priority = {
-        "weather": 11, "phone": 10, "email": 9, "crypto": 8, "username": 7, "ip": 6,
-        "mac": 5, "coordinates": 4, "domain": 3, "address": 2, "hashtag": 1.5, "person": 1,
+        "weather": 11,
+        "phone": 10,
+        "email": 9,
+        "crypto": 8,
+        "username": 7,
+        "ip": 6,
+        "mac": 5,
+        "coordinates": 4,
+        "place_category": 3.6,
+        "domain": 3,
+        "address": 2,
+        "hashtag": 1.5,
+        "person": 1,
     }
     return max(entities, key=lambda e: (priority.get(e.type, 0), e.confidence))

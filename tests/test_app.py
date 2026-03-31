@@ -161,6 +161,8 @@ class TestEntityAPI:
         resp = client.get("/api/entity?q=")
         data = resp.get_json()
         assert data["entities"] == []
+        assert data.get("preprocessing") is None
+        assert data.get("primary") is None
 
     def test_phone_detection(self, client):
         resp = client.get("/api/entity?q=+1 555-123-4567")

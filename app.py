@@ -30,6 +30,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
 from entity_parser import detect_entities, build_search_queries, primary_entity
+from query_understanding import preprocess_query
 
 try:
     from dotenv import load_dotenv
@@ -1943,13 +1944,22 @@ def api_entity():
     """API endpoint: detect entities in a query."""
     query = request.args.get("q", "").strip()
     if not query:
-        return jsonify({"entities": [], "queries": []})
+        return jsonify(
+            {
+                "preprocessing": None,
+                "entities": [],
+                "primary": None,
+                "queries": [],
+            }
+        )
     if len(query) > MAX_QUERY_LENGTH:
         return jsonify({"error": "Query too long"}), 400
-    entities = detect_entities(query)
+    prep = preprocess_query(query)
+    entities = detect_entities(query, _preprocessed=prep)
     queries = build_search_queries(query, entities)
     primary = primary_entity(entities)
     return jsonify({
+        "preprocessing": prep.to_dict(),
         "entities": [asdict(e) for e in entities],
         "primary": asdict(primary) if primary else None,
         "queries": queries,

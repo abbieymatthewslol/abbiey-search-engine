@@ -1,6 +1,6 @@
 # abbiey.search
 
-Privacy-respecting search engine with no tracking, filtering, or logs.
+Privacy-respecting search engine with no third-party tracking and no server-side query logs (soft client-side quota / optional unlock for heavy use).
 
 ## Tech Stack
 - Python / Flask
