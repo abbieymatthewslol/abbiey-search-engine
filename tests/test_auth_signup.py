@@ -67,6 +67,22 @@ def test_signup_maps_integrity_error_on_insert(client):
     assert b"already taken" in r.data
 
 
+def test_signup_outer_try_never_500_on_bcrypt_failure(client):
+    """Any unexpected error during signup POST should return the form with 200, not 500."""
+    with patch("app.generate_password_hash", side_effect=RuntimeError("hash failed")):
+        r = client.post(
+            "/signup",
+            data={
+                "username": "validuser",
+                "email": "ok@example.com",
+                "password": "password123",
+                "confirm_password": "password123",
+            },
+        )
+    assert r.status_code == 200
+    assert b"Something went wrong" in r.data or b"went wrong" in r.data
+
+
 def test_login_finds_user_case_insensitive(client):
     with patch("app._users_execute") as ex:
         ex.return_value = [

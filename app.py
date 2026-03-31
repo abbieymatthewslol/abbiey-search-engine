@@ -647,8 +647,40 @@ if not os.environ.get("VERCEL"):
     os.makedirs(_AVATARS_DIR, exist_ok=True)
 
 
+def _session_user_id_int(uid) -> int | None:
+    """Coerce session user_id to int; corrupt cookies must not 500 the app."""
+    if uid is None:
+        return None
+    try:
+        return int(uid)
+    except (TypeError, ValueError):
+        return None
+
+
+def _row_returning_id(rows: list | None) -> int | None:
+    """Read SERIAL id from INSERT … RETURNING (RealDict key may vary by driver)."""
+    if not rows:
+        return None
+    r = rows[0]
+    if r.get("id") is not None:
+        try:
+            return int(r["id"])
+        except (TypeError, ValueError):
+            pass
+    for k, v in r.items():
+        if str(k).lower() == "id" and v is not None:
+            try:
+                return int(v)
+            except (TypeError, ValueError):
+                return None
+    return None
+
+
 def _get_user_by_id(uid: int) -> "dict | None":
-    rows = _users_execute("SELECT * FROM users WHERE id=?", [uid])
+    uid_i = _session_user_id_int(uid)
+    if uid_i is None:
+        return None
+    rows = _users_execute("SELECT * FROM users WHERE id=?", [uid_i])
     return rows[0] if rows else None
 
 
@@ -665,23 +697,28 @@ def _get_user_by_login(identifier: str) -> "dict | None":
 
 @app.context_processor
 def _inject_current_user():
-    uid = session.get("user_id")
     ctx = {
         "deploy_hash": DEPLOY_HASH,
         "google_site_verification": _GOOGLE_SITE_VERIFICATION,
         "google_analytics_id": _GOOGLE_ANALYTICS_ID,
     }
-    if uid:
+    try:
+        uid = _session_user_id_int(session.get("user_id"))
+        if not uid:
+            return {**ctx, "current_user": None}
         user = _get_user_by_id(uid)
-        if user:
-            try:
-                _users_execute(
-                    "UPDATE users SET last_seen=datetime('now') WHERE id=?", [uid]
-                )
-            except Exception:
-                pass
-            return {**ctx, "current_user": user}
-    return {**ctx, "current_user": None}
+        if not user:
+            return {**ctx, "current_user": None}
+        try:
+            _users_execute(
+                "UPDATE users SET last_seen=datetime('now') WHERE id=?", [uid]
+            )
+        except Exception:
+            pass
+        return {**ctx, "current_user": user}
+    except Exception:
+        logger.exception("inject_current_user_failed")
+        return {**ctx, "current_user": None}
 
 
 @app.after_request
@@ -5219,13 +5256,21 @@ def _signup_unique_conflict_field(exc: BaseException) -> str | None:
             return "unknown"
         return None
     pgcode = getattr(exc, "pgcode", None)
-    if pgcode == "23505":
+    if pgcode == "23505" or "duplicate key value violates unique constraint" in msg_l:
         diag = getattr(exc, "diag", None)
         cname = (getattr(diag, "constraint_name", None) or "").lower()
         detail = (getattr(diag, "message_detail", None) or "").lower()
-        if "username" in cname or "username" in detail:
+        if "username" in cname or "username" in detail or "(username)=" in msg_l:
             return "username"
-        if "email" in cname or "email" in detail:
+        if "email" in cname or "email" in detail or "(email)=" in msg_l:
+            return "email"
+        if "idx_users_username_lower" in msg_l:
+            return "username"
+        if "idx_users_email_lower" in msg_l:
+            return "email"
+        if "users_username" in msg_l or "username_key" in msg_l:
+            return "username"
+        if "users_email" in msg_l or "email_key" in msg_l:
             return "email"
         return "unknown"
     return None
@@ -5238,15 +5283,8 @@ def _require_login():
     return None
 
 
-@app.route("/signup", methods=["GET", "POST"])
-@limiter.limit("100/hour")
-def signup():
-    if session.get("user_id"):
-        return redirect(url_for("profile"))
-
-    if request.method == "GET":
-        return render_template("signup.html")
-
+def _signup_process_post():
+    """Create account from validated form. Raises on unexpected failure; returns Response or render str path."""
     username_raw = request.form.get("username", "").strip()
     email = request.form.get("email", "").strip().lower()
     password = request.form.get("password", "")
@@ -5267,19 +5305,19 @@ def signup():
     if errors:
         return render_template("signup.html", errors=errors, username=username_raw, email=email)
 
-    # Canonical stored username (matches SQLite NOCASE + predictable handles); display_name keeps chosen casing.
     username_key = username_raw.lower()
     display_name = username_raw
     pw_hash = generate_password_hash(password)
+    uid = None
 
     lock = _signup_attempt_lock(email, username_key)
     with lock:
         taken_u = _users_execute(
-            "SELECT 1 FROM users WHERE LOWER(username)=LOWER(?) LIMIT 1",
+            "SELECT 1 AS taken FROM users WHERE LOWER(username)=LOWER(?) LIMIT 1",
             [username_key],
         )
         taken_e = _users_execute(
-            "SELECT 1 FROM users WHERE LOWER(email)=LOWER(?) LIMIT 1",
+            "SELECT 1 AS taken FROM users WHERE LOWER(email)=LOWER(?) LIMIT 1",
             [email],
         )
         if taken_u:
@@ -5299,9 +5337,7 @@ def signup():
                 [username_key, email, pw_hash, display_name],
                 return_id=True,
             )
-            uid = None
-            if rows and rows[0].get("id") is not None:
-                uid = int(rows[0]["id"])
+            uid = _row_returning_id(rows)
         except Exception as exc:
             field = _signup_unique_conflict_field(exc)
             if field == "username":
@@ -5329,9 +5365,33 @@ def signup():
         )
 
     session.permanent = True
-    session["user_id"] = uid
+    session["user_id"] = int(uid)
     flash("welcome", "welcome")
     return redirect(url_for("index") + "?welcome=1")
+
+
+@app.route("/signup", methods=["GET", "POST"])
+@limiter.limit("100/hour")
+def signup():
+    if session.get("user_id"):
+        return redirect(url_for("profile"))
+
+    if request.method == "GET":
+        return render_template("signup.html")
+
+    try:
+        return _signup_process_post()
+    except Exception:
+        logger.exception("signup_post_unhandled")
+        return render_template(
+            "signup.html",
+            errors=[
+                "Something went wrong while creating your account. Please try again. "
+                "If you already registered, sign in instead."
+            ],
+            username=(request.form.get("username") or "").strip(),
+            email=(request.form.get("email") or "").strip().lower(),
+        )
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -5357,7 +5417,10 @@ def login():
         )
 
     session.permanent = True
-    session["user_id"] = user["id"]
+    try:
+        session["user_id"] = int(user["id"])
+    except (TypeError, ValueError):
+        session["user_id"] = user["id"]
     return redirect(next_url or url_for("index"))
 
 
