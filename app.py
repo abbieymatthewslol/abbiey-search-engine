@@ -275,10 +275,18 @@ def _pg_execute(sql: str, args: list = None) -> list:
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(pg_sql, args or [])
+            # Fetch before commit — committing first can discard RETURNING / result rows (breaks signup INSERT … RETURNING id).
+            rows_out = []
+            if cur.description is not None:
+                rows_out = [dict(row) for row in cur.fetchall()]
             conn.commit()
-            if cur.description:
-                return [dict(row) for row in cur.fetchall()]
-        return []
+            return rows_out
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise
     finally:
         conn.close()
 
@@ -5291,7 +5299,9 @@ def signup():
                 [username_key, email, pw_hash, display_name],
                 return_id=True,
             )
-            uid = rows[0]["id"] if rows else None
+            uid = None
+            if rows and rows[0].get("id") is not None:
+                uid = int(rows[0]["id"])
         except Exception as exc:
             field = _signup_unique_conflict_field(exc)
             if field == "username":
@@ -5306,6 +5316,17 @@ def signup():
                 logger.warning("signup_insert_failed: %s", exc)
                 errors.append("Account could not be created. Please try again.")
             return render_template("signup.html", errors=errors, username=username_raw, email=email)
+
+    if not uid:
+        logger.error(
+            "signup_missing_user_id after insert email=%s username=%s", email, username_key
+        )
+        return render_template(
+            "signup.html",
+            errors=["Account could not be created. Please try again."],
+            username=username_raw,
+            email=email,
+        )
 
     session.permanent = True
     session["user_id"] = uid
