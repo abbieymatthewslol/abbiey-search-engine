@@ -1,9 +1,7 @@
-{% extends "base.html" %}
+{% extends "auth_base.html" %}
 {% block title %}Create account · abbiey.search{% endblock %}
 
-{% block content %}
-<main class="auth-main">
-    <div class="auth-container">
+{% block auth_content %}
 
         <div class="auth-heading" id="auth-form-title">
             <h1 class="auth-title">Create your account</h1>
@@ -68,8 +66,6 @@
         </form>
 
         <p class="auth-switch">Already have an account? <a href="/login">Sign in</a></p>
-    </div>
-</main>
 {% endblock %}
 
 {% block extra_scripts %}

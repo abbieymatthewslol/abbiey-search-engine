@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{# =============================================================================
+   AUTH LAYOUT CONTRACT — abbiey.search
+
+   Sign-in and sign-up pages MUST extend this template (not base.html directly).
+   This keeps body.page-auth, panel chrome, and CSS aligned with /search (see
+   style.css § AUTH + .search-box). New auth routes: extend auth_base.html and
+   add a test in tests/test_auth_layout.py.
+
+   ============================================================================= #}
+{% block body_class %}page-auth{% endblock %}
+
+{% block content %}
+<main class="auth-main" id="abbiey-auth-main">
+    <div class="auth-layout">
+        <a href="{{ url_for('search') }}" class="auth-back-search">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+            Back to search
+        </a>
+        <div class="auth-panel">
+            <div class="auth-container">
+                {% block auth_content %}{% endblock %}
+            </div>
+        </div>
+    </div>
+</main>
+{% endblock %}
