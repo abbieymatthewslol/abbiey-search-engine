@@ -29,6 +29,22 @@ document.addEventListener("DOMContentLoaded", () => {
     return "";
   }
 
+  /** Server should send stable copy; this trims and blocks obvious junk from ever showing in the UI. */
+  function userFacingPreviewError(msg) {
+    const s = msg != null ? String(msg).trim() : "";
+    if (!s || s.length > 400 || /traceback|exception|error:/i.test(s)) {
+      return "We couldn't load a preview for this page.";
+    }
+    return s;
+  }
+  function userFacingChatError(msg) {
+    const s = msg != null ? String(msg).trim() : "";
+    if (!s || s.length > 400 || /traceback|exception|^error:/i.test(s)) {
+      return "The research assistant is temporarily unavailable. Please try again.";
+    }
+    return s;
+  }
+
   if (navigator.geolocation) {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
@@ -162,11 +178,11 @@ document.addEventListener("DOMContentLoaded", () => {
       overlay.setAttribute("aria-hidden", "false");
       document.body.style.overflow = "hidden";
       if (cooldownOnly) {
-        titleEl.textContent = "Almost there";
-        subEl.textContent = `Your free searches reset in ${formatWait()}. You can still unlock unlimited anytime with a one-time $7 payment.`;
+        titleEl.textContent = "Free quota resets soon";
+        subEl.textContent = `Your free searches reset in ${formatWait()}. You can still unlock unlimited access anytime with a one-time $7 payment.`;
       } else {
-        titleEl.textContent = "Whoops! You've run out of free searches.";
-        subEl.textContent = "Make a one-time payment for unlimited searches, or wait 24 hours for your free quota to reset.";
+        titleEl.textContent = "You've reached your free search limit.";
+        subEl.textContent = "You can unlock unlimited searches with a one-time payment, or wait 24 hours for your free quota to reset.";
       }
     }
 
@@ -1622,7 +1638,7 @@ document.addEventListener("DOMContentLoaded", () => {
               previewLoading.style.display = "none";
               previewContent.style.display = "block";
               _previewTitle.textContent = "Preview unavailable";
-              _previewDesc.textContent = data.error || "Could not load page preview.";
+              _previewDesc.textContent = userFacingPreviewError(data.error);
               _previewExcerpt.textContent = "";
               _previewSite.textContent = "";
               _previewImg.style.display = "none";
@@ -1920,7 +1936,7 @@ document.addEventListener("DOMContentLoaded", () => {
         .then(r => r.json())
         .then(data => {
           removeMessage(typingId);
-          if (data.error) appendMessage("assistant", `Error: ${data.error}`);
+          if (data.error) appendMessage("assistant", userFacingChatError(data.error));
           else { appendMessage("assistant", data.response); chatHistory.push({ role: "user", content: msg }); chatHistory.push({ role: "assistant", content: data.response }); }
         })
         .catch(() => { removeMessage(typingId); appendMessage("assistant", "Connection error. Please try again."); })

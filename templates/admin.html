@@ -328,7 +328,7 @@ button{background:none;border:none;cursor:pointer;font:inherit;color:inherit}
             <strong style="color:var(--accent)">Option B — Turso (SQLite-compatible)</strong><br>
             <code style="background:var(--bg-hov);padding:.2em .4em;border-radius:4px;font-size:.78rem;display:block;margin:.4rem 0">LIBSQL_URL=https://your-db.turso.io<br>LIBSQL_AUTH_TOKEN=your-token</code>
             <a href="https://turso.tech" target="_blank" style="color:var(--accent)">Create free Turso DB →</a><br><br>
-            Ask AbbeyBot to walk you through either setup →
+            Ask the abbiey assistant to walk you through either setup →
           </div>
         </div>
       </div>
@@ -355,14 +355,14 @@ button{background:none;border:none;cursor:pointer;font:inherit;color:inherit}
 </div><!-- /shell -->
 
 <!-- ── Chat toggle button ──────────────────────────────────────────────── -->
-<button type="button" id="chat-toggle" onclick="openChat()" title="AbbeyBot — AI Admin Assistant">🤖</button>
+<button type="button" id="chat-toggle" onclick="openChat()" title="abbiey assistant — admin help">🤖</button>
 
 <!-- ── Chat panel ─────────────────────────────────────────────────────── -->
 <div id="chat-panel" class="hidden">
   <div class="chat-header">
     <div class="chat-avatar">🤖</div>
     <div>
-      <div class="chat-name">AbbeyBot</div>
+      <div class="chat-name">abbiey assistant</div>
       <div class="chat-status">● abbiey.search specialist</div>
     </div>
     <button type="button" class="chat-close" onclick="closeChat()">
@@ -371,7 +371,7 @@ button{background:none;border:none;cursor:pointer;font:inherit;color:inherit}
   </div>
   <div class="chat-messages" id="chat-messages">
     <div class="msg assistant">
-      <div class="msg-bubble">Hey! I'm AbbeyBot — I know everything about how abbiey.search works, runs, and what'll make it succeed. Ask me anything.</div>
+      <div class="msg-bubble">I'm the abbiey assistant for this dashboard. I can explain how abbiey.search is built, deployed, and operated. What do you need?</div>
       <div class="msg-time">Just now</div>
     </div>
   </div>
@@ -703,7 +703,7 @@ function renderErrors() {
       <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(e.message)}">${esc(e.message)}</td>
       <td style="color:var(--text-muted);white-space:nowrap">${ts}</td>
     </tr>`;
-  }).join('') || '<tr><td colspan="4" style="text-align:center;color:var(--text-muted);padding:1.5rem">No errors logged 🎉</td></tr>';
+  }).join('') || '<tr><td colspan="4" style="text-align:center;color:var(--text-muted);padding:1.5rem">No errors logged.</td></tr>';
 }
 
 // ── View switcher ────────────────────────────────────────────────────────
@@ -860,12 +860,12 @@ async function sendChat() {
     thinkEl.remove();
     if (!r.ok) throw new Error(r.status);
     const d = await r.json();
-    const reply = d.reply || 'Sorry, no response.';
+    const reply = d.reply || 'No response was returned. Please try again.';
     addMsg('assistant', reply);
     _history.push({role:'assistant', content:reply});
   } catch(e) {
     thinkEl.remove();
-    addMsg('assistant', `Error connecting to AbbeyBot (${e.message}). Check console.`);
+    addMsg('assistant', 'Unable to connect to the assistant. Please try again. If this continues, check server logs and your AI provider configuration.');
   } finally {
     document.getElementById('send-btn').disabled = false;
     input.focus();
