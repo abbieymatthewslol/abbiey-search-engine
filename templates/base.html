@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>{% block title %}abbiey.search{% endblock %}</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=deploy_hash) }}">
     <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png">
     <link rel="shortcut icon" href="/favicon.ico">
     <meta name="deploy-hash" content="{{ deploy_hash }}">
@@ -51,13 +51,13 @@
         <div class="header-controls">
 
             <div class="header-overflow" id="header-overflow">
-                <button class="header-btn" id="header-overflow-btn" aria-label="More options" title="More options">
+                <button type="button" class="header-btn" id="header-overflow-btn" aria-label="More options" title="More options">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/><circle cx="5" cy="12" r="1.2"/></svg>
                 </button>
                 <div class="header-overflow-menu" id="header-overflow-menu" hidden>
                     <div class="overflow-menu-row">
                         <span class="overflow-menu-label">Privacy</span>
-                        <button class="privacy-badge" id="privacy-badge" aria-label="Privacy stats" title="Privacy stats">
+                        <button type="button" class="privacy-badge" id="privacy-badge" aria-label="Privacy stats" title="Privacy stats">
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
                             <span>0 trackers</span>
                         </button>
@@ -83,13 +83,13 @@
                     </div>
                     <div class="overflow-menu-row">
                         <span class="overflow-menu-label">Density</span>
-                        <button id="density-toggle" class="header-btn overflow-icon-btn" aria-label="Toggle density" title="Layout density">
+                        <button type="button" id="density-toggle" class="header-btn overflow-icon-btn" aria-label="Toggle density" title="Layout density">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
                         </button>
                     </div>
                     <div class="overflow-menu-row">
                         <span class="overflow-menu-label">Theme</span>
-                        <button id="theme-toggle" class="header-btn overflow-icon-btn" aria-label="Toggle theme">
+                        <button type="button" id="theme-toggle" class="header-btn overflow-icon-btn" aria-label="Toggle theme">
                             <svg class="icon-sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
                             <svg class="icon-moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
                         </button>
@@ -97,7 +97,7 @@
                 </div>
             </div>
 
-            <button id="theme-settings-btn" class="header-btn" aria-label="Theme settings" title="Customize theme">
+            <button type="button" id="theme-settings-btn" class="header-btn" aria-label="Theme settings" title="Customize theme">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
             </button>
 
@@ -108,7 +108,10 @@
             </a>
             {% elif request.endpoint == 'login' %}
             <a href="/signup" class="header-auth-btn" aria-label="Create account">Create account</a>
+            {% elif request.endpoint == 'signup' %}
+            <a href="/login" class="header-auth-btn" aria-label="Sign in">Sign in</a>
             {% else %}
+            <a href="/signup" class="header-auth-btn" aria-label="Create account">Sign up</a>
             <a href="/login" class="header-auth-btn" aria-label="Sign in">Sign in</a>
             {% endif %}
             {% include 'includes/header_dev_link.html' %}
@@ -119,7 +122,7 @@
         <div class="settings-modal" id="settings-modal" role="dialog" aria-label="Settings">
             <div class="settings-modal-header">
                 <h2 class="settings-modal-title">Settings</h2>
-                <button class="settings-modal-close" id="settings-close" aria-label="Close">&times;</button>
+                <button type="button" class="settings-modal-close" id="settings-close" aria-label="Close">&times;</button>
             </div>
             <div class="settings-modal-body">
                 <section class="settings-section">
@@ -127,49 +130,49 @@
                     <div class="settings-row">
                         <span class="settings-row-label">Theme</span>
                         <div class="settings-btn-group" id="theme-btn-group">
-                            <button class="settings-seg-btn" data-val="dark">Dark</button>
-                            <button class="settings-seg-btn" data-val="light">Light</button>
+                            <button type="button" class="settings-seg-btn" data-val="dark">Dark</button>
+                            <button type="button" class="settings-seg-btn" data-val="light">Light</button>
                         </div>
                     </div>
                     <div class="settings-row">
                         <span class="settings-row-label">Accent color</span>
                         <div class="settings-accent-row">
                             <div class="theme-color-presets" id="color-presets">
-                                <button class="color-swatch" data-color="#2563eb" style="background:#2563eb" title="Blue"></button>
-                                <button class="color-swatch" data-color="#1e40af" style="background:#1e40af" title="Navy"></button>
-                                <button class="color-swatch" data-color="#0f766e" style="background:#0f766e" title="Teal"></button>
-                                <button class="color-swatch" data-color="#15803d" style="background:#15803d" title="Green"></button>
-                                <button class="color-swatch" data-color="#b45309" style="background:#b45309" title="Amber"></button>
-                                <button class="color-swatch" data-color="#7c3aed" style="background:#7c3aed" title="Violet"></button>
-                                <button class="color-swatch" data-color="#be123c" style="background:#be123c" title="Red"></button>
-                                <button class="color-swatch" data-color="#475569" style="background:#475569" title="Slate"></button>
+                                <button type="button" class="color-swatch" data-color="#e7e5e4" style="background:#e7e5e4;border:1px solid #444" title="Stone"></button>
+                                <button type="button" class="color-swatch" data-color="#d6d3d1" style="background:#d6d3d1;border:1px solid #444" title="Mist"></button>
+                                <button type="button" class="color-swatch" data-color="#a8a29e" style="background:#a8a29e" title="Warm gray"></button>
+                                <button type="button" class="color-swatch" data-color="#475569" style="background:#475569" title="Slate"></button>
+                                <button type="button" class="color-swatch" data-color="#0f766e" style="background:#0f766e" title="Teal"></button>
+                                <button type="button" class="color-swatch" data-color="#15803d" style="background:#15803d" title="Green"></button>
+                                <button type="button" class="color-swatch" data-color="#2563eb" style="background:#2563eb" title="Blue"></button>
+                                <button type="button" class="color-swatch" data-color="#7c3aed" style="background:#7c3aed" title="Violet"></button>
                             </div>
-                            <input type="color" id="custom-color" value="#2563eb" title="Custom color" class="settings-color-picker">
+                            <input type="color" id="custom-color" value="#e7e5e4" title="Custom color" class="settings-color-picker">
                         </div>
                     </div>
                     <div class="settings-row">
                         <span class="settings-row-label">Font size</span>
                         <div class="settings-btn-group" id="font-size-group">
-                            <button class="settings-seg-btn" data-val="small">S</button>
-                            <button class="settings-seg-btn" data-val="medium">M</button>
-                            <button class="settings-seg-btn" data-val="large">L</button>
-                            <button class="settings-seg-btn" data-val="xl">XL</button>
+                            <button type="button" class="settings-seg-btn" data-val="small">S</button>
+                            <button type="button" class="settings-seg-btn" data-val="medium">M</button>
+                            <button type="button" class="settings-seg-btn" data-val="large">L</button>
+                            <button type="button" class="settings-seg-btn" data-val="xl">XL</button>
                         </div>
                     </div>
                     <div class="settings-row">
                         <span class="settings-row-label">Font</span>
                         <div class="settings-btn-group" id="font-family-group">
-                            <button class="settings-seg-btn" data-val="system">System</button>
-                            <button class="settings-seg-btn" data-val="serif">Serif</button>
-                            <button class="settings-seg-btn" data-val="mono">Mono</button>
+                            <button type="button" class="settings-seg-btn" data-val="system">System</button>
+                            <button type="button" class="settings-seg-btn" data-val="serif">Serif</button>
+                            <button type="button" class="settings-seg-btn" data-val="mono">Mono</button>
                         </div>
                     </div>
                     <div class="settings-row">
                         <span class="settings-row-label">Density</span>
                         <div class="settings-btn-group" id="density-group">
-                            <button class="settings-seg-btn" data-val="compact">Compact</button>
-                            <button class="settings-seg-btn" data-val="default">Default</button>
-                            <button class="settings-seg-btn" data-val="comfortable">Comfortable</button>
+                            <button type="button" class="settings-seg-btn" data-val="compact">Compact</button>
+                            <button type="button" class="settings-seg-btn" data-val="default">Default</button>
+                            <button type="button" class="settings-seg-btn" data-val="comfortable">Comfortable</button>
                         </div>
                     </div>
                 </section>
@@ -178,26 +181,27 @@
                     <div class="settings-row">
                         <span class="settings-row-label">Safe search</span>
                         <div class="settings-btn-group" id="safesearch-group">
-                            <button class="settings-seg-btn" data-val="off">Off</button>
-                            <button class="settings-seg-btn" data-val="moderate">Moderate</button>
-                            <button class="settings-seg-btn" data-val="strict">Strict</button>
+                            <button type="button" class="settings-seg-btn" data-val="off">Off</button>
+                            <button type="button" class="settings-seg-btn" data-val="moderate">Moderate</button>
+                            <button type="button" class="settings-seg-btn" data-val="strict">Strict</button>
                         </div>
                     </div>
                     <div class="settings-row">
                         <span class="settings-row-label">Default tab</span>
                         <div class="settings-btn-group" id="default-tab-group">
-                            <button class="settings-seg-btn" data-val="text">All</button>
-                            <button class="settings-seg-btn" data-val="images">Images</button>
-                            <button class="settings-seg-btn" data-val="news">News</button>
-                            <button class="settings-seg-btn" data-val="videos">Videos</button>
-                            <button class="settings-seg-btn" data-val="code">Code</button>
+                            <button type="button" class="settings-seg-btn" data-val="text">All</button>
+                            <button type="button" class="settings-seg-btn" data-val="images">Images</button>
+                            <button type="button" class="settings-seg-btn" data-val="news">News</button>
+                            <button type="button" class="settings-seg-btn" data-val="videos">Videos</button>
+                            <button type="button" class="settings-seg-btn" data-val="code">Code</button>
+                            <button type="button" class="settings-seg-btn" data-val="onion">Deep Web</button>
                         </div>
                     </div>
                     <div class="settings-row">
                         <span class="settings-row-label">Open results</span>
                         <div class="settings-btn-group" id="newtab-group">
-                            <button class="settings-seg-btn" data-val="true">New tab</button>
-                            <button class="settings-seg-btn" data-val="false">Same tab</button>
+                            <button type="button" class="settings-seg-btn" data-val="true">New tab</button>
+                            <button type="button" class="settings-seg-btn" data-val="false">Same tab</button>
                         </div>
                     </div>
                     <div class="settings-row">
@@ -257,11 +261,11 @@
                     </div>
                     <div class="settings-row">
                         <span class="settings-row-label">Clear search history</span>
-                        <button class="settings-danger-btn" id="clear-history-btn">Clear</button>
+                        <button type="button" class="settings-danger-btn" id="clear-history-btn">Clear</button>
                     </div>
                     <div class="settings-row">
                         <span class="settings-row-label">Reset all settings &amp; data</span>
-                        <button class="settings-danger-btn" id="clear-all-btn">Reset everything</button>
+                        <button type="button" class="settings-danger-btn" id="clear-all-btn">Reset everything</button>
                     </div>
                 </section>
             </div>
@@ -271,7 +275,7 @@
     <div class="privacy-popover" id="privacy-popover">
         <div class="privacy-popover-header">
             <span>Your Privacy</span>
-            <button class="privacy-popover-close" id="privacy-popover-close">&times;</button>
+            <button type="button" class="privacy-popover-close" id="privacy-popover-close">&times;</button>
         </div>
         <div class="privacy-stats" id="privacy-stats">
             <div class="privacy-stat">
@@ -301,7 +305,7 @@
         <p class="footer-sub">We don't log your searches. Your data stays yours.</p>
     </footer>
 
-    <script src="{{ url_for('static', filename='script.js') }}"></script>
+    <script src="{{ url_for('static', filename='script.js', v=deploy_hash) }}"></script>
     {% block extra_scripts %}{% endblock %}
 </body>
 </html>

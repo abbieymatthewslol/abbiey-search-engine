@@ -393,7 +393,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // ===== Settings Modal =====
   const _S = {
     theme:         { key: "theme",                 def: "dark"   },
-    accent:        { key: "accent-color",          def: "#2563eb"},
+    accent:        { key: "accent-color",          def: "#e7e5e4"},
     density:       { key: "density",               def: "default"},
     fontSize:      { key: "abbiey_font_size",      def: "medium" },
     fontFamily:    { key: "abbiey_font_family",    def: "system" },

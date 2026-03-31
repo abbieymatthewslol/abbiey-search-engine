@@ -3,9 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="deploy-hash" content="{{ deploy_hash }}">
     {% include 'includes/google_analytics.html' %}
     <title>Analytics — abbiey.search</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script>
+        (function() {
+            var t = localStorage.getItem('theme') || 'dark';
+            var d = localStorage.getItem('density') || 'default';
+            var a = localStorage.getItem('accent-color') || localStorage.getItem('accentColor');
+            document.documentElement.setAttribute('data-theme', t);
+            document.documentElement.setAttribute('data-density', d);
+            if (a) document.documentElement.style.setProperty('--accent', a);
+        })();
+    </script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=deploy_hash) }}">
     <style>
         body { padding: 2rem 1rem; max-width: 960px; margin: 0 auto; }
         h1 { font-size: 1.5rem; font-weight: 800; color: var(--accent); margin-bottom: .25rem; }
@@ -182,9 +193,5 @@
 
     {% endif %}{# end if not error #}
 
-    <script>
-        const savedTheme = localStorage.getItem("theme") || "dark";
-        document.documentElement.setAttribute("data-theme", savedTheme);
-    </script>
 </body>
 </html>

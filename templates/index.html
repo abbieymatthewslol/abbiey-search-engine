@@ -154,7 +154,7 @@
         <div class="settings-modal" id="settings-modal" role="dialog" aria-label="Settings">
             <div class="settings-modal-header">
                 <h2 class="settings-modal-title">Settings</h2>
-                <button class="settings-modal-close" id="settings-close" aria-label="Close">&times;</button>
+                <button type="button" class="settings-modal-close" id="settings-close" aria-label="Close">&times;</button>
             </div>
             <div class="settings-modal-body">
 
@@ -164,22 +164,22 @@
                     <div class="settings-row">
                         <span class="settings-row-label">Theme</span>
                         <div class="settings-btn-group" id="theme-btn-group">
-                            <button class="settings-seg-btn" data-val="dark">Dark</button>
-                            <button class="settings-seg-btn" data-val="light">Light</button>
+                            <button type="button" class="settings-seg-btn" data-val="dark">Dark</button>
+                            <button type="button" class="settings-seg-btn" data-val="light">Light</button>
                         </div>
                     </div>
                     <div class="settings-row">
                         <span class="settings-row-label">Accent color</span>
                         <div class="settings-accent-row">
                             <div class="theme-color-presets" id="color-presets">
-                                <button class="color-swatch" data-color="#e7e5e4" style="background:#e7e5e4;border:1px solid #444" title="Stone"></button>
-                                <button class="color-swatch" data-color="#d6d3d1" style="background:#d6d3d1;border:1px solid #444" title="Mist"></button>
-                                <button class="color-swatch" data-color="#a8a29e" style="background:#a8a29e" title="Warm gray"></button>
-                                <button class="color-swatch" data-color="#475569" style="background:#475569" title="Slate"></button>
-                                <button class="color-swatch" data-color="#0f766e" style="background:#0f766e" title="Teal"></button>
-                                <button class="color-swatch" data-color="#15803d" style="background:#15803d" title="Green"></button>
-                                <button class="color-swatch" data-color="#2563eb" style="background:#2563eb" title="Blue"></button>
-                                <button class="color-swatch" data-color="#7c3aed" style="background:#7c3aed" title="Violet"></button>
+                                <button type="button" class="color-swatch" data-color="#e7e5e4" style="background:#e7e5e4;border:1px solid #444" title="Stone"></button>
+                                <button type="button" class="color-swatch" data-color="#d6d3d1" style="background:#d6d3d1;border:1px solid #444" title="Mist"></button>
+                                <button type="button" class="color-swatch" data-color="#a8a29e" style="background:#a8a29e" title="Warm gray"></button>
+                                <button type="button" class="color-swatch" data-color="#475569" style="background:#475569" title="Slate"></button>
+                                <button type="button" class="color-swatch" data-color="#0f766e" style="background:#0f766e" title="Teal"></button>
+                                <button type="button" class="color-swatch" data-color="#15803d" style="background:#15803d" title="Green"></button>
+                                <button type="button" class="color-swatch" data-color="#2563eb" style="background:#2563eb" title="Blue"></button>
+                                <button type="button" class="color-swatch" data-color="#7c3aed" style="background:#7c3aed" title="Violet"></button>
                             </div>
                             <input type="color" id="custom-color" value="#e7e5e4" title="Custom color" class="settings-color-picker">
                         </div>
@@ -187,26 +187,26 @@
                     <div class="settings-row">
                         <span class="settings-row-label">Font size</span>
                         <div class="settings-btn-group" id="font-size-group">
-                            <button class="settings-seg-btn" data-val="small">S</button>
-                            <button class="settings-seg-btn" data-val="medium">M</button>
-                            <button class="settings-seg-btn" data-val="large">L</button>
-                            <button class="settings-seg-btn" data-val="xl">XL</button>
+                            <button type="button" class="settings-seg-btn" data-val="small">S</button>
+                            <button type="button" class="settings-seg-btn" data-val="medium">M</button>
+                            <button type="button" class="settings-seg-btn" data-val="large">L</button>
+                            <button type="button" class="settings-seg-btn" data-val="xl">XL</button>
                         </div>
                     </div>
                     <div class="settings-row">
                         <span class="settings-row-label">Font</span>
                         <div class="settings-btn-group" id="font-family-group">
-                            <button class="settings-seg-btn" data-val="system">System</button>
-                            <button class="settings-seg-btn" data-val="serif">Serif</button>
-                            <button class="settings-seg-btn" data-val="mono">Mono</button>
+                            <button type="button" class="settings-seg-btn" data-val="system">System</button>
+                            <button type="button" class="settings-seg-btn" data-val="serif">Serif</button>
+                            <button type="button" class="settings-seg-btn" data-val="mono">Mono</button>
                         </div>
                     </div>
                     <div class="settings-row">
                         <span class="settings-row-label">Density</span>
                         <div class="settings-btn-group" id="density-group">
-                            <button class="settings-seg-btn" data-val="compact">Compact</button>
-                            <button class="settings-seg-btn" data-val="default">Default</button>
-                            <button class="settings-seg-btn" data-val="comfortable">Comfortable</button>
+                            <button type="button" class="settings-seg-btn" data-val="compact">Compact</button>
+                            <button type="button" class="settings-seg-btn" data-val="default">Default</button>
+                            <button type="button" class="settings-seg-btn" data-val="comfortable">Comfortable</button>
                         </div>
                     </div>
                 </section>
@@ -236,26 +236,27 @@
                     <div class="settings-row">
                         <span class="settings-row-label">Safe search</span>
                         <div class="settings-btn-group" id="safesearch-group">
-                            <button class="settings-seg-btn" data-val="off">Off</button>
-                            <button class="settings-seg-btn" data-val="moderate">Moderate</button>
-                            <button class="settings-seg-btn" data-val="strict">Strict</button>
+                            <button type="button" class="settings-seg-btn" data-val="off">Off</button>
+                            <button type="button" class="settings-seg-btn" data-val="moderate">Moderate</button>
+                            <button type="button" class="settings-seg-btn" data-val="strict">Strict</button>
                         </div>
                     </div>
                     <div class="settings-row">
                         <span class="settings-row-label">Default tab</span>
                         <div class="settings-btn-group" id="default-tab-group">
-                            <button class="settings-seg-btn" data-val="text">All</button>
-                            <button class="settings-seg-btn" data-val="images">Images</button>
-                            <button class="settings-seg-btn" data-val="news">News</button>
-                            <button class="settings-seg-btn" data-val="videos">Videos</button>
-                            <button class="settings-seg-btn" data-val="code">Code</button>
+                            <button type="button" class="settings-seg-btn" data-val="text">All</button>
+                            <button type="button" class="settings-seg-btn" data-val="images">Images</button>
+                            <button type="button" class="settings-seg-btn" data-val="news">News</button>
+                            <button type="button" class="settings-seg-btn" data-val="videos">Videos</button>
+                            <button type="button" class="settings-seg-btn" data-val="code">Code</button>
+                            <button type="button" class="settings-seg-btn" data-val="onion">Deep Web</button>
                         </div>
                     </div>
                     <div class="settings-row">
                         <span class="settings-row-label">Open results</span>
                         <div class="settings-btn-group" id="newtab-group">
-                            <button class="settings-seg-btn" data-val="true">New tab</button>
-                            <button class="settings-seg-btn" data-val="false">Same tab</button>
+                            <button type="button" class="settings-seg-btn" data-val="true">New tab</button>
+                            <button type="button" class="settings-seg-btn" data-val="false">Same tab</button>
                         </div>
                     </div>
                     <div class="settings-row">
@@ -324,11 +325,11 @@
                     </div>
                     <div class="settings-row">
                         <span class="settings-row-label">Clear search history</span>
-                        <button class="settings-danger-btn" id="clear-history-btn">Clear</button>
+                        <button type="button" class="settings-danger-btn" id="clear-history-btn">Clear</button>
                     </div>
                     <div class="settings-row">
                         <span class="settings-row-label">Reset all settings &amp; data</span>
-                        <button class="settings-danger-btn" id="clear-all-btn">Reset everything</button>
+                        <button type="button" class="settings-danger-btn" id="clear-all-btn">Reset everything</button>
                     </div>
                 </section>
 
@@ -340,7 +341,7 @@
     <div class="privacy-popover" id="privacy-popover">
         <div class="privacy-popover-header">
             <span>Your Privacy</span>
-            <button class="privacy-popover-close" id="privacy-popover-close">&times;</button>
+            <button type="button" class="privacy-popover-close" id="privacy-popover-close">&times;</button>
         </div>
         <div class="privacy-stats" id="privacy-stats">
             <div class="privacy-stat">
@@ -1213,7 +1214,7 @@
         <div class="settings-modal welcome-modal">
             <div class="settings-modal-header">
                 <span class="settings-modal-title">Welcome! What are you looking for?</span>
-                <button class="settings-modal-close" id="welcome-close" aria-label="Skip">✕</button>
+                <button type="button" class="settings-modal-close" id="welcome-close" aria-label="Skip">✕</button>
             </div>
             <div class="settings-modal-body">
                 <p style="margin:0 0 1rem;color:var(--text-dim);font-size:.9rem">Pick a category to get started, or just type in the search box.</p>

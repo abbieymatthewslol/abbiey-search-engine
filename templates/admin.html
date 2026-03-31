@@ -152,22 +152,22 @@ button{background:none;border:none;cursor:pointer;font:inherit;color:inherit}
       <div class="brand-dot"></div>
       <div class="brand-name">abbiey<span>.search</span></div>
     </div>
-    <button class="nav-item active" data-view="overview" onclick="showView('overview',this)">
+    <button type="button" class="nav-item active" data-view="overview" onclick="showView('overview',this)">
       <span class="nav-icon">📊</span><span>Overview</span>
     </button>
-    <button class="nav-item" data-view="query-log" onclick="showView('query-log',this)">
+    <button type="button" class="nav-item" data-view="query-log" onclick="showView('query-log',this)">
       <span class="nav-icon">📋</span><span>Query log</span>
     </button>
-    <button class="nav-item" data-view="account-history" onclick="showView('account-history',this)">
+    <button type="button" class="nav-item" data-view="account-history" onclick="showView('account-history',this)">
       <span class="nav-icon">🕘</span><span>Account history</span>
     </button>
-    <button class="nav-item" data-view="users" onclick="showView('users',this)">
+    <button type="button" class="nav-item" data-view="users" onclick="showView('users',this)">
       <span class="nav-icon">👤</span><span>Users</span>
     </button>
-    <button class="nav-item" data-view="errors" onclick="showView('errors',this)">
+    <button type="button" class="nav-item" data-view="errors" onclick="showView('errors',this)">
       <span class="nav-icon">⚠️</span><span>Errors</span>
     </button>
-    <button class="nav-item" onclick="window.open('/?token={{ token }}','_blank')">
+    <button type="button" class="nav-item" onclick="window.open('/?token={{ token }}','_blank')">
       <span class="nav-icon">🌐</span><span>Live Site</span>
     </button>
     <div class="sidebar-footer">
@@ -189,7 +189,7 @@ button{background:none;border:none;cursor:pointer;font:inherit;color:inherit}
         <span id="storage-badge" style="font-size:.68rem;padding:.15rem .5rem;border-radius:var(--r-full);background:var(--bg-hov);color:var(--text-muted);display:none"></span>
         <span id="sse-badge" style="font-size:.68rem;padding:.15rem .5rem;border-radius:var(--r-full);background:var(--bg-hov);color:var(--text-muted)">● offline</span>
         <span style="font-size:.72rem;color:var(--text-muted)" id="last-updated"></span>
-        <button class="refresh-btn" id="refresh-btn" onclick="loadData()">
+        <button type="button" class="refresh-btn" id="refresh-btn" onclick="loadData()">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
           Refresh
         </button>
@@ -355,7 +355,7 @@ button{background:none;border:none;cursor:pointer;font:inherit;color:inherit}
 </div><!-- /shell -->
 
 <!-- ── Chat toggle button ──────────────────────────────────────────────── -->
-<button id="chat-toggle" onclick="openChat()" title="AbbeyBot — AI Admin Assistant">🤖</button>
+<button type="button" id="chat-toggle" onclick="openChat()" title="AbbeyBot — AI Admin Assistant">🤖</button>
 
 <!-- ── Chat panel ─────────────────────────────────────────────────────── -->
 <div id="chat-panel" class="hidden">
@@ -365,7 +365,7 @@ button{background:none;border:none;cursor:pointer;font:inherit;color:inherit}
       <div class="chat-name">AbbeyBot</div>
       <div class="chat-status">● abbiey.search specialist</div>
     </div>
-    <button class="chat-close" onclick="closeChat()">
+    <button type="button" class="chat-close" onclick="closeChat()">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
     </button>
   </div>
@@ -376,15 +376,15 @@ button{background:none;border:none;cursor:pointer;font:inherit;color:inherit}
     </div>
   </div>
   <div class="suggestions" id="chat-suggestions">
-    <button class="sug-btn" onclick="sendSuggestion('How do I deploy changes?')">Deploy changes</button>
-    <button class="sug-btn" onclick="sendSuggestion('Why is search slow?')">Search slow?</button>
-    <button class="sug-btn" onclick="sendSuggestion('What should I build next?')">What to build next</button>
-    <button class="sug-btn" onclick="sendSuggestion('How does code search work?')">Code search</button>
-    <button class="sug-btn" onclick="sendSuggestion(\'Tell me about the user database and risks\')">User DB risks</button>
+    <button type="button" class="sug-btn" onclick="sendSuggestion('How do I deploy changes?')">Deploy changes</button>
+    <button type="button" class="sug-btn" onclick="sendSuggestion('Why is search slow?')">Search slow?</button>
+    <button type="button" class="sug-btn" onclick="sendSuggestion('What should I build next?')">What to build next</button>
+    <button type="button" class="sug-btn" onclick="sendSuggestion('How does code search work?')">Code search</button>
+    <button type="button" class="sug-btn" onclick="sendSuggestion(\'Tell me about the user database and risks\')">User DB risks</button>
   </div>
   <div class="chat-footer">
     <input id="chat-input" placeholder="Ask about abbiey.search…" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat()}">
-    <button class="send-btn" id="send-btn" onclick="sendChat()">
+    <button type="button" class="send-btn" id="send-btn" onclick="sendChat()">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
     </button>
   </div>

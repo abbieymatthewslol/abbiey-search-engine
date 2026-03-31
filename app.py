@@ -25,6 +25,7 @@ import httpx
 from cachetools import TTLCache
 from ddgs import DDGS
 from flask import Flask, render_template, request, jsonify, redirect, session, url_for, flash, Response, has_request_context
+from werkzeug.exceptions import HTTPException
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -216,6 +217,8 @@ def _normalize_supabase_db_url(db_url: str) -> str:
 _SUPABASE_DB_URL = _normalize_supabase_db_url(
     os.environ.get("SUPABASE_DB_URL", "") or os.environ.get("DATABASE_URL", "")
 )
+# True only after table init + ping succeed; avoids 500s when URL is set but DB is unreachable.
+_SUPABASE_DB_READY = False
 _pg_conn_lock = threading.Lock()
 
 
@@ -400,6 +403,7 @@ if _SUPABASE_DB_URL:
         _migrate_pg_users_lower_unique()
         _pg_execute("SELECT 1 AS ok")
         _endpoint = _db_url_host_for_log(_SUPABASE_DB_URL)
+        _SUPABASE_DB_READY = True
         logging.info("Supabase/PostgreSQL connected (%s) — users, analytics, waitlist use this DB", _endpoint)
     except Exception as _pg_init_err:
         logging.warning(
@@ -411,7 +415,7 @@ if _SUPABASE_DB_URL:
 
 def _analytics_execute(sql: str, args: list = None):
     """Route SQL to the active analytics backend: Supabase → Turso → SQLite."""
-    if _SUPABASE_DB_URL:
+    if _SUPABASE_DB_URL and _SUPABASE_DB_READY:
         return _pg_execute(sql, args or [])
     if _LIBSQL_URL and _LIBSQL_TOKEN:
         return _turso_execute(sql, args or [], db="analytics")
@@ -425,7 +429,7 @@ def _analytics_execute(sql: str, args: list = None):
 
 
 def _active_storage() -> str:
-    if _SUPABASE_DB_URL:
+    if _SUPABASE_DB_URL and _SUPABASE_DB_READY:
         return "supabase"
     if _LIBSQL_URL and _LIBSQL_TOKEN:
         return "turso"
@@ -512,7 +516,7 @@ _init_analytics_db()
 
 def _migrate_search_logs_client_columns():
     """Add client_ip, user_agent, device_label, location to search_logs (all analytics backends)."""
-    if _SUPABASE_DB_URL:
+    if _SUPABASE_DB_URL and _SUPABASE_DB_READY:
         for stmt in (
             "ALTER TABLE search_logs ADD COLUMN IF NOT EXISTS client_ip TEXT DEFAULT ''",
             "ALTER TABLE search_logs ADD COLUMN IF NOT EXISTS user_agent TEXT DEFAULT ''",
@@ -554,7 +558,7 @@ except Exception as _mig_err:
 
 def _users_execute(sql: str, args: list = None, return_id: bool = False) -> list:
     """Route SQL to Supabase or users.db SQLite. When return_id=True, returns [{'id': N}]."""
-    if _SUPABASE_DB_URL:
+    if _SUPABASE_DB_URL and _SUPABASE_DB_READY:
         if return_id and sql.strip().upper().startswith('INSERT'):
             pg_sql = sql.rstrip().rstrip(';') + ' RETURNING id'
             return _pg_execute(pg_sql, args)
@@ -571,7 +575,7 @@ def _users_execute(sql: str, args: list = None, return_id: bool = False) -> list
 
 def _waitlist_execute(sql: str, args: list = None) -> list:
     """Route SQL to Supabase or waitlist.db SQLite."""
-    if _SUPABASE_DB_URL:
+    if _SUPABASE_DB_URL and _SUPABASE_DB_READY:
         return _pg_execute(sql, args)
     with sqlite3.connect(_WAITLIST_DB) as con:
         con.row_factory = sqlite3.Row
@@ -724,17 +728,21 @@ def _inject_current_user():
 @app.after_request
 def _response_policy_headers(resp):
     """HTML: avoid stale shells after deploy. APIs: permissive CORS so clients are not stranded."""
-    ct = (resp.headers.get("Content-Type") or "").lower()
-    if "text/html" in ct:
-        resp.headers["Cache-Control"] = "private, max-age=0, must-revalidate"
-    if request.path.startswith("/api/"):
-        resp.headers.setdefault("Access-Control-Allow-Origin", "*")
-        resp.headers.setdefault("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        resp.headers.setdefault(
-            "Access-Control-Allow-Headers",
-            "Content-Type, X-Requested-With, Accept, Authorization",
-        )
-    return resp
+    try:
+        ct = (resp.headers.get("Content-Type") or "").lower()
+        if "text/html" in ct:
+            resp.headers["Cache-Control"] = "private, max-age=0, must-revalidate"
+        if request.path.startswith("/api/"):
+            resp.headers.setdefault("Access-Control-Allow-Origin", "*")
+            resp.headers.setdefault("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+            resp.headers.setdefault(
+                "Access-Control-Allow-Headers",
+                "Content-Type, X-Requested-With, Accept, Authorization",
+            )
+        return resp
+    except Exception:
+        logger.exception("_response_policy_headers_failed")
+        return resp
 
 
 @app.before_request
@@ -848,7 +856,7 @@ def _insert_search_log_row(vals: list) -> "int | None":
         "INSERT INTO search_logs (query, search_type, region, result_count, latency_ms, hour, day_of_week,"
         " client_ip, user_agent, device_label, location) VALUES (?,?,?,?,?,?,?,?,?,?,?)"
     )
-    if _SUPABASE_DB_URL:
+    if _SUPABASE_DB_URL and _SUPABASE_DB_READY:
         rows = _pg_execute(sql + " RETURNING id", vals)
         if rows and rows[0].get("id") is not None:
             return int(rows[0]["id"])
@@ -1086,26 +1094,30 @@ def _log_event(event: str, **fields: object) -> None:
 
 @app.after_request
 def _security_headers(response):
-    response.headers.setdefault("X-Content-Type-Options", "nosniff")
-    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
-    response.headers.setdefault(
-        "Permissions-Policy",
-        "camera=(), microphone=(), geolocation=(), payment=()",
-    )
-    csp = (
-        "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com "
-        "https://www.googletagmanager.com https://www.google-analytics.com; "
-        "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; "
-        "img-src 'self' data: https: blob:; "
-        "connect-src 'self' https: wss:; "
-        "font-src 'self' data:; "
-        "frame-ancestors 'self'; "
-        "base-uri 'self'; "
-        "form-action 'self'"
-    )
-    response.headers.setdefault("Content-Security-Policy", csp)
-    return response
+    try:
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        response.headers.setdefault(
+            "Permissions-Policy",
+            "camera=(), microphone=(), geolocation=(), payment=()",
+        )
+        csp = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com "
+            "https://www.googletagmanager.com https://www.google-analytics.com; "
+            "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; "
+            "img-src 'self' data: https: blob:; "
+            "connect-src 'self' https: wss:; "
+            "font-src 'self' data:; "
+            "frame-ancestors 'self'; "
+            "base-uri 'self'; "
+            "form-action 'self'"
+        )
+        response.headers.setdefault("Content-Security-Policy", csp)
+        return response
+    except Exception:
+        logger.exception("_security_headers_failed")
+        return response
 
 
 # ---------------------------------------------------------------------------
@@ -1153,44 +1165,153 @@ def _get_http():
 # ---------------------------------------------------------------------------
 # Error handlers
 # ---------------------------------------------------------------------------
+def _wants_json_error_response() -> bool:
+    """Prefer JSON error payloads for APIs and XHR (never raises)."""
+    try:
+        p = request.path or ""
+        if p.startswith("/api/"):
+            return True
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return True
+        return request.accept_mimetypes.best == "application/json"
+    except Exception:
+        return False
+
+
+def _safe_error_response(
+    *,
+    code: int,
+    title: str,
+    message: str,
+    extra_help: bool = False,
+    json_extras: dict | None = None,
+):
+    """
+    Render error.html with fallbacks so template/include failures never produce a second crash.
+    """
+    if _wants_json_error_response():
+        body = {
+            "error": "server_error" if code >= 500 else "client_error",
+            "code": code,
+            "message": message,
+        }
+        if json_extras:
+            body.update(json_extras)
+        try:
+            return jsonify(body), code
+        except Exception:
+            return Response(
+                '{"error":"server_error","message":"Request could not be completed."}',
+                status=code,
+                mimetype="application/json",
+            )
+    try:
+        return (
+            render_template(
+                "error.html",
+                code=code,
+                title=title,
+                message=message,
+                extra_help=extra_help,
+                deploy_hash=DEPLOY_HASH,
+            ),
+            code,
+        )
+    except Exception:
+        logger.exception("error_page_template_failed code=%s", code)
+        msg = (
+            str(message)
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace('"', "&quot;")
+        )
+        ttl = str(title).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        html = (
+            f"<!DOCTYPE html><html lang=\"en\"><meta charset=\"utf-8\"><title>{ttl}</title>"
+            f"<body style=\"margin:2rem;font-family:system-ui;background:#0a0a0a;color:#eee\">"
+            f"<h1>{ttl}</h1><p>{msg}</p>"
+            f"<p><a href=\"/search\" style=\"color:#93c5fd\">Back to search</a></p>"
+            f"<p><a href=\"/api/access-resources\" style=\"color:#93c5fd\">Access resources (JSON)</a></p>"
+            f"</body></html>"
+        )
+        return Response(html, status=code, mimetype="text/html; charset=utf-8")
+
+
 @app.errorhandler(400)
 def error_400(e):
-    return render_template("error.html", code=400, title="Bad Request",
-                           message=str(e.description) if hasattr(e, 'description') else "Invalid request."), 400
+    msg = "Invalid request."
+    try:
+        if getattr(e, "description", None):
+            msg = str(e.description)
+    except Exception:
+        pass
+    return _safe_error_response(code=400, title="Bad Request", message=msg)
 
 
 @app.errorhandler(404)
 def error_404(e):
-    return render_template(
-        "error.html", code=404, title="Not Found",
+    return _safe_error_response(
+        code=404,
+        title="Not Found",
         message="That path is not on this server. You can still search or use the access resources below.",
         extra_help=True,
-    ), 404
+    )
 
 
 @app.errorhandler(429)
 def error_429(e):
-    if request.headers.get("X-Requested-With") == "XMLHttpRequest" or \
-       request.accept_mimetypes.best == "application/json":
-        return jsonify({
-            "error": "rate_limited",
-            "message": "Too many requests from this network. Wait briefly or use other tools listed in /api/access-resources.",
-            "resources": "/api/access-resources",
-        }), 429
-    return render_template(
-        "error.html", code=429, title="Too Many Requests",
-        message="You hit a temporary limit so the service stays up for everyone. Wait a minute, try again, or use the links below — you are not out of options.",
+    if _wants_json_error_response():
+        try:
+            return (
+                jsonify(
+                    {
+                        "error": "rate_limited",
+                        "message": "Too many requests from this network. Wait briefly or use other tools listed in /api/access-resources.",
+                        "resources": "/api/access-resources",
+                    }
+                ),
+                429,
+            )
+        except Exception:
+            return Response(
+                '{"error":"rate_limited","resources":"/api/access-resources"}',
+                status=429,
+                mimetype="application/json",
+            )
+    return _safe_error_response(
+        code=429,
+        title="Too Many Requests",
+        message=(
+            "You hit a temporary limit so the service stays up for everyone. Wait a minute, try again, "
+            "or use the links below — you are not out of options."
+        ),
         extra_help=True,
-    ), 429
+    )
 
 
 @app.errorhandler(500)
 def error_500(e):
-    return render_template(
-        "error.html", code=500, title="Server Error",
+    return _safe_error_response(
+        code=500,
+        title="Server Error",
         message="Something failed on our side. Please retry; if it persists, use the open-web resources below.",
         extra_help=True,
-    ), 500
+    )
+
+
+@app.errorhandler(Exception)
+def error_unhandled_exception(exc):
+    """Catch any unhandled error: log it, return HTML or JSON — never propagate to WSGI crash."""
+    if isinstance(exc, HTTPException):
+        return exc
+    logger.exception("unhandled_exception %s %s", request.method, request.path)
+    return _safe_error_response(
+        code=500,
+        title="Server Error",
+        message="Something failed on our side. Please retry; if it persists, use the open-web resources below.",
+        extra_help=True,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -2705,7 +2826,9 @@ def api_waitlist():
         if "unique" in msg or "duplicate" in msg or "already exists" in msg:
             return jsonify({"ok": True})  # Already on list — treat as success
         logger.error("Waitlist insert failed: %s", exc)
-        return jsonify({"error": "Server error"}), 500
+        return jsonify(
+            {"ok": False, "error": "Could not save your email right now. Please try again later."}
+        ), 503
 
 
 # ---------------------------------------------------------------------------
@@ -5407,7 +5530,17 @@ def login():
     password   = request.form.get("password", "")
     next_url   = request.form.get("next", "")
 
-    user = _get_user_by_login(identifier)
+    try:
+        user = _get_user_by_login(identifier)
+    except Exception:
+        logger.exception("login_lookup_failed")
+        return render_template(
+            "login.html",
+            error="Something went wrong. Please try again in a moment.",
+            identifier=identifier,
+            next=next_url,
+        )
+
     if not user or not check_password_hash(user["password_hash"], password):
         return render_template(
             "login.html",
@@ -5441,10 +5574,14 @@ def _user_id_from_api_key(token: str) -> int | None:
     if len(token) < len(ABBIEY_API_KEY_PREFIX) + 8:
         return None
     digest = _hash_api_key(token)
-    rows = _users_execute(
-        "SELECT user_id FROM api_keys WHERE key_hash=? AND revoked_at IS NULL LIMIT 1",
-        [digest],
-    )
+    try:
+        rows = _users_execute(
+            "SELECT user_id FROM api_keys WHERE key_hash=? AND revoked_at IS NULL LIMIT 1",
+            [digest],
+        )
+    except Exception:
+        logger.exception("api_key_lookup_failed")
+        return None
     if not rows:
         return None
     try:
@@ -5494,7 +5631,13 @@ def _count_active_api_keys(uid: int) -> int:
 @app.route("/developer")
 def developer():
     uid = session.get("user_id")
-    keys = _list_api_keys_for_user(uid) if uid else []
+    keys = []
+    if uid:
+        try:
+            keys = _list_api_keys_for_user(uid)
+        except Exception:
+            logger.exception("developer_keys_list_failed")
+            session["api_key_error"] = "Could not load API keys. Please refresh the page."
     reveal = session.pop("api_key_reveal_once", None)
     err = session.pop("api_key_error", None)
     billing_success = request.args.get("billing", "").strip().lower() == "success"
@@ -5514,7 +5657,13 @@ def developer_api_key_create():
     if not session.get("user_id"):
         return redirect(url_for("login", next=url_for("developer")))
     uid = session["user_id"]
-    if _count_active_api_keys(uid) >= _MAX_API_KEYS_PER_USER:
+    try:
+        key_count = _count_active_api_keys(uid)
+    except Exception:
+        logger.exception("api_key_count_failed")
+        session["api_key_error"] = "Could not verify your keys. Please try again."
+        return redirect(url_for("developer"))
+    if key_count >= _MAX_API_KEYS_PER_USER:
         session["api_key_error"] = (
             f"You can have at most {_MAX_API_KEYS_PER_USER} active keys. "
             "Revoke one to create another."
@@ -5544,10 +5693,14 @@ def developer_api_key_revoke(key_id):
     if not session.get("user_id"):
         return redirect(url_for("login", next=url_for("developer")))
     uid = session["user_id"]
-    _users_execute(
-        "UPDATE api_keys SET revoked_at=datetime('now') WHERE id=? AND user_id=? AND revoked_at IS NULL",
-        [key_id, uid],
-    )
+    try:
+        _users_execute(
+            "UPDATE api_keys SET revoked_at=datetime('now') WHERE id=? AND user_id=? AND revoked_at IS NULL",
+            [key_id, uid],
+        )
+    except Exception:
+        logger.exception("api_key_revoke_failed")
+        session["api_key_error"] = "Could not revoke that key. Please try again."
     return redirect(url_for("developer"))
 
 
@@ -5558,20 +5711,33 @@ def profile():
         return redir
 
     uid = session["user_id"]
-    user = _get_user_by_id(uid)
-    if not user:
-        session.pop("user_id", None)
-        return redirect(url_for("login"))
+    try:
+        user = _get_user_by_id(uid)
+        if not user:
+            session.pop("user_id", None)
+            return redirect(url_for("login"))
 
-    bookmarks = _users_execute(
-        "SELECT * FROM user_bookmarks WHERE user_id=? ORDER BY saved_at DESC LIMIT 100",
-        [uid],
-    )
-    history = _users_execute(
-        "SELECT query, search_type, searched_at FROM user_search_history"
-        " WHERE user_id=? ORDER BY searched_at DESC LIMIT 50",
-        [uid],
-    )
+        bookmarks = _users_execute(
+            "SELECT * FROM user_bookmarks WHERE user_id=? ORDER BY saved_at DESC LIMIT 100",
+            [uid],
+        )
+        history = _users_execute(
+            "SELECT query, search_type, searched_at FROM user_search_history"
+            " WHERE user_id=? ORDER BY searched_at DESC LIMIT 50",
+            [uid],
+        )
+    except Exception:
+        logger.exception("profile_load_failed")
+        return (
+            render_template(
+                "error.html",
+                code=503,
+                title="Could not load profile",
+                message="We couldn't load your account right now. Please try again in a moment.",
+                extra_help=True,
+            ),
+            503,
+        )
 
     return render_template("profile.html", user=user, bookmarks=bookmarks, history=history)
 
@@ -5586,10 +5752,23 @@ def profile_update():
     display_name = request.form.get("display_name", "").strip()[:60]
     bio          = request.form.get("bio", "").strip()[:200]
 
-    _users_execute(
-        "UPDATE users SET display_name=?, bio=? WHERE id=?",
-        [display_name or None, bio, uid],
-    )
+    try:
+        _users_execute(
+            "UPDATE users SET display_name=?, bio=? WHERE id=?",
+            [display_name or None, bio, uid],
+        )
+    except Exception:
+        logger.exception("profile_update_failed")
+        return (
+            render_template(
+                "error.html",
+                code=503,
+                title="Could not save profile",
+                message="Your changes could not be saved. Please try again shortly.",
+                extra_help=False,
+            ),
+            503,
+        )
 
     return redirect(url_for("profile"))
 
@@ -5620,7 +5799,10 @@ def profile_avatar():
     f.save(os.path.join(save_dir, filename))
 
     avatar_path = f"avatars/{filename}"
-    _users_execute("UPDATE users SET avatar=? WHERE id=?", [avatar_path, uid])
+    try:
+        _users_execute("UPDATE users SET avatar=? WHERE id=?", [avatar_path, uid])
+    except Exception:
+        logger.exception("profile_avatar_db_failed")
 
     return redirect(url_for("profile"))
 
@@ -5634,7 +5816,11 @@ def api_user_me():
         return bearer_err
     if not uid:
         return jsonify({"error": "Not authenticated"}), 401
-    user = _get_user_by_id(uid)
+    try:
+        user = _get_user_by_id(uid)
+    except Exception:
+        logger.exception("api_user_me_lookup_failed")
+        return jsonify({"error": "Could not load account. Try again later."}), 503
     if not user:
         return jsonify({"error": "Not authenticated"}), 401
     return jsonify(
@@ -5653,11 +5839,15 @@ def api_user_bookmarks_get():
         return bearer_err
     if not uid:
         return jsonify({"error": "Not authenticated"}), 401
-    rows = _users_execute(
-        "SELECT id, url, title, snippet, saved_at FROM user_bookmarks"
-        " WHERE user_id=? ORDER BY saved_at DESC",
-        [uid],
-    )
+    try:
+        rows = _users_execute(
+            "SELECT id, url, title, snippet, saved_at FROM user_bookmarks"
+            " WHERE user_id=? ORDER BY saved_at DESC",
+            [uid],
+        )
+    except Exception:
+        logger.exception("api_user_bookmarks_get_failed")
+        return jsonify({"error": "Could not load bookmarks.", "bookmarks": []}), 503
     return jsonify({"bookmarks": rows})
 
 
@@ -5668,11 +5858,15 @@ def api_user_recent_searches():
         return bearer_err
     if not uid:
         return jsonify([]), 401
-    rows = _users_execute(
-        "SELECT query, search_type FROM user_search_history"
-        " WHERE user_id=? ORDER BY searched_at DESC LIMIT 5",
-        [uid],
-    )
+    try:
+        rows = _users_execute(
+            "SELECT query, search_type FROM user_search_history"
+            " WHERE user_id=? ORDER BY searched_at DESC LIMIT 5",
+            [uid],
+        )
+    except Exception:
+        logger.exception("api_user_recent_searches_failed")
+        return jsonify([]), 503
     seen = set()
     unique = []
     for r in rows:
@@ -5704,8 +5898,9 @@ def api_user_bookmarks_save():
             return_id=True,
         )
         bid = rows[0]["id"] if rows else None
-    except Exception as exc:
-        return jsonify({"error": str(exc)}), 500
+    except Exception:
+        logger.exception("api_user_bookmarks_post_failed")
+        return jsonify({"error": "Could not save bookmark. Try again later."}), 503
     return jsonify({"ok": True, "id": bid}), 201
 
 
@@ -5716,9 +5911,13 @@ def api_user_bookmarks_delete(bid: int):
         return bearer_err
     if not uid:
         return jsonify({"error": "Not authenticated"}), 401
-    _users_execute(
-        "DELETE FROM user_bookmarks WHERE id=? AND user_id=?", [bid, uid]
-    )
+    try:
+        _users_execute(
+            "DELETE FROM user_bookmarks WHERE id=? AND user_id=?", [bid, uid]
+        )
+    except Exception:
+        logger.exception("api_user_bookmarks_delete_failed")
+        return jsonify({"error": "Could not remove bookmark."}), 503
     return jsonify({"ok": True})
 
 
@@ -5972,22 +6171,28 @@ def api_password_check():
 @app.after_request
 def _set_cache_headers(response):
     """Set appropriate cache headers based on response type and path."""
-    path = request.path
-    # Static assets — long-lived immutable cache
-    if path.startswith("/static/") and any(
-        path.endswith(ext) for ext in (".css", ".js", ".woff2", ".woff", ".ttf", ".png", ".ico", ".svg", ".webp")
-    ):
-        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    try:
+        path = request.path or ""
+        # Static assets — long-lived immutable cache
+        if path.startswith("/static/") and any(
+            path.endswith(ext)
+            for ext in (".css", ".js", ".woff2", ".woff", ".ttf", ".png", ".ico", ".svg", ".webp")
+        ):
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+            return response
+        # Trends / autocomplete API — short public cache
+        if path in ("/api/trends", "/api/autocomplete", "/api/suggestions"):
+            response.headers["Cache-Control"] = "public, max-age=60, s-maxage=60"
+            return response
+        # Search page and HTML — never cache
+        ct = (response.content_type or "") if response.content_type else ""
+        if path == "/search" or ("text/html" in ct):
+            response.headers["Cache-Control"] = "no-store"
+            return response
         return response
-    # Trends / autocomplete API — short public cache
-    if path in ("/api/trends", "/api/autocomplete", "/api/suggestions"):
-        response.headers["Cache-Control"] = "public, max-age=60, s-maxage=60"
+    except Exception:
+        logger.exception("_set_cache_headers_failed")
         return response
-    # Search page and HTML — never cache
-    if path == "/search" or (response.content_type and "text/html" in response.content_type):
-        response.headers["Cache-Control"] = "no-store"
-        return response
-    return response
 
 
 if __name__ == "__main__":

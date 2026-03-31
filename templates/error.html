@@ -3,10 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="deploy-hash" content="{{ deploy_hash }}">
     {% include 'includes/google_analytics.html' %}
     <title>{{ code }} - abbiey.search</title>
+    <script>
+        (function() {
+            var t = localStorage.getItem('theme') || 'dark';
+            var a = localStorage.getItem('accent-color') || localStorage.getItem('accentColor');
+            document.documentElement.setAttribute('data-theme', t);
+            if (a) document.documentElement.style.setProperty('--accent', a);
+        })();
+    </script>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=deploy_hash) }}">
-    <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='icon-192.png') }}">
+    <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='icon-192.png', v=deploy_hash) }}">
     <link rel="shortcut icon" href="{{ url_for('favicon_ico') }}">
 </head>
 <body>
@@ -14,7 +23,7 @@
         <a href="/" class="logo">abbiey.<span>search</span></a>
         <div class="header-controls">
         {% include 'includes/header_dev_link.html' %}
-        <button id="theme-toggle" aria-label="Toggle theme">
+        <button type="button" id="theme-toggle" aria-label="Toggle theme">
             <svg class="icon-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
             <svg class="icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
         </button>
@@ -26,7 +35,7 @@
             <span class="error-code">{{ code }}</span>
             <h1 class="error-title">{{ title }}</h1>
             <p class="error-message">{{ message }}</p>
-            <a href="/search" class="error-home-btn">Back to search</a>
+            <a href="/search" class="error-home-btn">Back to Search</a>
             {% if extra_help %}
             <div class="error-help" style="margin-top:2rem;padding-top:1.5rem;border-top:1px solid var(--border,#333);text-align:left;max-width:28rem;margin-left:auto;margin-right:auto">
                 <p style="font-size:.85rem;color:var(--text-dim,#888);margin:0 0 .75rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em">You still have options</p>
