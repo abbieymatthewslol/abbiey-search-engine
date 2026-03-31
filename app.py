@@ -372,9 +372,24 @@ def _init_pg_tables():
         logging.warning("PG table init failed: %s", exc)
 
 
+def _migrate_pg_users_lower_unique():
+    """Enforce case-insensitive uniqueness on Postgres (aligns with SQLite COLLATE NOCASE)."""
+    if not _SUPABASE_DB_URL:
+        return
+    for stmt in (
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_lower ON users ((LOWER(username)))",
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_lower ON users ((LOWER(email)))",
+    ):
+        try:
+            _pg_execute(stmt, [])
+        except Exception as exc:
+            logging.warning("PG users lower-unique index skipped: %s", exc)
+
+
 if _SUPABASE_DB_URL:
     try:
         _init_pg_tables()
+        _migrate_pg_users_lower_unique()
         _pg_execute("SELECT 1 AS ok")
         _endpoint = _db_url_host_for_log(_SUPABASE_DB_URL)
         logging.info("Supabase/PostgreSQL connected (%s) — users, analytics, waitlist use this DB", _endpoint)
@@ -630,9 +645,12 @@ def _get_user_by_id(uid: int) -> "dict | None":
 
 
 def _get_user_by_login(identifier: str) -> "dict | None":
+    ident = (identifier or "").strip()
+    if not ident:
+        return None
     rows = _users_execute(
-        "SELECT * FROM users WHERE email=? OR username=?",
-        [identifier, identifier],
+        "SELECT * FROM users WHERE LOWER(email)=LOWER(?) OR LOWER(username)=LOWER(?)",
+        [ident, ident],
     )
     return rows[0] if rows else None
 
@@ -5168,6 +5186,42 @@ import re as _re
 
 _USERNAME_RE = _re.compile(r'^[a-zA-Z0-9_]{3,30}$')
 
+# Serialize signup attempts that reuse the same email+username pair (double-submit / parallel tabs).
+_N_SIGNUP_LOCKS = 256
+_SIGNUP_PARALLEL_LOCKS = tuple(threading.Lock() for _ in range(_N_SIGNUP_LOCKS))
+
+
+def _signup_attempt_lock(email: str, username: str) -> threading.Lock:
+    raw = f"{(email or '').strip().lower()}\x00{(username or '').strip().lower()}".encode(
+        "utf-8", errors="ignore"
+    )
+    idx = int.from_bytes(hashlib.sha256(raw).digest()[:2], "big") % _N_SIGNUP_LOCKS
+    return _SIGNUP_PARALLEL_LOCKS[idx]
+
+
+def _signup_unique_conflict_field(exc: BaseException) -> str | None:
+    """Classify DB unique violations so reused username/email get consistent messages (SQLite + PostgreSQL)."""
+    msg_l = str(exc).lower()
+    if isinstance(exc, sqlite3.IntegrityError) or "sqlite3" in type(exc).__module__:
+        if "users.username" in msg_l or ("username" in msg_l and "unique" in msg_l):
+            return "username"
+        if "users.email" in msg_l or ("email" in msg_l and "unique" in msg_l):
+            return "email"
+        if "unique" in msg_l:
+            return "unknown"
+        return None
+    pgcode = getattr(exc, "pgcode", None)
+    if pgcode == "23505":
+        diag = getattr(exc, "diag", None)
+        cname = (getattr(diag, "constraint_name", None) or "").lower()
+        detail = (getattr(diag, "message_detail", None) or "").lower()
+        if "username" in cname or "username" in detail:
+            return "username"
+        if "email" in cname or "email" in detail:
+            return "email"
+        return "unknown"
+    return None
+
 
 def _require_login():
     """Return a redirect if not logged in, else None."""
@@ -5185,41 +5239,73 @@ def signup():
     if request.method == "GET":
         return render_template("signup.html")
 
-    username = request.form.get("username", "").strip()
-    email    = request.form.get("email", "").strip().lower()
+    username_raw = request.form.get("username", "").strip()
+    email = request.form.get("email", "").strip().lower()
     password = request.form.get("password", "")
-    confirm  = request.form.get("confirm_password", "")
+    confirm = request.form.get("confirm_password", "")
 
     errors = []
-    if not _USERNAME_RE.match(username):
+    if not _USERNAME_RE.match(username_raw):
         errors.append("Username must be 3–30 characters: letters, numbers, underscores only.")
     if not email or "@" not in email:
         errors.append("A valid email address is required.")
+    elif len(email) > 254:
+        errors.append("Email address is too long.")
     if len(password) < 8:
         errors.append("Password must be at least 8 characters.")
     if password != confirm:
         errors.append("Passwords do not match.")
 
     if errors:
-        return render_template("signup.html", errors=errors, username=username, email=email)
+        return render_template("signup.html", errors=errors, username=username_raw, email=email)
 
+    # Canonical stored username (matches SQLite NOCASE + predictable handles); display_name keeps chosen casing.
+    username_key = username_raw.lower()
+    display_name = username_raw
     pw_hash = generate_password_hash(password)
-    try:
-        rows = _users_execute(
-            "INSERT INTO users (username, email, password_hash, display_name) VALUES (?,?,?,?)",
-            [username, email, pw_hash, username],
-            return_id=True,
+
+    lock = _signup_attempt_lock(email, username_key)
+    with lock:
+        taken_u = _users_execute(
+            "SELECT 1 FROM users WHERE LOWER(username)=LOWER(?) LIMIT 1",
+            [username_key],
         )
-        uid = rows[0]["id"] if rows else None
-    except Exception as exc:
-        msg = str(exc).lower()
-        if "username" in msg:
-            errors.append("That username is already taken.")
-        elif "email" in msg:
-            errors.append("An account with that email already exists.")
-        else:
-            errors.append("Account could not be created. Please try again.")
-        return render_template("signup.html", errors=errors, username=username, email=email)
+        taken_e = _users_execute(
+            "SELECT 1 FROM users WHERE LOWER(email)=LOWER(?) LIMIT 1",
+            [email],
+        )
+        if taken_u:
+            errors.append(
+                "That username is already taken. Sign in if it is yours, or choose another username."
+            )
+        if taken_e:
+            errors.append(
+                "An account with that email already exists. Sign in or use a different email address."
+            )
+        if errors:
+            return render_template("signup.html", errors=errors, username=username_raw, email=email)
+
+        try:
+            rows = _users_execute(
+                "INSERT INTO users (username, email, password_hash, display_name) VALUES (?,?,?,?)",
+                [username_key, email, pw_hash, display_name],
+                return_id=True,
+            )
+            uid = rows[0]["id"] if rows else None
+        except Exception as exc:
+            field = _signup_unique_conflict_field(exc)
+            if field == "username":
+                errors.append(
+                    "That username is already taken. Sign in if it is yours, or choose another username."
+                )
+            elif field == "email":
+                errors.append(
+                    "An account with that email already exists. Sign in or use a different email address."
+                )
+            else:
+                logger.warning("signup_insert_failed: %s", exc)
+                errors.append("Account could not be created. Please try again.")
+            return render_template("signup.html", errors=errors, username=username_raw, email=email)
 
     session.permanent = True
     session["user_id"] = uid

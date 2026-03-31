@@ -16,7 +16,7 @@
         </div>
         {% endif %}
 
-        <form class="auth-form" method="POST" action="/signup" autocomplete="on" aria-labelledby="auth-form-title">
+        <form class="auth-form" method="POST" action="/signup" id="signup-form" autocomplete="on" aria-labelledby="auth-form-title">
 
             <div class="auth-field">
                 <label for="username">Username</label>
@@ -64,7 +64,7 @@
                 </div>
             </div>
 
-            <button type="submit" class="search-btn auth-submit">Create account</button>
+            <button type="submit" class="search-btn auth-submit" id="signup-submit">Create account</button>
         </form>
 
         <p class="auth-switch">Already have an account? <a href="/login">Sign in</a></p>
@@ -74,6 +74,17 @@
 
 {% block extra_scripts %}
 <script>
+    (function () {
+        const form = document.getElementById("signup-form");
+        const submit = document.getElementById("signup-submit");
+        if (form && submit) {
+            form.addEventListener("submit", function () {
+                if (submit.disabled) return;
+                submit.disabled = true;
+                submit.setAttribute("aria-busy", "true");
+            });
+        }
+    })();
     document.querySelectorAll('.pw-toggle').forEach(btn => {
         btn.addEventListener('click', () => {
             const inp = btn.previousElementSibling;
