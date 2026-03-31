@@ -8,6 +8,52 @@
 document.addEventListener("DOMContentLoaded", () => {
   const html = document.documentElement;
 
+  /** Append &lat=&lon= for local ranking when browser or prior search shared coordinates. */
+  function geoQuerySuffix() {
+    const la = document.getElementById("geo-lat-input");
+    const lo = document.getElementById("geo-lon-input");
+    let lat = la && la.value.trim();
+    let lon = lo && lo.value.trim();
+    if (!lat || !lon) {
+      try {
+        const g = JSON.parse(sessionStorage.getItem("abbiey_geo") || "{}");
+        if (typeof g.lat === "number" && typeof g.lon === "number") {
+          lat = String(g.lat);
+          lon = String(g.lon);
+        }
+      } catch (_) {
+        /* ignore */
+      }
+    }
+    if (lat && lon) return `&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}`;
+    return "";
+  }
+
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        try {
+          sessionStorage.setItem(
+            "abbiey_geo",
+            JSON.stringify({
+              lat: pos.coords.latitude,
+              lon: pos.coords.longitude,
+              t: Date.now(),
+            }),
+          );
+          const la = document.getElementById("geo-lat-input");
+          const lo = document.getElementById("geo-lon-input");
+          if (la && !la.value) la.value = String(pos.coords.latitude);
+          if (lo && !lo.value) lo.value = String(pos.coords.longitude);
+        } catch (_) {
+          /* ignore */
+        }
+      },
+      () => {},
+      { enableHighAccuracy: false, timeout: 8000, maximumAge: 300000 },
+    );
+  }
+
   // ===== Soft paywall: 7 free searches, Stripe $7, or 24h wait (client-side) =====
   (function initPaywall() {
     const LS = {
@@ -867,9 +913,17 @@ document.addEventListener("DOMContentLoaded", () => {
   const aiBody = document.getElementById("ai-summary-body");
   const aiSources = document.getElementById("ai-summary-sources");
   if (aiCard && aiBody && window.__searchQuery && window.__searchType === "text") {
-    fetch(`/api/ai-summary?q=${encodeURIComponent(window.__searchQuery)}`)
+    if (window.__queryUi && window.__queryUi.show_ai_summary === false) {
+      aiCard.classList.add("ai-hidden");
+    } else {
+    const aiQ = `/api/ai-summary?q=${encodeURIComponent(window.__searchQuery)}${geoQuerySuffix()}`;
+    fetch(aiQ)
       .then(r => r.json())
       .then(data => {
+        if (data.enabled === false) {
+          aiCard.classList.add("ai-hidden");
+          return;
+        }
         if (data.error === "rate_limited") {
           aiBody.innerHTML = `<div class="ai-summary-text ai-unavailable">Summary temporarily unavailable &mdash; too many requests. Results are shown below.</div>`;
           return;
@@ -900,6 +954,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       })
       .catch(() => { aiCard.classList.add("ai-hidden"); });
+    }
   }
 
   const aiDismiss = document.getElementById("ai-summary-dismiss");
@@ -1211,6 +1266,11 @@ document.addEventListener("DOMContentLoaded", () => {
     if (dfVal) scrollUrl += `&df=${encodeURIComponent(dfVal)}`;
     const imgExtra = sentinel.dataset.imgExtra;
     if (type === "images" && imgExtra) scrollUrl += `&${imgExtra}`;
+    let geoSuf = geoQuerySuffix();
+    if (!geoSuf && sentinel.dataset.lat && sentinel.dataset.lon) {
+      geoSuf = `&lat=${encodeURIComponent(sentinel.dataset.lat)}&lon=${encodeURIComponent(sentinel.dataset.lon)}`;
+    }
+    scrollUrl += geoSuf;
     fetch(scrollUrl, {
       headers: { "X-Requested-With": "XMLHttpRequest" },
     })

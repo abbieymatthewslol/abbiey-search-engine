@@ -6,6 +6,7 @@ from unittest.mock import patch, MagicMock
 import pytest
 
 from app import (
+    MAX_QUERY_LENGTH,
     _try_calculator, _try_color_picker, _try_unit_convert,
     _try_knowledge_panel,
 )
@@ -162,6 +163,7 @@ class TestEntityAPI:
         data = resp.get_json()
         assert data["entities"] == []
         assert data.get("preprocessing") is None
+        assert data.get("query_ui") is None
         assert data.get("primary") is None
 
     def test_phone_detection(self, client):
@@ -169,6 +171,8 @@ class TestEntityAPI:
         data = resp.get_json()
         assert len(data["entities"]) > 0
         assert data["entities"][0]["type"] == "phone"
+        assert "query_ui" in data
+        assert data["query_ui"]["intent"] in ("informational", "local_search", "navigational", "transactional")
 
     def test_email_detection(self, client):
         resp = client.get("/api/entity?q=test@example.com")
@@ -817,7 +821,7 @@ class TestAISummary:
 
     def test_ai_summary_success(self, client, mock_ddg, mock_chat):
         mock_chat.return_value = "Python is a programming language [1]. It was created by Guido [2]."
-        resp = client.get("/api/ai-summary?q=python")
+        resp = client.get("/api/ai-summary?q=what+is+python")
         assert resp.status_code == 200
         data = resp.get_json()
         assert "summary" in data
@@ -829,12 +833,12 @@ class TestAISummary:
         assert resp.status_code == 400
 
     def test_ai_summary_long_query(self, client):
-        resp = client.get(f"/api/ai-summary?q={'a' * 2001}")
+        resp = client.get(f"/api/ai-summary?q={'a' * (MAX_QUERY_LENGTH + 1)}")
         assert resp.status_code == 400
 
     def test_ai_summary_sources_have_urls(self, client, mock_ddg, mock_chat):
         mock_chat.return_value = "Summary text."
-        resp = client.get("/api/ai-summary?q=test")
+        resp = client.get("/api/ai-summary?q=what+is+a+test")
         data = resp.get_json()
         for source in data["sources"]:
             assert "title" in source
@@ -843,7 +847,7 @@ class TestAISummary:
     def test_ai_summary_fallback_on_ai_failure(self, client, mock_ddg, mock_chat):
         """When AI fails, should fallback to extractive summary."""
         mock_chat.side_effect = Exception("AI down")
-        resp = client.get("/api/ai-summary?q=test")
+        resp = client.get("/api/ai-summary?q=explain+gravity")
         assert resp.status_code == 200
         data = resp.get_json()
         assert "summary" in data
@@ -851,8 +855,14 @@ class TestAISummary:
     def test_ai_summary_no_results(self, client):
         """When no search results exist, return 404."""
         with patch("app._fetch_results", return_value={"results": [], "has_more": False, "page": 1}):
-            resp = client.get("/api/ai-summary?q=xyznonexistent123")
+            resp = client.get("/api/ai-summary?q=why+does+water+freeze")
         assert resp.status_code == 404
+
+    def test_ai_summary_gated_for_local_keyword_queries(self, client, mock_ddg):
+        """Bare local lookups should not run summarization."""
+        resp = client.get("/api/ai-summary?q=closest+pizza")
+        assert resp.status_code == 200
+        assert resp.get_json() == {"enabled": False}
 
 
 # =====================================================================
@@ -913,7 +923,7 @@ class TestFeatureCardLogic:
         assert b"ai-summary-card" not in resp.data
 
     def test_ai_summary_on_text_tab(self, client, mock_ddg):
-        resp = client.get("/search?q=test&type=text")
+        resp = client.get("/search?q=what+is+a+test&type=text")
         assert b"ai-summary-card" in resp.data
 
 

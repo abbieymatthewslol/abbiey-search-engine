@@ -4,11 +4,15 @@ import pytest
 
 from entity_parser import detect_entities, primary_entity
 from query_understanding import (
+    build_backend_search_query,
     classify_intent,
     normalize_synonyms,
     parse_query_patterns,
     place_category_matches,
     preprocess_query,
+    query_ui_hints,
+    resolve_location_for_search,
+    should_enable_ai_summary,
 )
 
 
@@ -81,8 +85,34 @@ def test_parse_near_poi():
 
 
 def test_primary_prefers_phone_over_place():
-    prep = preprocess_query("call +1 555-123-4567 at the thrift store")
-    entities = detect_entities("call +1 555-123-4567 at the thrift store", _preprocessed=prep)
+    # Word after the number must not start with a–f (phone detector skips “hex-adjacent” matches).
+    prep = preprocess_query("call +1 555-123-4567 today at the thrift store")
+    entities = detect_entities("call +1 555-123-4567 today at the thrift store", _preprocessed=prep)
     prim = primary_entity(entities)
     assert prim is not None
     assert prim.type == "phone"
+
+
+def test_build_backend_query_closest_op_shop():
+    prep = preprocess_query("closest op shop")
+    loc = resolve_location_for_search(prep, None, None, None)
+    q = build_backend_search_query("closest op shop", prep, loc)
+    assert "near me" in q.lower() and "sorted by distance" in q.lower()
+    assert "thrift" in q.lower()
+
+
+def test_ai_summary_disabled_for_closest_pizza():
+    prep = preprocess_query("closest pizza")
+    assert should_enable_ai_summary(prep) is False
+
+
+def test_ai_summary_enabled_for_what_is_x():
+    prep = preprocess_query("what is photosynthesis")
+    assert should_enable_ai_summary(prep) is True
+
+
+def test_query_ui_hints_local():
+    prep = preprocess_query("gas station near me")
+    ui = query_ui_hints(prep)
+    assert ui["local_intent"] is True
+    assert ui["show_ai_summary"] is False

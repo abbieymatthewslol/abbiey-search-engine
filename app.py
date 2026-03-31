@@ -30,7 +30,14 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
 from entity_parser import detect_entities, build_search_queries, primary_entity
-from query_understanding import preprocess_query
+from query_understanding import (
+    preprocess_query,
+    build_backend_search_query,
+    resolve_location_for_search,
+    query_ui_hints,
+    should_enable_ai_summary,
+    has_local_intent_signals,
+)
 
 try:
     from dotenv import load_dotenv
@@ -1623,6 +1630,17 @@ _TEMPLATE_DEFAULTS = dict(
     img_ov_src="",
     img_src_checked=["ddg", "openverse", "commons"],
     img_scroll_extras="",
+    query_ui={
+        "intent": "informational",
+        "interrogative_or_explanatory": False,
+        "local_intent": False,
+        "transactional_local_keywords": False,
+        "prefer_local_ui": False,
+        "show_ai_summary": False,
+    },
+    search_lat=None,
+    search_lon=None,
+    show_ai_summary_block=False,
 )
 
 
@@ -1675,6 +1693,73 @@ ACCESS_RESOURCES_JSON = {
 def api_access_resources():
     """Always-available JSON: mirrors, Tor, and archives so users are never philosophically 'stuck'."""
     return jsonify(ACCESS_RESOURCES_JSON)
+
+
+def _parse_request_coord(name):
+    """Parse float query param (lat/lon); empty or invalid → None."""
+    raw = (request.args.get(name) or "").strip()
+    if not raw:
+        return None
+    try:
+        return float(raw)
+    except ValueError:
+        return None
+
+
+def _reverse_geocode_label(lat, lon):
+    """City/town label for local query injection (Nominatim reverse)."""
+    try:
+        resp = httpx.get(
+            "https://nominatim.openstreetmap.org/reverse",
+            params={"lat": lat, "lon": lon, "format": "json"},
+            headers={"User-Agent": "abbiey.search/1.0"},
+            timeout=2.0,
+        )
+        data = resp.json()
+        addr = data.get("address") or {}
+        for key in ("city", "town", "village", "municipality", "state"):
+            if addr.get(key):
+                return str(addr[key]).strip()
+        disp = (data.get("display_name") or "").strip()
+        return disp.split(",")[0].strip() if disp else None
+    except Exception:
+        logger.debug("reverse_geocode_failed", exc_info=True)
+        return None
+
+
+_LOCAL_MAPS_HOST_RE = re.compile(
+    r"(google\.com/maps|maps\.google|goo\.gl/maps|openstreetmap\.org|yelp\.|tripadvisor\.|"
+    r"foursquare\.|yellowpages|bing\.com/maps|mapquest\.|here\.com)",
+    re.I,
+)
+
+
+def _local_probe_score(result, loc_ctx):
+    """Proxy score when true distance per snippet is unavailable (DDG has no lat/lon per hit)."""
+    url = (result.get("url") or "").lower()
+    title = (result.get("title") or "").lower()
+    body = (result.get("body") or "").lower()
+    blob = f"{title} {body} {url}"
+    domain_boost = 1.0 if _LOCAL_MAPS_HOST_RE.search(url) else 0.35
+    anchor = (loc_ctx.get("anchor_label") or loc_ctx.get("location_from_query") or "").lower()
+    anchor_tokens = [t for t in re.split(r"\W+", anchor) if len(t) > 2]
+    overlap = 0.0
+    if anchor_tokens:
+        hits = sum(1 for t in anchor_tokens if t in blob)
+        overlap = min(1.0, hits / max(len(anchor_tokens), 1))
+    rating_eg = (
+        1.0 if re.search(r"\b\d\.\d\s*★|⭐|\bout of 5\b|\bstars?\b", blob) else 0.0
+    )
+    engagement = min(1.0, len(body) / 380.0)
+    return 0.65 * domain_boost + 0.25 * overlap + 0.10 * (0.7 * rating_eg + 0.3 * engagement)
+
+
+def _rank_local_search_results(results, loc_ctx):
+    if not results or not loc_ctx or not loc_ctx.get("has_local_intent"):
+        return results
+    scored = list(enumerate(results))
+    scored.sort(key=lambda ix: (-_local_probe_score(ix[1], loc_ctx), ix[0]))
+    return [r for _, r in scored]
 
 
 @app.route("/search")
@@ -1731,6 +1816,10 @@ def search():
             img_ov_src="",
             img_src_checked=[],
             img_scroll_extras="",
+            query_ui=_TEMPLATE_DEFAULTS["query_ui"],
+            search_lat=None,
+            search_lon=None,
+            show_ai_summary_block=False,
         )
 
     if len(query) > MAX_QUERY_LENGTH:
@@ -1752,6 +1841,22 @@ def search():
     expanded_query, expansion_terms = _expand_query(clean_query)
     if expansion_terms:
         clean_query = expanded_query
+
+    user_lat = _parse_request_coord("lat")
+    user_lon = _parse_request_coord("lon")
+    if user_lat is not None and not (-90 <= user_lat <= 90):
+        user_lat = None
+    if user_lon is not None and not (-180 <= user_lon <= 180):
+        user_lon = None
+
+    prep = preprocess_query(clean_query)
+    query_ui = query_ui_hints(prep)
+    anchor_geo = None
+    if user_lat is not None and user_lon is not None and has_local_intent_signals(prep):
+        anchor_geo = _reverse_geocode_label(user_lat, user_lon)
+    loc_ctx = resolve_location_for_search(prep, user_lat, user_lon, anchor_geo)
+    backend_query = build_backend_search_query(clean_query, prep, loc_ctx)
+    local_rank_context = loc_ctx if search_type == "text" and loc_ctx.get("has_local_intent") else None
 
     # Entity detection
     entities = detect_entities(query)
@@ -1777,7 +1882,7 @@ def search():
     if request.headers.get("X-Requested-With") == "XMLHttpRequest":
         _t_ajax = time.perf_counter()
         results = _fetch_results(
-            clean_query,
+            backend_query,
             page,
             search_type,
             region,
@@ -1786,6 +1891,7 @@ def search():
             time_filter=time_filter,
             safesearch=safesearch,
             image_opts=image_opts,
+            local_rank_context=local_rank_context,
         )
         _ajax_ms = int((time.perf_counter() - _t_ajax) * 1000)
         if page == 1:
@@ -1794,7 +1900,7 @@ def search():
 
     _t0 = time.perf_counter()
     results = _fetch_results(
-        clean_query,
+        backend_query,
         1,
         search_type,
         region,
@@ -1803,6 +1909,7 @@ def search():
         time_filter=time_filter,
         safesearch=safesearch,
         image_opts=image_opts,
+        local_rank_context=local_rank_context,
     )
     _latency_ms = int((time.perf_counter() - _t0) * 1000)
 
@@ -1881,6 +1988,7 @@ def search():
             knowledge = _try_knowledge_panel(query)
 
     img_extras = _image_search_url_extras(image_opts)
+    show_ai_summary_block = search_type == "text" and query_ui.get("show_ai_summary", False)
     return render_template(
         "index.html",
         query=query,
@@ -1912,6 +2020,10 @@ def search():
         img_ov_src=",".join((image_opts or {}).get("sources") or []),
         img_src_checked=list((image_opts or {}).get("sources") or ["ddg", "openverse", "commons"]),
         img_scroll_extras=img_extras,
+        query_ui=query_ui,
+        search_lat=user_lat,
+        search_lon=user_lon,
+        show_ai_summary_block=show_ai_summary_block,
     )
 
 
@@ -1947,6 +2059,7 @@ def api_entity():
         return jsonify(
             {
                 "preprocessing": None,
+                "query_ui": None,
                 "entities": [],
                 "primary": None,
                 "queries": [],
@@ -1960,6 +2073,7 @@ def api_entity():
     primary = primary_entity(entities)
     return jsonify({
         "preprocessing": prep.to_dict(),
+        "query_ui": query_ui_hints(prep),
         "entities": [asdict(e) for e in entities],
         "primary": asdict(primary) if primary else None,
         "queries": queries,
@@ -2443,8 +2557,26 @@ def api_ai_summary():
     if not query or len(query) > MAX_QUERY_LENGTH:
         return jsonify({"error": "Invalid query"}), 400
 
+    prep = preprocess_query(query)
+    if not should_enable_ai_summary(prep):
+        return jsonify({"enabled": False})
+
+    user_lat = _parse_request_coord("lat")
+    user_lon = _parse_request_coord("lon")
+    if user_lat is not None and not (-90 <= user_lat <= 90):
+        user_lat = None
+    if user_lon is not None and not (-180 <= user_lon <= 180):
+        user_lon = None
+    anchor_geo = None
+    if user_lat is not None and user_lon is not None and has_local_intent_signals(prep):
+        anchor_geo = _reverse_geocode_label(user_lat, user_lon)
+    loc_ctx = resolve_location_for_search(prep, user_lat, user_lon, anchor_geo)
+    backend_q = build_backend_search_query(query, prep, loc_ctx)
+
     # Fetch top 5 results
-    context_results = _fetch_results(query, 1, "text")
+    context_results = _fetch_results(
+        backend_q, 1, "text", local_rank_context=loc_ctx if loc_ctx.get("has_local_intent") else None
+    )
     top5 = context_results["results"][:5]
     if not top5:
         return jsonify({"error": "No results to summarize"}), 404
@@ -4785,6 +4917,7 @@ def _fetch_results(
     time_filter=None,
     safesearch="off",
     image_opts=None,
+    local_rank_context=None,
 ):
     """Fetch results with caching. Returns paginated slice."""
     operators = operators or {}
@@ -5009,6 +5142,8 @@ def _fetch_results(
         results = _try_ddg_instant(query)
 
     results = _deduplicate(results)
+    if search_type == "text" and local_rank_context and local_rank_context.get("has_local_intent"):
+        results = _rank_local_search_results(results, local_rank_context)
 
     # Store in cache
     with _cache_lock:

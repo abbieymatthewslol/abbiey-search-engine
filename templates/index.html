@@ -363,7 +363,7 @@
         <div class="privacy-tagline">Your privacy is our priority.</div>
     </div>
 
-    <div class="app-layout {% if query %}has-chat{% endif %}">
+    <div class="app-layout {% if query %}has-chat{% endif %}"{% if query %} data-query-intent="{{ query_ui.intent }}" data-query-local="{% if query_ui.local_intent %}1{% else %}0{% endif %}"{% endif %}>
     <main>
         <div class="search-container">
             {% if not query %}
@@ -399,6 +399,8 @@
                 <input type="hidden" name="lang" id="lang-input" value="{{ lang or '' }}">
                 <input type="hidden" name="df" id="df-input" value="{{ time_filter or '' }}">
                 <input type="hidden" name="safesearch" id="safesearch-input" value="off">
+                <input type="hidden" name="lat" id="geo-lat-input" value="{% if search_lat is not none %}{{ search_lat }}{% endif %}">
+                <input type="hidden" name="lon" id="geo-lon-input" value="{% if search_lon is not none %}{{ search_lon }}{% endif %}">
             </form>
 
             {% if not query %}
@@ -449,6 +451,11 @@
                     </div>
                 </div>
             </nav>
+            {% if query and query_ui.local_intent and search_type == 'text' %}
+            <div class="local-search-hint" id="local-search-hint" role="status">
+                Local search: results are re-ranked using map and listing signals. Exact distance per result is not available from the web index.
+            </div>
+            {% endif %}
             {% if query %}
             <button class="share-search-btn" id="share-search-btn" title="Share this search" aria-label="Share search">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
@@ -581,8 +588,8 @@
 
         {% if query %}
 
-        {# ===== AI SUMMARY SKELETON (text tab, page 1 only) ===== #}
-        {% if search_type == 'text' %}
+        {# ===== AI SUMMARY SKELETON (text tab, page 1 only; gated by query type) ===== #}
+        {% if search_type == 'text' and show_ai_summary_block %}
         <div class="ai-summary-card" id="ai-summary-card">
             <div class="ai-summary-header">
                 <div class="ai-summary-header-left">
@@ -605,7 +612,7 @@
         <div class="ai-summary-restore-wrap" id="ai-summary-restore-wrap" hidden>
             <button type="button" class="ai-summary-restore-btn" id="ai-summary-restore-tab">Show AI summary</button>
         </div>
-        {% endif %}
+        {% endif %} {# show_ai_summary_block #}
 
         {# ===== CALCULATOR CARD ===== #}
         {% if calculator %}
@@ -1038,7 +1045,7 @@
         <div id="trending-searches" class="trending-searches" style="display:none"></div>
 
         {% if has_more %}
-        <div id="scroll-sentinel" data-page="1" data-query="{{ query }}" data-type="{{ search_type }}" data-has-more="true" data-img-extra="{{ img_scroll_extras or '' }}">
+        <div id="scroll-sentinel" data-page="1" data-query="{{ query }}" data-type="{{ search_type }}" data-has-more="true" data-img-extra="{{ img_scroll_extras or '' }}" data-lat="{% if search_lat is not none %}{{ search_lat }}{% endif %}" data-lon="{% if search_lon is not none %}{{ search_lon }}{% endif %}">
             <div class="scroll-loader">
                 <div class="spinner"></div>
             </div>
@@ -1170,6 +1177,7 @@
     <script>
         window.__searchQuery = {{ query|tojson }};
         window.__searchType = {{ search_type|tojson }};
+        window.__queryUi = {{ query_ui|tojson }};
     </script>
     {% endif %}
 

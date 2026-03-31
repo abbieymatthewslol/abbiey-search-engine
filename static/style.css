@@ -586,6 +586,17 @@ body.has-results .search-btn.search-btn-icon {
   pointer-events: none;
 }
 
+.local-search-hint {
+  font-size: .8125rem;
+  color: var(--text-muted);
+  margin: .5rem 0 0;
+  padding: .5rem .65rem;
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  line-height: 1.45;
+}
+
 .tab-more-wrap {
   position: relative;
   display: inline-flex;
@@ -1482,6 +1493,9 @@ article.result.code-result { font-size: .9rem; }
   border-radius: var(--radius-sm);
   padding: .875rem 1rem;
   margin-bottom: 1.25rem;
+}
+.ai-summary-card.ai-hidden {
+  display: none !important;
 }
 
 .ai-summary-card,

@@ -334,3 +334,137 @@ def preprocess_query(query: str) -> PreprocessedQuery:
         pattern=pattern,
         unknown_terms=unknown_terms,
     )
+
+
+_SUMMARY_EXPLANATORY = re.compile(
+    r"\b("
+    r"explain|definition|meaning of|tutorial|guide|learn about|"
+    r"difference between|compared to|overview of|facts about|how does|how do|"
+    r"why does|why do|what is|what are|what does|who is|who are"
+    r")\b",
+    re.I,
+)
+_QUESTION_START = re.compile(
+    r"^(what|why|how|when|where|who|which|is|are|does|do|can|could|should|would|did|have|has|had)\b",
+    re.I,
+)
+
+
+def has_informational_summary_signals(text: str) -> bool:
+    """Question-shaped or explanatory phrasing suitable for an AI web summary."""
+    s = (text or "").strip()
+    if not s:
+        return False
+    if "?" in s:
+        return True
+    if _SUMMARY_EXPLANATORY.search(s):
+        return True
+    if _QUESTION_START.search(s):
+        return True
+    return False
+
+
+def should_enable_ai_summary(prep: PreprocessedQuery) -> bool:
+    """Gate auto AI summary: question/explanatory phrasing only; never nav or shopping intent."""
+    if prep.intent in ("navigational", "transactional"):
+        return False
+    return has_informational_summary_signals(prep.original) or has_informational_summary_signals(
+        prep.normalized
+    )
+
+
+_TRANSACTIONAL_LOCAL_UI = re.compile(
+    r"\b("
+    r"near|closest|nearest|nearby|around\s+here|in\s+my\s+area|open\s+now|"
+    r"buy|order|shop\s+for|cheap(est)?|deal|delivery|pickup"
+    r")\b",
+    re.I,
+)
+
+
+def has_local_intent_signals(prep: PreprocessedQuery) -> bool:
+    if prep.intent == "local_search":
+        return True
+    if prep.pattern and prep.pattern.kind in ("closest", "near_me", "near_poi", "best_in"):
+        return True
+    return False
+
+
+def query_ui_hints(prep: PreprocessedQuery) -> Dict[str, Any]:
+    """Signals for template/JS: interrogative vs transactional/local, AI summary, local chrome."""
+    info_sig = has_informational_summary_signals(prep.original) or has_informational_summary_signals(
+        prep.normalized
+    )
+    local_sig = has_local_intent_signals(prep)
+    transactional_local = bool(_TRANSACTIONAL_LOCAL_UI.search(prep.normalized))
+    return {
+        "intent": prep.intent,
+        "interrogative_or_explanatory": bool(info_sig),
+        "local_intent": bool(local_sig),
+        "transactional_local_keywords": transactional_local,
+        "prefer_local_ui": bool(local_sig or transactional_local),
+        "show_ai_summary": should_enable_ai_summary(prep),
+    }
+
+
+def resolve_location_for_search(
+    prep: PreprocessedQuery,
+    user_lat: Optional[float],
+    user_lon: Optional[float],
+    anchor_from_geocode: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Resolve place context: GPS, explicit place in query, or free-text near_me/closest.
+    anchor_from_geocode: city/area label from reverse geocode when lat/lon are available.
+    """
+    has_local = has_local_intent_signals(prep)
+    loc_from_query: Optional[str] = None
+    if prep.pattern:
+        if prep.pattern.kind in ("near_poi", "best_in") and prep.pattern.location:
+            loc_from_query = prep.pattern.location.strip()
+    return {
+        "has_local_intent": bool(has_local),
+        "user_lat": user_lat,
+        "user_lon": user_lon,
+        "location_from_query": loc_from_query,
+        "anchor_label": (anchor_from_geocode or loc_from_query or "").strip() or None,
+    }
+
+
+def build_backend_search_query(
+    clean_query: str,
+    prep: PreprocessedQuery,
+    loc: Dict[str, Any],
+) -> str:
+    """
+    Rewrite into engine-friendly text (synonyms already in prep.normalized).
+    Example: closest op shop → thrift store near me sorted by distance.
+    """
+    pat = prep.pattern
+    q = ""
+
+    if pat:
+        if pat.kind == "closest" and pat.subject:
+            subj = pat.subject.strip()
+            q = f"{subj} near me sorted by distance"
+        elif pat.kind == "near_me" and pat.subject:
+            q = f"{pat.subject.strip()} near me open now"
+        elif pat.kind == "near_poi" and pat.subject and pat.location:
+            q = f"{pat.subject.strip()} near {pat.location.strip()}"
+        elif pat.kind == "best_in" and pat.subject and pat.location:
+            q = f"best {pat.subject.strip()} in {pat.location.strip()}"
+
+    if not q:
+        q = (prep.normalized or clean_query or "").strip()
+
+    if loc.get("has_local_intent") and loc.get("user_lat") is not None and loc.get("user_lon") is not None:
+        al = loc.get("anchor_label")
+        if al and al.lower() not in q.lower():
+            q = f"{q} near {al}".strip()
+        elif not al:
+            lat, lon = loc["user_lat"], loc["user_lon"]
+            coord = f"{lat:.4f},{lon:.4f}"
+            if coord not in q.replace(" ", ""):
+                q = f"{q} near {coord}".strip()
+
+    return q or (clean_query or "").strip()
