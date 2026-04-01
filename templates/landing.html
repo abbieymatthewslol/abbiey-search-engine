@@ -7,6 +7,11 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=deploy_hash) }}">
     {% include 'includes/google_site_verification.html' %}
     {% include 'includes/google_analytics.html' %}
+    <!-- Vercel Speed Insights -->
+    <script>
+        window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
+    </script>
+    <script defer src="/_vercel/speed-insights/script.js"></script>
     <meta name="description" content="Private search — no logs, no profiling. Nobody's watching.">
     <link rel="canonical" href="{{ site_base_url }}/landing">
 </head>
