@@ -1571,20 +1571,32 @@ document.addEventListener("DOMContentLoaded", () => {
     let _cachedResults = null;
     const resultsEl = document.getElementById("results");
 
+    const PREVIEW_CARD_SEL = [
+      ".entity-results-section article.result[data-url]",
+      "#results .result[data-url]",
+      "#results .image-card[data-url]",
+    ].join(", ");
+
     function getResultElements() {
-      if (!resultsEl) return [];
       if (!_cachedResults) {
-        const t = resultsEl.getAttribute("data-type");
-        _cachedResults = t === "images"
-          ? resultsEl.querySelectorAll(":scope > .image-card")
-          : resultsEl.querySelectorAll(":scope > .result");
+        const list = [];
+        document.querySelectorAll(PREVIEW_CARD_SEL).forEach((el) => list.push(el));
+        _cachedResults = list;
       }
       return _cachedResults;
     }
 
-    // Invalidate cache when infinite scroll adds results
+    // Invalidate when results tree changes (infinite scroll, saved tab fill-in, etc.)
     const resultObserver = new MutationObserver(() => { _cachedResults = null; });
-    if (resultsEl) resultObserver.observe(resultsEl, { childList: true });
+    if (resultsEl) resultObserver.observe(resultsEl, { childList: true, subtree: true });
+
+    function normalizePreviewUrl(raw) {
+      if (!raw || typeof raw !== "string") return "";
+      const u = raw.trim();
+      if (u.startsWith("//")) return `https:${u}`;
+      if (u.startsWith("http://") || u.startsWith("https://")) return u;
+      return "";
+    }
 
     function clearResultHighlight() {
       if (!resultsEl) return;
@@ -1605,7 +1617,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function loadPreview(url) {
-      if (!url || !url.startsWith("http")) return;
+      const u = normalizePreviewUrl(url);
+      if (!u) return;
 
       scheduleKbFocusPending = previewFocusFromKeyboard;
       previewFocusFromKeyboard = false;
@@ -1618,9 +1631,9 @@ document.addEventListener("DOMContentLoaded", () => {
         previewOpen = true;
       }
 
-      // Check cache
-      if (previewCache[url]) {
-        renderPreview(previewCache[url]);
+      // Check cache (key by normalized URL)
+      if (previewCache[u]) {
+        renderPreview(previewCache[u]);
         return;
       }
 
@@ -1631,7 +1644,7 @@ document.addEventListener("DOMContentLoaded", () => {
         previewLoading.style.display = "flex";
       });
 
-      fetch(`/api/preview?url=${encodeURIComponent(url)}`)
+      fetch(`/api/preview?url=${encodeURIComponent(u)}`)
         .then(r => r.json())
         .then(data => {
           if (data.error) {
@@ -1643,12 +1656,12 @@ document.addEventListener("DOMContentLoaded", () => {
               _previewExcerpt.textContent = "";
               _previewSite.textContent = "";
               _previewImg.style.display = "none";
-              _previewLink.href = url;
+              _previewLink.href = u;
               schedulePreviewFocusFromKeyboard();
             });
             return;
           }
-          previewCache[url] = data;
+          previewCache[u] = data;
           renderPreview(data);
         })
         .catch(() => {
@@ -1681,18 +1694,29 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     }
 
-    // Hover to preview
+    // Hover to preview (all result cards with data-url: main grid, saved, entity sections)
     let hoverTimer = null;
     document.addEventListener("mouseover", (e) => {
-      const result = e.target.closest("#results > .result, #results > .image-card");
+      const result = e.target.closest(PREVIEW_CARD_SEL);
       if (!result || !result.dataset.url) return;
       previewFocusFromKeyboard = false;
       clearTimeout(hoverTimer);
       hoverTimer = setTimeout(() => loadPreview(result.dataset.url), 300);
     }, { passive: true });
     document.addEventListener("mouseout", (e) => {
-      if (e.target.closest("#results > .result, #results > .image-card")) clearTimeout(hoverTimer);
+      if (e.target.closest(PREVIEW_CARD_SEL)) clearTimeout(hoverTimer);
     }, { passive: true });
+
+    // Tap on card body on touch / coarse-pointer devices — hover does not run there
+    function onResultCardTapPreview(e) {
+      const card = e.target.closest(PREVIEW_CARD_SEL);
+      if (!card || !card.dataset.url) return;
+      if (e.target.closest("a[href], button, input, textarea, select, label")) return;
+      loadPreview(card.dataset.url);
+    }
+    if (window.matchMedia("(hover: none), (pointer: coarse)").matches) {
+      document.addEventListener("click", onResultCardTapPreview);
+    }
 
     // Keyboard navigation: j/k for results, o to open (inside previewPanel scope)
     document.addEventListener("keydown", (e) => {
@@ -1720,8 +1744,8 @@ document.addEventListener("DOMContentLoaded", () => {
         highlightResult(activeResultIdx);
       } else if (e.key === "o" && activeResultIdx >= 0) {
         e.preventDefault();
-        const url = results[activeResultIdx].dataset.url;
-        if (url) window.open(url, "_blank");
+        const u = normalizePreviewUrl(results[activeResultIdx].dataset.url);
+        if (u) window.open(u, "_blank");
       } else if (e.key === "Escape" && previewOpen) {
         previewPanel.classList.remove("open");
         previewOpen = false;
@@ -2158,7 +2182,7 @@ document.addEventListener("DOMContentLoaded", () => {
         savedContainer.innerHTML = '<p class="no-results">No saved results yet. Click the bookmark icon on any result to save it.</p>';
       } else {
         savedContainer.innerHTML = bookmarks.map(b => `
-          <article class="result saved-result">
+          <article class="result saved-result" data-url="${esc(b.url)}">
             <button class="bookmark-remove-btn" data-url="${esc(b.url)}" aria-label="Remove bookmark" title="Remove">&#10005;</button>
             <a href="${esc(b.url)}" target="_blank" rel="noopener" class="result-title">${esc(b.title)}</a>
             <cite class="result-url">${esc(b.url)}</cite>
