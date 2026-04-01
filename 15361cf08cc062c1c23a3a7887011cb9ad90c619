@@ -1,0 +1,23 @@
+CLAUDE.md
+  051fbaadd2875acb 52,56-67,70-73
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.3",
+  "base_commit_sha": "15361cf08cc062c1c23a3a7887011cb9ad90c619",
+  "prompts": {
+    "051fbaadd2875acb": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "0d4e6f00-6fa3-467b-9c96-ebebdbf7237a",
+        "model": "default"
+      },
+      "human_author": "Abbiey",
+      "messages": [],
+      "total_additions": 17,
+      "total_deletions": 1,
+      "accepted_lines": 17,
+      "overriden_lines": 0
+    }
+  }
+}
