@@ -83,6 +83,12 @@ def mock_httpx():
 
 
 @pytest.fixture(autouse=True)
+def disable_retrieval_pipeline(monkeypatch):
+    """Avoid live multi-source HTTP in unit tests (DDG mock only applies to legacy path)."""
+    monkeypatch.setenv("ABBIEY_RETRIEVAL_PIPELINE", "0")
+
+
+@pytest.fixture(autouse=True)
 def clear_cache():
     """Clear the result cache before each test."""
     from app import _cache, _cache_lock

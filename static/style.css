@@ -3698,3 +3698,43 @@ footer {
   padding: 0.1rem 0.25rem;
   border-radius: 4px;
 }
+
+/* ===== Marketing /landing ===== */
+.landing-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid var(--border);
+}
+.landing-main {
+  max-width: 40rem;
+  margin: 2.5rem auto;
+  padding: 0 1.5rem 3rem;
+}
+.landing-main h1 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin: 0 0 1rem;
+  letter-spacing: -0.02em;
+}
+.landing-lead {
+  font-size: 1.05rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+  margin: 0 0 1.25rem;
+}
+.landing-lead strong {
+  color: var(--text);
+  font-weight: 600;
+}
+.landing-points {
+  margin: 0 0 1.5rem;
+  padding-left: 1.25rem;
+  color: var(--text-dim);
+  line-height: 1.55;
+}
+.landing-cta {
+  text-decoration: none;
+}
