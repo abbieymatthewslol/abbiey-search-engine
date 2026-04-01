@@ -66,6 +66,8 @@ Production deploys use **`vercel.json`** (Python serverless). SQLite under **`/t
    Local sync: `vercel env pull` (CLI) if you use the Vercel-linked project.
 
 ## Deploy
+- **Production (Vercel + abbieysearch.com):** See [`.github/PLATFORM_INTEGRATIONS.md`](.github/PLATFORM_INTEGRATIONS.md) — one Vercel project, GitHub repo, and Supabase Postgres (`SUPABASE_DB_URL` in Vercel env). CI: `.github/workflows/deploy.yml` (requires `VERCEL_TOKEN` secret).
+
 ```bash
 # Vercel (see “Vercel + Supabase” above for DATABASE_URL)
 vercel deploy --prod
