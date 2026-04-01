@@ -1,0 +1,27 @@
+templates/profile.html
+  fb864f0daf6d8a95 124-125
+templates/verify_email.html
+  fb864f0daf6d8a95 9-11
+requirements.txt
+  fb864f0daf6d8a95 12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.3",
+  "base_commit_sha": "60bf0e9ed0f5714f330d11250f3e1504b2f8e239",
+  "prompts": {
+    "fb864f0daf6d8a95": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "96dd2785-364f-4942-abec-ed7c3e76d04d",
+        "model": "default"
+      },
+      "human_author": "Abbiey",
+      "messages": [],
+      "total_additions": 251,
+      "total_deletions": 248,
+      "accepted_lines": 228,
+      "overriden_lines": 0
+    }
+  }
+}
