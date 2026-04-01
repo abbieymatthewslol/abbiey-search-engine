@@ -1,0 +1,23 @@
+.github/workflows/production-readiness.yml
+  3cbc96e441f92ed6 13-14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.3",
+  "base_commit_sha": "c0b7fd731649d3a7a373eed5166a5a259c203bb8",
+  "prompts": {
+    "3cbc96e441f92ed6": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "e10cf347-68ab-4f87-8f4e-b5c67baaf7bb",
+        "model": "default"
+      },
+      "human_author": "Abbiey",
+      "messages": [],
+      "total_additions": 4,
+      "total_deletions": 3,
+      "accepted_lines": 2,
+      "overriden_lines": 0
+    }
+  }
+}
