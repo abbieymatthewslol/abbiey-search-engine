@@ -1,27 +1,11 @@
-"""Vercel WSGI entry point for abbiey.search."""
-import sys
-import os
+from flask import Flask, jsonify
 
-# Ensure the project root is on the path so `app` and `entity_parser` resolve
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+app = Flask(__name__)
 
-from app import app  # noqa: F401 — Vercel picks up `app` as the WSGI handler
+@app.route("/api/health")
+def health():
+    return jsonify({"status": "ok"})
 
-# ---- AUTO HEALTH PATCH ----
-try:
-    from flask import jsonify
-except:
-    pass
-
-def _health_response():
-    try:
-        return jsonify({"status": "ok"})
-    except:
-        return {"status": "ok"}
-
-try:
-    app.route("/api/health")(_health_response)
-except:
-    pass
-# ---- END PATCH ----
-
+@app.route("/api")
+def root():
+    return jsonify({"status": "api live"})
