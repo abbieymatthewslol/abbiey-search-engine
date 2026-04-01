@@ -1,0 +1,23 @@
+.github/SELF_HOSTED_RUNNER.md
+  051fbaadd2875acb 1,3,5,7-8,10,12,14-16,18-20,22-24,26-28,30,32,34-37,39,41,43,45-49,51,53,55-57,59,61-62
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.3",
+  "base_commit_sha": "af0851d1e52bba4c638b42267d0556ccbe5eb851",
+  "prompts": {
+    "051fbaadd2875acb": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "0d4e6f00-6fa3-467b-9c96-ebebdbf7237a",
+        "model": "default"
+      },
+      "human_author": "Abbiey",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 41,
+      "overriden_lines": 4
+    }
+  }
+}
