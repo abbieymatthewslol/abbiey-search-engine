@@ -1,5 +1,6 @@
-# Vercel Production is tied to branch `main`. This keeps `main` identical to `master`
-# on every push so you only ever work on `master` and the live site still updates.
+# Vercel production (abbieysearch.com) may use branch `main`. This keeps `main` identical to `master`
+# on every push so default branch + Git-connected deploys stay aligned with `master`.
+# See .github/PLATFORM_INTEGRATIONS.md for the full GitHub / Vercel / Supabase setup.
 
 name: Sync main from master
 
