@@ -5787,7 +5787,7 @@ def _signup_process_post():
         )
 
     _send_signup_verification_email(email, display_name, otp, vtok)
-    return redirect(url_for("verify_email", email=email, signup="1"))
+    return redirect(url_for("verify_email", email=email, new="1"))
 
 
 @app.route("/signup", methods=["GET", "POST"])
