@@ -39,6 +39,7 @@ from query_understanding import (
     should_enable_ai_summary,
     has_local_intent_signals,
 )
+from retrieval.pipeline import run_text_retrieval_pipeline_sync
 
 try:
     from dotenv import load_dotenv
@@ -125,6 +126,16 @@ def _env_truthy(key: str) -> bool:
 
 # Self-host only: disables all Flask-Limiter rules (public deployments should leave this off).
 ABBIEY_OPEN_ACCESS = _env_truthy("ABBIEY_OPEN_ACCESS")
+
+
+def _retrieval_pipeline_enabled() -> bool:
+    """Multi-source async aggregation + scoring for web text search (read env per request for tests)."""
+    return os.environ.get("ABBIEY_RETRIEVAL_PIPELINE", "1").strip().lower() not in (
+        "0",
+        "false",
+        "no",
+        "off",
+    )
 
 
 def _max_query_length() -> int:
@@ -5262,6 +5273,42 @@ def _fetch_results(
             )
             skip_ddg = bool(results)
 
+        pipeline_used = False
+        if search_type == "text" and _retrieval_pipeline_enabled():
+            try:
+                _rp_fetchers = {
+                    "ddg": lambda: _try_ddg(
+                        effective_query, max_results, "text", region, time_filter, safesearch
+                    ),
+                    "wikipedia": lambda: _try_wikipedia(effective_query, lang),
+                    "marginalia": lambda: _try_marginalia(query),
+                    "stract": lambda: _try_stract(query),
+                    "searxng": lambda: _try_searxng(query),
+                    "hn": lambda: _try_hackernews_text(query),
+                    "reddit": lambda: _try_reddit_text(query),
+                    "archive": lambda: _try_internet_archive_text(query),
+                }
+                if _looks_academic(query):
+                    _rp_fetchers["arxiv"] = lambda: _try_arxiv(query)
+                    _rp_fetchers["pubmed"] = lambda: _try_pubmed(query)
+                    _rp_fetchers["crossref"] = lambda: _try_crossref(query)
+                _rp_hits = run_text_retrieval_pipeline_sync(
+                    user_query=query,
+                    effective_query=effective_query,
+                    fetchers=_rp_fetchers,
+                    max_results=max_results,
+                    lang=lang,
+                    region=region,
+                    time_filter=time_filter,
+                    safesearch=safesearch,
+                )
+                if _rp_hits:
+                    results = _rp_hits
+                    pipeline_used = True
+                    skip_ddg = True
+            except Exception:
+                logger.exception("retrieval_pipeline_failed")
+
         if not skip_ddg:
             # Layer 1: DDG multi-backend (with timeout guard)
             try:
@@ -5273,8 +5320,8 @@ def _fetch_results(
             except Exception:
                 logger.exception("DDG failed/timed out for query=%s type=%s", query, search_type)
 
-        # Text: parallel multi-source enrichment — always blend deeper sources alongside DDG
-        if search_type == "text":
+        # Text: parallel multi-source enrichment — blend deeper sources alongside DDG (legacy path)
+        if search_type == "text" and not pipeline_used:
             existing_urls = {r.get("url", "") for r in results}
             _deep_pool = ThreadPoolExecutor(max_workers=10)
             try:
