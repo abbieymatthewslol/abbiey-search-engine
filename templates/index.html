@@ -932,7 +932,7 @@
             <div class="entity-result-group">
                 <h3 class="entity-result-label">{{ section.label }}</h3>
                 {% for r in section.results %}
-                <article class="result result-compact">
+                <article class="result result-compact" data-url="{{ r.url }}">
                     <a href="{{ r.url }}" target="_blank" rel="noopener" class="result-title">{{ r.title }}</a>
                     <img class="result-favicon" src="https://icons.duckduckgo.com/ip3/{{ r.url|domain }}/favicon.ico" onerror="this.style.display='none'" alt="" loading="lazy"><cite class="result-url">{{ r.url }}</cite>
                     <p class="result-snippet">{{ r.body }}</p>
@@ -1062,7 +1062,7 @@
     </main>
 
     {# ===== RESULT PREVIEW PANEL ===== #}
-    {% if query and search_type in ('text', 'news', 'code', 'onion', 'videos', 'images') %}
+    {% if query and search_type in ('text', 'news', 'code', 'onion', 'videos', 'images', 'saved', 'prices', 'alts') %}
     <div class="layout-gutter-preview" id="layout-gutter-preview" role="separator" aria-orientation="vertical" aria-label="Resize preview panel" tabindex="0"></div>
     <aside class="preview-panel" id="preview-panel">
         <div class="preview-header">
@@ -1078,7 +1078,7 @@
         </div>
         <div class="preview-body" id="preview-body">
             <div class="preview-empty" id="preview-empty">
-                <p>Hover a result or press <kbd>j</kbd> / <kbd>k</kbd> to move focus and load a page preview.</p>
+                <p>Hover a result (or tap the card on touch screens), or press <kbd>j</kbd> / <kbd>k</kbd> to move focus and load a page preview.</p>
             </div>
             <div class="preview-content" id="preview-content" style="display:none">
                 <img class="preview-image" id="preview-image" src="" alt="" style="display:none">

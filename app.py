@@ -2729,6 +2729,8 @@ def _is_private_ip(hostname):
 def api_preview():
     """Fetch a page preview (title + description + text excerpt)."""
     url = request.args.get("url", "").strip()
+    if url.startswith("//"):
+        url = "https:" + url
     if not url or not url.startswith("http"):
         return jsonify({"error": _PREVIEW_MSG_INVALID}), 400
     if len(url) > _MAX_PREVIEW_URL_LEN:
@@ -2743,7 +2745,7 @@ def api_preview():
     try:
         resp = httpx.get(
             url,
-            timeout=httpx.Timeout(connect=2.0, read=4.0),
+            timeout=4.0,
             follow_redirects=True,
             headers={"User-Agent": "Mozilla/5.0 (compatible; abbiey.search/1.0)"},
         )

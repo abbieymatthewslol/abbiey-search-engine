@@ -352,6 +352,22 @@ class TestApiPreview:
         resp = client.get("/api/preview", query_string={"url": long_url})
         assert resp.status_code == 400
 
+    def test_preview_normalizes_protocol_relative_url(self, client):
+        from unittest.mock import MagicMock, patch
+
+        import httpx
+
+        mock_resp = MagicMock()
+        mock_resp.text = "<html><head><title>Ex</title></head><body>hi</body></html>"
+        mock_resp.raise_for_status = MagicMock()
+        with patch.object(httpx, "get", return_value=mock_resp) as get_mock:
+            resp = client.get("/api/preview", query_string={"url": "//example.com/page"})
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data.get("url") == "https://example.com/page"
+        get_mock.assert_called_once()
+        assert get_mock.call_args[0][0] == "https://example.com/page"
+
 
 class TestChatAPI:
     """Test the AI research assistant chat endpoint."""
