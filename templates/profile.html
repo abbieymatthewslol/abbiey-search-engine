@@ -121,8 +121,8 @@
             <dl class="account-details">
                 <dt>Username</dt><dd>{{ user.username }}</dd>
                 <dt>Email</dt><dd>{{ user.email }}</dd>
-                <dt>Joined</dt><dd>{{ user.created_at[:10] }}</dd>
-                <dt>Last active</dt><dd>{{ user.last_seen[:16].replace('T', ' ') }}</dd>
+                <dt>Joined</dt><dd>{% if user.created_at is string %}{{ user.created_at[:10] }}{% elif user.created_at %}{{ user.created_at.strftime('%Y-%m-%d') }}{% else %}—{% endif %}</dd>
+                <dt>Last active</dt><dd>{% if user.last_seen is string %}{{ user.last_seen[:16].replace('T', ' ') }}{% elif user.last_seen %}{{ user.last_seen.strftime('%Y-%m-%d %H:%M') }}{% else %}—{% endif %}</dd>
             </dl>
             <a href="/logout" class="signout-link">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
