@@ -9,8 +9,9 @@
 
 name: Production readiness
 
-# All branch pushes + manual run (explicit list avoids ambiguous null `push:` / `workflow_dispatch:` keys)
-on: [push, workflow_dispatch]
+on:
+  push:
+  workflow_dispatch:
 
 jobs:
   verify:
