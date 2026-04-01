@@ -11,6 +11,9 @@
         {% if error %}
         <div class="auth-errors" role="alert" aria-live="polite">
             <p>{{ error }}</p>
+            {% if verify_email_hint %}
+            <p class="form-hint" style="margin-top:.75rem"><a href="/verify-email">Open email verification</a></p>
+            {% endif %}
         </div>
         {% endif %}
 

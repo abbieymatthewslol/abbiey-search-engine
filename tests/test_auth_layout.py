@@ -11,7 +11,7 @@ _AUTH_MARKERS = (
 )
 
 
-@pytest.mark.parametrize("path", ["/signup", "/login"])
+@pytest.mark.parametrize("path", ["/signup", "/login", "/verify-email"])
 def test_auth_pages_use_shared_layout_contract(client, path):
     r = client.get(path)
     assert r.status_code == 200

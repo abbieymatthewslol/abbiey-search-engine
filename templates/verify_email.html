@@ -1,0 +1,74 @@
+{% extends "auth_base.html" %}
+{% block title %}Verify email · abbiey.search{% endblock %}
+
+{% block auth_content %}
+
+        <div class="auth-heading" id="auth-form-title">
+            <h1 class="auth-title">Check your email</h1>
+            <p class="auth-subtitle">
+                {% if signup %}
+                We sent a <strong>6-digit code</strong> and a <strong>verification link</strong> to your inbox.
+                {% elif resent %}
+                If that address has an unverified account, we sent a new code and link.
+                {% else %}
+                Enter the code from your email, or open the link we sent you.
+                {% endif %}
+            </p>
+        </div>
+
+        {% if errors %}
+        <div class="auth-errors" role="alert" aria-live="polite">
+            {% for e in errors %}<p>{{ e }}</p>{% endfor %}
+        </div>
+        {% endif %}
+
+        {% if verified_hint %}
+        <p class="auth-switch"><a href="/login">Sign in</a></p>
+        {% else %}
+
+        <form class="auth-form" method="POST" action="/verify-email" autocomplete="on" aria-labelledby="auth-form-title">
+            <div class="auth-field">
+                <label for="email">Email</label>
+                <div class="auth-input-pill">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="auth-input-icon" aria-hidden="true"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                    <input type="email" name="email" id="email" value="{{ email or '' }}"
+                           placeholder="you@example.com" autocomplete="email" required>
+                </div>
+            </div>
+
+            <div class="auth-field">
+                <label for="code">6-digit code</label>
+                <div class="auth-input-pill">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="auth-input-icon" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+                    <input type="text" name="code" id="code" inputmode="numeric" pattern="[0-9]{6}"
+                           maxlength="6" minlength="6" placeholder="000000" autocomplete="one-time-code" required>
+                </div>
+                <span class="form-hint">Expires in about 15 minutes</span>
+            </div>
+
+            <button type="submit" class="search-btn auth-submit">Verify and continue</button>
+        </form>
+
+        <form class="auth-form" method="POST" action="/verify-email/resend" id="verify-resend-form" style="margin-top:1rem">
+            <input type="hidden" name="email" id="resend-email-hidden" value="{{ email or '' }}">
+            <button type="submit" class="search-btn auth-submit" style="opacity:.9">Send new code</button>
+        </form>
+
+        <p class="auth-switch">Wrong address? <a href="/signup">Sign up again</a> · <a href="/login">Sign in</a></p>
+        {% endif %}
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function () {
+    var rf = document.getElementById("verify-resend-form");
+    var em = document.getElementById("email");
+    var hid = document.getElementById("resend-email-hidden");
+    if (rf && em && hid) {
+        rf.addEventListener("submit", function () {
+            hid.value = (em.value || "").trim();
+        });
+    }
+})();
+</script>
+{% endblock %}
