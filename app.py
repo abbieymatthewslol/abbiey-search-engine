@@ -4,6 +4,7 @@ No tracking. No filtering. No logs. Just results.
 """
 
 import hashlib
+import hmac
 import json
 import logging
 import os
@@ -18,6 +19,7 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed, wait as _futures_wait
 from itertools import zip_longest
 from dataclasses import asdict
+from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qs, quote_plus, unquote, urlparse, urlencode
 
 import feedparser
@@ -377,7 +379,12 @@ def _init_pg_tables():
             bio           TEXT DEFAULT '',
             avatar        TEXT,
             created_at    TIMESTAMPTZ DEFAULT NOW(),
-            last_seen     TIMESTAMPTZ DEFAULT NOW()
+            last_seen     TIMESTAMPTZ DEFAULT NOW(),
+            email_verified BOOLEAN NOT NULL DEFAULT TRUE,
+            verify_token  TEXT,
+            verify_token_expires TIMESTAMPTZ,
+            otp_code_hash TEXT,
+            otp_expires   TIMESTAMPTZ
         );
         CREATE INDEX IF NOT EXISTS idx_users_username ON users(LOWER(username));
         CREATE INDEX IF NOT EXISTS idx_users_email    ON users(LOWER(email));
@@ -643,7 +650,12 @@ def _init_users_db():
                 display_name  TEXT,
                 bio           TEXT DEFAULT '',
                 created_at    TEXT DEFAULT (datetime('now')),
-                last_seen     TEXT DEFAULT (datetime('now'))
+                last_seen     TEXT DEFAULT (datetime('now')),
+                email_verified INTEGER DEFAULT 1,
+                verify_token TEXT,
+                verify_token_expires TEXT,
+                otp_code_hash TEXT,
+                otp_expires TEXT
             );
             CREATE TABLE IF NOT EXISTS user_bookmarks (
                 id       INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -679,7 +691,39 @@ def _init_users_db():
         """)
 
 
+def _migrate_users_email_verification_columns():
+    """Add email verification columns to existing SQLite / Postgres users tables."""
+    sqlite_alters = (
+        "ALTER TABLE users ADD COLUMN email_verified INTEGER DEFAULT 1",
+        "ALTER TABLE users ADD COLUMN verify_token TEXT",
+        "ALTER TABLE users ADD COLUMN verify_token_expires TEXT",
+        "ALTER TABLE users ADD COLUMN otp_code_hash TEXT",
+        "ALTER TABLE users ADD COLUMN otp_expires TEXT",
+    )
+    for stmt in sqlite_alters:
+        try:
+            with sqlite3.connect(_USERS_DB) as con:
+                con.execute(stmt)
+        except Exception:
+            pass
+    if not (_SUPABASE_DB_URL and _SUPABASE_DB_READY):
+        return
+    pg_alters = (
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT TRUE",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS verify_token TEXT",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS verify_token_expires TIMESTAMPTZ",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS otp_code_hash TEXT",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS otp_expires TIMESTAMPTZ",
+    )
+    for stmt in pg_alters:
+        try:
+            _pg_execute(stmt, [])
+        except Exception as exc:
+            logging.warning("PG users email verification migration: %s", exc)
+
+
 _init_users_db()
+_migrate_users_email_verification_columns()
 
 # Avatar column migration — SQLite only (PG schema already includes it)
 if not _SUPABASE_DB_URL:
@@ -743,6 +787,137 @@ def _get_user_by_login(identifier: str) -> "dict | None":
     return rows[0] if rows else None
 
 
+def _user_is_email_verified(user: dict | None) -> bool:
+    if not user:
+        return False
+    v = user.get("email_verified")
+    if v is None:
+        return True
+    if isinstance(v, bool):
+        return v
+    try:
+        return int(v) != 0
+    except (TypeError, ValueError):
+        return bool(v)
+
+
+def _random_otp6() -> str:
+    return f"{secrets.randbelow(1000000):06d}"
+
+
+def _otp_digest(user_id: int, code: str) -> str:
+    raw = f"{int(user_id)}:{(code or '').strip()}"
+    sk = (app.config.get("SECRET_KEY") or app.secret_key or "dev").encode("utf-8", errors="replace")
+    return hmac.new(sk, raw.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def _parse_db_ts(val) -> datetime | None:
+    if val is None:
+        return None
+    if isinstance(val, datetime):
+        dt = val
+        if dt.tzinfo is None:
+            return dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
+    s = str(val).strip()
+    if not s:
+        return None
+    if s.endswith("Z"):
+        s = s[:-1] + "+00:00"
+    try:
+        dt = datetime.fromisoformat(s)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
+    except Exception:
+        return None
+
+
+def _ts_still_valid(val) -> bool:
+    dt = _parse_db_ts(val)
+    if not dt:
+        return False
+    return datetime.now(timezone.utc) <= dt
+
+
+def _set_verification_challenge(user_id: int) -> tuple[str, str]:
+    """Generate OTP + link token; persist hashes and expiry. Returns (otp_plain, verify_token)."""
+    otp = _random_otp6()
+    vtok = secrets.token_urlsafe(32)
+    now = datetime.now(timezone.utc)
+    v_exp_s = (now + timedelta(hours=24)).isoformat()
+    o_exp_s = (now + timedelta(minutes=15)).isoformat()
+    otp_hash = _otp_digest(user_id, otp)
+    _users_execute(
+        "UPDATE users SET verify_token=?, verify_token_expires=?, otp_code_hash=?, otp_expires=? WHERE id=?",
+        [vtok, v_exp_s, otp_hash, o_exp_s, user_id],
+    )
+    return otp, vtok
+
+
+def _mark_email_verified(user_id: int) -> None:
+    _users_execute(
+        "UPDATE users SET email_verified=?, verify_token=NULL, verify_token_expires=NULL, "
+        "otp_code_hash=NULL, otp_expires=NULL WHERE id=?",
+        [True, user_id],
+    )
+
+
+def _send_signup_verification_email(
+    to_email: str, username_display: str, otp: str, verify_token: str
+) -> bool:
+    base = _site_base_url().rstrip("/")
+    q = urlencode({"token": verify_token})
+    link = f"{base}/verify-email?{q}"
+    subject = "Verify your abbiey.search account"
+    text_body = (
+        f"Hi {username_display},\n\n"
+        f"Your verification code is: {otp}\n"
+        f"(expires in 15 minutes)\n\n"
+        f"Or open this link (expires in 24 hours):\n{link}\n\n"
+        f"If you did not sign up, you can ignore this email.\n"
+    )
+    html_body = (
+        f"<p>Hi {username_display},</p>"
+        f"<p>Your verification code is:</p>"
+        f'<p style="font-size:1.5rem;letter-spacing:0.2em;font-weight:bold">{otp}</p>'
+        f'<p style="color:#666">Code expires in 15 minutes.</p>'
+        f'<p>Or <a href="{link}">click here to verify your email</a> '
+        f"(link expires in 24 hours).</p>"
+        f'<p style="color:#666">If you did not create an account, you can ignore this message.</p>'
+    )
+    key = (os.environ.get("RESEND_API_KEY") or "").strip()
+    from_addr = (os.environ.get("EMAIL_FROM") or "abbiey.search <onboarding@resend.dev>").strip()
+    if not key:
+        logger.warning(
+            "RESEND_API_KEY not set — cannot send verification email to %s. OTP=%s URL=%s",
+            to_email,
+            otp,
+            link,
+        )
+        return False
+    try:
+        r = httpx.post(
+            "https://api.resend.com/emails",
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+            json={
+                "from": from_addr,
+                "to": [to_email],
+                "subject": subject,
+                "text": text_body,
+                "html": html_body,
+            },
+            timeout=20.0,
+        )
+        if r.status_code >= 400:
+            logger.warning("Resend API error %s: %s", r.status_code, (r.text or "")[:500])
+            return False
+        return True
+    except Exception as exc:
+        logger.warning("Resend request failed: %s", exc)
+        return False
+
+
 @app.context_processor
 def _inject_current_user():
     ctx = {
@@ -757,6 +932,9 @@ def _inject_current_user():
             return {**ctx, "current_user": None}
         user = _get_user_by_id(uid)
         if not user:
+            return {**ctx, "current_user": None}
+        if not _user_is_email_verified(user):
+            session.pop("user_id", None)
             return {**ctx, "current_user": None}
         try:
             _users_execute(
@@ -5565,8 +5743,9 @@ def _signup_process_post():
 
         try:
             rows = _users_execute(
-                "INSERT INTO users (username, email, password_hash, display_name) VALUES (?,?,?,?)",
-                [username_key, email, pw_hash, display_name],
+                "INSERT INTO users (username, email, password_hash, display_name, email_verified) "
+                "VALUES (?,?,?,?,?)",
+                [username_key, email, pw_hash, display_name, False],
                 return_id=True,
             )
             uid = _row_returning_id(rows)
@@ -5596,17 +5775,30 @@ def _signup_process_post():
             email=email,
         )
 
-    session.permanent = True
-    session["user_id"] = int(uid)
-    flash("welcome", "welcome")
-    return redirect(url_for("index") + "?welcome=1")
+    try:
+        otp, vtok = _set_verification_challenge(int(uid))
+    except Exception:
+        logger.exception("verification_challenge_failed uid=%s", uid)
+        return render_template(
+            "signup.html",
+            errors=["Account was created but verification could not be started. Please contact support."],
+            username=username_raw,
+            email=email,
+        )
+
+    _send_signup_verification_email(email, display_name, otp, vtok)
+    return redirect(url_for("verify_email", email=email, signup="1"))
 
 
 @app.route("/signup", methods=["GET", "POST"])
 @limiter.limit("100/hour")
 def signup():
-    if session.get("user_id"):
-        return redirect(url_for("profile"))
+    uid = session.get("user_id")
+    if uid:
+        u = _get_user_by_id(uid)
+        if u and _user_is_email_verified(u):
+            return redirect(url_for("profile"))
+        session.pop("user_id", None)
 
     if request.method == "GET":
         return render_template("signup.html")
@@ -5629,8 +5821,12 @@ def signup():
 @app.route("/login", methods=["GET", "POST"])
 @limiter.limit("120/hour")
 def login():
-    if session.get("user_id"):
-        return redirect(url_for("profile"))
+    uid = session.get("user_id")
+    if uid:
+        u = _get_user_by_id(uid)
+        if u and _user_is_email_verified(u):
+            return redirect(url_for("profile"))
+        session.pop("user_id", None)
 
     if request.method == "GET":
         return render_template("login.html", next=request.args.get("next", ""))
@@ -5656,6 +5852,18 @@ def login():
             error="Invalid email/username or password.",
             identifier=identifier,
             next=next_url,
+        )
+
+    if not _user_is_email_verified(user):
+        return render_template(
+            "login.html",
+            error=(
+                "Please verify your email before signing in. Check your inbox for a 6-digit code and link, "
+                "or use the verification page to request a new email."
+            ),
+            identifier=identifier,
+            next=next_url,
+            verify_email_hint=True,
         )
 
     session.permanent = True
