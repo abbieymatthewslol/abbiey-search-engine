@@ -1,27 +1,11 @@
-"""Vercel WSGI entry point for abbiey.search."""
-import sys
-import os
+"""Optional Vercel serverless entry: import the Flask app.
 
-# Ensure the project root is on the path so `app` and `entity_parser` resolve
+Production deploys use ``vercel.json`` with ``builds`` → ``app.py`` and a catch-all route.
+This file remains valid if a project is pointed at ``api/index.py`` instead.
+"""
+import os
+import sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from app import app  # noqa: F401 — Vercel picks up `app` as the WSGI handler
-
-# ---- AUTO HEALTH PATCH ----
-try:
-    from flask import jsonify
-except:
-    pass
-
-def _health_response():
-    try:
-        return jsonify({"status": "ok"})
-    except:
-        return {"status": "ok"}
-
-try:
-    app.route("/api/health")(_health_response)
-except:
-    pass
-# ---- END PATCH ----
-
+from app import app  # noqa: F401

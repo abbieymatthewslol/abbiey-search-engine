@@ -125,20 +125,20 @@ class TestRoutes:
 
 
 class TestQueryLimits:
-    """Test query length validation."""
+    """Test query length validation (default limit from ABBIEY_MAX_QUERY_LENGTH, see MAX_QUERY_LENGTH)."""
 
     def test_long_query_returns_400(self, client):
-        long_query = "a" * 2001
+        long_query = "a" * (MAX_QUERY_LENGTH + 1)
         resp = client.get(f"/search?q={long_query}")
         assert resp.status_code == 400
 
     def test_max_length_query_ok(self, client, mock_ddg):
-        query = "a" * 2000
+        query = "a" * MAX_QUERY_LENGTH
         resp = client.get(f"/search?q={query}")
         assert resp.status_code == 200
 
     def test_entity_api_long_query_returns_400(self, client):
-        long_query = "a" * 2001
+        long_query = "a" * (MAX_QUERY_LENGTH + 1)
         resp = client.get(f"/api/entity?q={long_query}")
         assert resp.status_code == 400
 

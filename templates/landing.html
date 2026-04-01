@@ -1,8 +1,32 @@
 <!DOCTYPE html>
-<html>
-<head><title>Abbiey Search</title></head>
-<body style="background:#0b0b0b;color:white;font-family:sans-serif;">
-<h1>Abbiey Search</h1>
-<a href="/search">Go to search</a>
+<html lang="en" data-theme="dark" data-density="default">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>abbiey.search — Private search</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=deploy_hash) }}">
+    {% include 'includes/google_site_verification.html' %}
+    {% include 'includes/google_analytics.html' %}
+    <meta name="description" content="Private search — no logs, no profiling. Nobody's watching.">
+    <link rel="canonical" href="{{ site_base_url }}/landing">
+</head>
+<body>
+    <header class="landing-header">
+        <a href="/search" class="logo">abbiey.<span>search</span></a>
+        <a href="/search" class="header-btn landing-cta">Open search</a>
+    </header>
+    <main class="landing-main">
+        <h1>Search with clarity</h1>
+        <p class="landing-lead">
+            abbiey.search is for people who want results — not a dossier. We do not log your queries,
+            sell your interests, or train on what you type. <strong>nobody's watching</strong> over your shoulder.
+        </p>
+        <ul class="landing-points">
+            <li>answers over obstacles</li>
+            <li>context over constraints</li>
+            <li>clarity over confusion</li>
+        </ul>
+        <p><a href="/search" class="header-btn">Start searching</a></p>
+    </main>
 </body>
 </html>
