@@ -1320,7 +1320,8 @@ document.addEventListener("DOMContentLoaded", () => {
             el.innerHTML = `<div class="code-result-header"><a href="${esc(r.url)}" target="_blank" rel="noopener" class="result-title">${esc(r.title)}</a>${r.language ? `<span class="code-lang-badge">${esc(r.language)}</span>` : ""}<span class="code-source-badge">${esc(r.source || "")}</span></div>${faviconImg(r.url)}<cite class="result-url">${esc(r.url)}</cite><p class="result-snippet">${esc(r.body || "")}</p><div class="code-meta">${r.stars ? `<span class="code-stat">&#9733; ${esc(r.stars)}</span>` : ""}${r.forks ? `<span class="code-stat">&#9906; ${esc(r.forks)}</span>` : ""}</div>`;
           } else {
             el.className = "result";
-            el.innerHTML = `<button class="bookmark-btn" data-url="${esc(r.url)}" data-title="${esc(r.title)}" data-snippet="${esc(r.body || "")}" aria-label="Save result" title="Save"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg></button><a href="${esc(r.url)}" target="_blank" rel="noopener" class="result-title">${esc(r.title)}</a>${faviconImg(r.url)}<cite class="result-url">${esc(r.url)}</cite><p class="result-snippet">${esc(r.body || "")}</p>${r.date ? `<time class="result-date">${esc(r.date)}</time>` : ""}`;
+            el.setAttribute("data-source-type", r.source_type || "");
+            el.innerHTML = `<button class="bookmark-btn" data-url="${esc(r.url)}" data-title="${esc(r.title)}" data-snippet="${esc(r.body || "")}" aria-label="Save result" title="Save"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg></button>${resultDomainRow(r.url, r.source_type, r.source)}<a href="${esc(r.url)}" target="_blank" rel="noopener" class="result-title">${esc(r.title)}</a><p class="result-snippet">${esc(r.body || "")}</p>${r.date ? `<time class="result-date">${esc(r.date)}</time>` : ""}`;
           }
           frag.appendChild(el);
         });
@@ -2459,11 +2460,32 @@ function esc(str) {
   return d.innerHTML;
 }
 
+/** Match Jinja `url|domain` (urlparse netloc) for display; favicon CDN still uses hostname. */
+function displayNetloc(url) {
+  try {
+    return new URL(url).host || "";
+  } catch {
+    return "";
+  }
+}
+
 function faviconImg(url) {
   try {
     const host = new URL(url).hostname;
     return `<img class="result-favicon" src="https://icons.duckduckgo.com/ip3/${esc(host)}/favicon.ico" onerror="this.style.display='none'" alt="" loading="lazy">`;
   } catch { return ""; }
+}
+
+/** Matches server-rendered `result-domain-row` in index.html (text/news/etc.). */
+function resultDomainRow(url, sourceType, sourceLabel) {
+  const host = displayNetloc(url);
+  const st = (sourceType && String(sourceType).trim()) || "";
+  const stClass = st.replace(/[^\w-]/g, "");
+  const badge = st
+    ? `<span class="source-type-badge${stClass ? ` source-type-${stClass}` : ""}">${esc(st)}</span>`
+    : "";
+  const src = sourceLabel ? `<span class="result-source-label">${esc(sourceLabel)}</span>` : "";
+  return `<div class="result-domain-row">${faviconImg(url)}<span class="result-domain">${esc(host)}</span>${badge}${src}</div>`;
 }
 
 
