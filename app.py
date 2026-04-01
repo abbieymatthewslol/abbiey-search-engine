@@ -2828,13 +2828,12 @@ def api_preview():
 
 def _ollama_chat(messages, model=None):
     """AI chat using local Ollama instance."""
-    import requests as _requests
     _model = model or OLLAMA_MODEL
     try:
-        resp = _requests.post(
+        resp = _get_http().post(
             f"{OLLAMA_BASE_URL}/api/chat",
             json={"model": _model, "messages": messages, "stream": False},
-            timeout=30
+            timeout=30.0,
         )
         resp.raise_for_status()
         return resp.json()["message"]["content"]
@@ -3467,11 +3466,11 @@ def admin_api_health():
     except Exception as e:
         health["users_db"] = f"error: {e}"
         health["status"] = "degraded"
-    # Cache stats
+    # Cache stats (main search TTL cache + onion status cache)
     try:
-        from cachetools import TTLCache as _TC
-        health["cache_size"] = len(_result_cache)
-        health["cache_maxsize"] = _result_cache.maxsize
+        health["cache_size"] = len(_cache)
+        health["cache_maxsize"] = getattr(_cache, "maxsize", None)
+        health["onion_cache_size"] = len(_onion_status_cache)
     except Exception:
         pass
     return jsonify(health)
@@ -5124,7 +5123,11 @@ def _try_prices(query, max_results=40):
 
 def _try_alternativeto(query, max_results=16):
     """Scrape AlternativeTo search results page."""
-    from bs4 import BeautifulSoup
+    try:
+        from bs4 import BeautifulSoup  # type: ignore[import-untyped]
+    except ImportError:
+        logger.warning("beautifulsoup4 not installed — AlternativeTo fallback disabled")
+        return []
     try:
         resp = _get_http().get(
             f"https://alternativeto.net/browse/search/?q={quote_plus(query)}",
@@ -5134,7 +5137,7 @@ def _try_alternativeto(query, max_results=16):
         )
         if resp.status_code != 200:
             return []
-        soup = BeautifulSoup(resp.text, "lxml")
+        soup = BeautifulSoup(resp.text, "html.parser")
         results = []
         seen = set()
         # Software links follow pattern /software/{name}/ or /software/{name}/about/
@@ -5786,8 +5789,11 @@ def _signup_process_post():
             email=email,
         )
 
-    _send_signup_verification_email(email, display_name, otp, vtok)
-    return redirect(url_for("verify_email", email=email, new="1"))
+    sent = _send_signup_verification_email(email, display_name, otp, vtok)
+    vq = {"email": email, "new": "1"}
+    if not sent:
+        vq["email_failed"] = "1"
+    return redirect(url_for("verify_email", **vq))
 
 
 @app.route("/signup", methods=["GET", "POST"])
@@ -5816,6 +5822,134 @@ def signup():
             username=(request.form.get("username") or "").strip(),
             email=(request.form.get("email") or "").strip().lower(),
         )
+
+
+@app.route("/verify-email", methods=["GET", "POST"])
+@limiter.limit("120/hour")
+def verify_email():
+    token = (request.args.get("token") or "").strip()
+    if request.method == "GET" and token:
+        rows = _users_execute("SELECT * FROM users WHERE verify_token=? LIMIT 1", [token])
+        if not rows:
+            return render_template(
+                "verify_email.html",
+                errors=["That link is invalid or has already been used."],
+            )
+        u = rows[0]
+        if _user_is_email_verified(u):
+            return render_template(
+                "verify_email.html",
+                errors=["That account is already verified. You can sign in."],
+                verified_hint=True,
+            )
+        if not _ts_still_valid(u.get("verify_token_expires")):
+            em = (u.get("email") or "").strip().lower()
+            return render_template(
+                "verify_email.html",
+                errors=["That link has expired. Enter your email below and request a new code."],
+                email=em,
+            )
+        try:
+            uid_ok = int(u["id"])
+        except (TypeError, ValueError):
+            return render_template("verify_email.html", errors=["Something went wrong. Try again."])
+        _mark_email_verified(uid_ok)
+        session.permanent = True
+        session["user_id"] = uid_ok
+        flash("welcome", "welcome")
+        return redirect(url_for("index") + "?welcome=1")
+
+    if request.method == "POST":
+        email_in = (request.form.get("email") or "").strip().lower()
+        code = (request.form.get("code") or "").strip().replace(" ", "")
+        errors = []
+        if not email_in or "@" not in email_in:
+            errors.append("Enter the email you used to sign up.")
+        if not code or not code.isdigit() or len(code) != 6:
+            errors.append("Enter the 6-digit code from your email.")
+        if errors:
+            return render_template("verify_email.html", errors=errors, email=email_in)
+        rows = _users_execute("SELECT * FROM users WHERE LOWER(email)=LOWER(?) LIMIT 1", [email_in])
+        if not rows:
+            return render_template(
+                "verify_email.html",
+                errors=["No account found for that email. Check the address or sign up again."],
+                email=email_in,
+            )
+        u = rows[0]
+        if _user_is_email_verified(u):
+            return render_template(
+                "verify_email.html",
+                errors=["That email is already verified. You can sign in."],
+                email=email_in,
+                verified_hint=True,
+            )
+        if not _ts_still_valid(u.get("otp_expires")):
+            return render_template(
+                "verify_email.html",
+                errors=["That code has expired. Request a new code below."],
+                email=email_in,
+            )
+        try:
+            uid_ok = int(u["id"])
+        except (TypeError, ValueError):
+            return render_template("verify_email.html", errors=["Something went wrong. Try again."], email=email_in)
+        expect = (u.get("otp_code_hash") or "").strip()
+        if not expect or not hmac.compare_digest(expect, _otp_digest(uid_ok, code)):
+            return render_template(
+                "verify_email.html",
+                errors=["That code is not correct."],
+                email=email_in,
+            )
+        _mark_email_verified(uid_ok)
+        session.permanent = True
+        session["user_id"] = uid_ok
+        flash("welcome", "welcome")
+        return redirect(url_for("index") + "?welcome=1")
+
+    email_q = (request.args.get("email") or "").strip().lower()
+    return render_template(
+        "verify_email.html",
+        email=email_q,
+        from_signup=(request.args.get("new") == "1"),
+        resent=(request.args.get("resent") == "1"),
+        email_failed=(request.args.get("email_failed") == "1"),
+    )
+
+
+@app.route("/verify-email/resend", methods=["POST"])
+@limiter.limit("8/hour")
+def verify_email_resend():
+    email_in = (request.form.get("email") or "").strip().lower()
+    if not email_in or "@" not in email_in:
+        return render_template(
+            "verify_email.html",
+            errors=["Enter your email address."],
+            email=email_in,
+        )
+    rows = _users_execute("SELECT * FROM users WHERE LOWER(email)=LOWER(?) LIMIT 1", [email_in])
+    if not rows or _user_is_email_verified(rows[0]):
+        return redirect(url_for("verify_email", email=email_in, resent="1"))
+    u = rows[0]
+    try:
+        uid_ok = int(u["id"])
+    except (TypeError, ValueError):
+        return redirect(url_for("verify_email", email=email_in, resent="1"))
+    try:
+        otp, vtok = _set_verification_challenge(uid_ok)
+    except Exception:
+        logger.exception("verify_resend_challenge_failed")
+        return render_template(
+            "verify_email.html",
+            errors=["Could not send a new code right now. Try again in a few minutes."],
+            email=email_in,
+        )
+    disp = u.get("display_name") or u.get("username") or "there"
+    sent = _send_signup_verification_email(email_in, disp, otp, vtok)
+    rq = {"email": email_in, "resent": "1"}
+    if not sent:
+        rq["email_failed"] = "1"
+    return redirect(url_for("verify_email", **rq))
 
 
 @app.route("/login", methods=["GET", "POST"])
