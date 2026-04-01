@@ -1,0 +1,39 @@
+# Automated checks you can run from GitHub Actions (no dashboard logins from here).
+#
+# Optional repository secrets (Settings → Secrets and variables → Actions):
+#   SITE_URL       Production origin, e.g. https://www.abbieysearch.com
+#   ADMIN_TOKEN    Same token as Vercel ADMIN_TOKEN — used only to call GET /admin/api/health
+#
+# Vercel / Resend / Supabase credentials must still be set in the Vercel project dashboard
+# (or `vercel env pull`). This workflow cannot create them for you.
+
+name: Production readiness
+
+# All branch pushes + manual run (explicit list avoids ambiguous null `push:` / `workflow_dispatch:` keys)
+on: [push, workflow_dispatch]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install python-dotenv
+
+      - name: Advisory configuration check
+        run: python scripts/verify_production_env.py
+
+      - name: Live site health (optional)
+        env:
+          SITE_URL: ${{ secrets.SITE_URL }}
+          ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
+        run: |
+          if [ -z "${SITE_URL:-}" ] || [ -z "${ADMIN_TOKEN:-}" ]; then
+            echo "Skipping live ping: add SITE_URL and ADMIN_TOKEN as repository secrets to enable."
+            exit 0
+          fi
+          python scripts/verify_production_env.py --ping
