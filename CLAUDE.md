@@ -49,12 +49,28 @@ pytest tests/ -v
 ```
 
 ## Supabase (production database)
-- Set **`SUPABASE_DB_URL`** or **`DATABASE_URL`** to the **PostgreSQL URI** from the Supabase dashboard (**Settings → Database → Connection string**). Prefer the **pooler** (port **6543**, transaction mode) for serverless.
+- Set **`SUPABASE_DB_URL`** or **`DATABASE_URL`** to the **PostgreSQL URI** from the Supabase dashboard (**Settings → Database → Connection string**). Prefer the **pooler** (port **6543**, **Transaction** mode) for serverless; the app adds **`sslmode=require`** automatically if missing on Supabase hosts.
 - **Not** used: the dashboard **sb_publishable_*** / **sb_secret_*** keys (those target the Supabase REST API; this app uses `psycopg2` + SQL).
 - On success, startup logs: `Supabase/PostgreSQL connected (host:port)`. **`/admin/api/health?token=...`** returns `"storage": "supabase"` and `"analytics_db": "ok"`.
 
+## Vercel + Supabase
+Production deploys use **`vercel.json`** (Python serverless). SQLite under **`/tmp`** is ephemeral on Vercel; **use Supabase (or Turso)** for durable users, bookmarks, analytics, and waitlist.
+
+1. **Vercel → your project → Settings → Environment Variables**  
+   Add **`SUPABASE_DB_URL`** (or **`DATABASE_URL`**) with the same URI as local—**Transaction pooler**, port **6543**, user usually **`postgres.<project-ref>`** as shown in Supabase. Apply to **Production** (and **Preview** if you want DB there too).
+
+2. **Optional — Vercel Marketplace**  
+   You can install the [Supabase integration](https://vercel.com/marketplace/supabase) on Vercel; it may inject a Postgres URL under a different variable name. If so, either copy that value into **`SUPABASE_DB_URL`** or set **`DATABASE_URL`** to match—this app reads only those two names.
+
+3. **Redeploy** after changing env vars. Confirm with **`/admin/api/health?token=...`** (`storage`: `supabase`, `analytics_db`: `ok`).  
+   Local sync: `vercel env pull` (CLI) if you use the Vercel-linked project.
+
 ## Deploy
 ```bash
+# Vercel (see “Vercel + Supabase” above for DATABASE_URL)
+vercel deploy --prod
+# CI: .github/workflows/deploy.yml — requires VERCEL_TOKEN secret
+
 # Docker
 docker compose up --build
 
