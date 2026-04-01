@@ -48,7 +48,7 @@ Two patterns work; **pick one** for production to avoid duplicate deploys:
 
 ## Automated checks
 
-- **Workflow:** [.github/workflows/production-readiness.yml](workflows/production-readiness.yml) runs on `push` to `master` / `main` and on **workflow_dispatch**. It always runs `python scripts/verify_production_env.py` (advisory).
+- **Workflow:** [.github/workflows/production-readiness.yml](workflows/production-readiness.yml) runs on **every branch** `push` and on **workflow_dispatch**. It always runs `python scripts/verify_production_env.py` (advisory).
 - **Optional GitHub secrets** for a live ping: `SITE_URL` (e.g. `https://www.abbieysearch.com`) and `ADMIN_TOKEN` (same as Vercel). If both are set, the workflow also runs `--ping` against `/admin/api/health`.
 - **Local:** `python scripts/verify_production_env.py` or `python scripts/verify_production_env.py --strict` before you deploy.
 

@@ -102,9 +102,32 @@ def main() -> int:
                 req = urllib.request.Request(url, headers={"User-Agent": "verify_production_env/1.0"})
                 with urllib.request.urlopen(req, timeout=15) as resp:
                     body = resp.read().decode("utf-8", errors="replace")
+                try:
                     data = json.loads(body)
-                ping_ok = data.get("status") in ("ok", "degraded")
-                ping_detail = f"status={data.get('status')!r} storage={data.get('storage')!r}"
+                except json.JSONDecodeError:
+                    ping_ok = False
+                    ping_detail = "Response was not JSON (check SITE_URL points to this app)"
+                else:
+                    if data.get("error"):
+                        ping_ok = False
+                        ping_detail = f"API error: {data.get('error')!r}"
+                    else:
+                        ping_ok = data.get("status") in ("ok", "degraded")
+                        ping_detail = f"status={data.get('status')!r} storage={data.get('storage')!r}"
+            except urllib.error.HTTPError as e:
+                ping_ok = False
+                try:
+                    raw = e.read().decode("utf-8", errors="replace")
+                except Exception:
+                    raw = ""
+                ping_detail = f"HTTP {e.code}"
+                try:
+                    errj = json.loads(raw)
+                    if errj.get("error"):
+                        ping_detail = f"HTTP {e.code}: {errj.get('error')}"
+                except json.JSONDecodeError:
+                    if raw:
+                        ping_detail = f"HTTP {e.code} (non-JSON body)"
             except Exception as exc:
                 ping_ok = False
                 ping_detail = str(exc)[:200]
@@ -134,7 +157,10 @@ def main() -> int:
                 print(f"  [OK ] Live health: {ping_detail}")
             else:
                 print(f"  [!! ] Live health: {ping_detail}")
-        print()
+        if not args.strict and not args.ping:
+            print(
+                "Note: advisory mode always exits 0. Use --strict or --ping for failing checks.\n"
+            )
 
     if strict_fail:
         print("Strict mode: fix core variables above (SECRET_KEY, ADMIN_TOKEN).", file=sys.stderr)
