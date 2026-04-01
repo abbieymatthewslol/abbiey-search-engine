@@ -27,18 +27,18 @@
     <meta name="description" content="Private search results for {{ query }} — no tracking, no profiling.">
     <meta property="og:title" content="{{ query }} — abbiey.search">
     <meta property="og:description" content="Private search results for: {{ query }}">
-    <meta property="og:url" content="https://www.abbieysearch.com/search?q={{ query|urlencode }}">
+    <meta property="og:url" content="{{ site_base_url }}/search?q={{ query|urlencode }}">
     {% else %}
     <meta name="description" content="abbiey.search — A private, fast search engine. No tracking, no data collection, no judgment.">
     <meta property="og:title" content="abbiey.search — Private Search Engine">
     <meta property="og:description" content="Search the web without being tracked. No logs. No profiling. No judgment.">
-    <meta property="og:url" content="https://www.abbieysearch.com/search">
+    <meta property="og:url" content="{{ site_base_url }}/search">
     {% endif %}
     <meta name="keywords" content="private search engine, no tracking search, privacy search, anonymous search">
     <meta name="author" content="abbiey.search">
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="abbiey.search">
-    <meta property="og:image" content="https://www.abbieysearch.com/static/og-image.png">
+    <meta property="og:image" content="{{ site_base_url }}/static/og-image.png">
     <meta name="twitter:card" content="summary_large_image">
     {% if query %}
     <meta name="twitter:title" content="{{ query }} — abbiey.search">
@@ -47,8 +47,8 @@
     <meta name="twitter:title" content="abbiey.search — Private Search Engine">
     <meta name="twitter:description" content="Search the web without being tracked. No logs. No profiling. No judgment.">
     {% endif %}
-    <meta name="twitter:image" content="https://www.abbieysearch.com/static/og-image.png">
-    {% if not query %}<link rel="canonical" href="https://www.abbieysearch.com/search">{% endif %}
+    <meta name="twitter:image" content="{{ site_base_url }}/static/og-image.png">
+    {% if not query %}<link rel="canonical" href="{{ site_base_url }}/search">{% endif %}
     <!-- PWA -->
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#000000">
@@ -67,13 +67,13 @@
       "@context": "https://schema.org",
       "@type": "WebSite",
       "name": "abbiey.search",
-      "url": "https://www.abbieysearch.com/search",
+      "url": {{ (site_base_url + '/search')|tojson }},
       "description": "Private search engine. No tracking. No profiling. No judgment.",
       "potentialAction": {
         "@type": "SearchAction",
         "target": {
           "@type": "EntryPoint",
-          "urlTemplate": "https://www.abbieysearch.com/search?q={search_term_string}"
+          "urlTemplate": {{ (site_base_url + '/search?q={search_term_string}')|tojson }}
         },
         "query-input": "required name=search_term_string"
       }
@@ -1159,8 +1159,8 @@
     <div id="paywall-overlay" class="paywall-overlay" hidden aria-hidden="true">
         <div class="paywall-card" role="dialog" aria-modal="true" aria-labelledby="paywall-title">
             <button type="button" class="paywall-close" id="paywall-close" aria-label="Close">&times;</button>
-            <h2 id="paywall-title" class="paywall-title">Whoops! You&rsquo;ve run out of free searches.</h2>
-            <p id="paywall-subtitle" class="paywall-subtitle">Make a one-time payment for unlimited searches, or wait 24 hours for your free quota to reset.</p>
+            <h2 id="paywall-title" class="paywall-title">You&rsquo;ve reached your free search limit.</h2>
+            <p id="paywall-subtitle" class="paywall-subtitle">You can unlock unlimited searches with a one-time payment, or wait 24 hours for your free quota to reset.</p>
             <p class="paywall-hint">Pay securely with a card or PayPal &mdash; handled by Stripe.</p>
             <div class="paywall-actions">
                 <a href="https://buy.stripe.com/28E7sKbEo0K07r0al1b7y0b" class="paywall-btn paywall-btn-primary" id="paywall-stripe-link" target="_blank" rel="noopener noreferrer">Unlock &mdash; $7 one-time</a>

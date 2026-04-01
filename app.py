@@ -139,6 +139,39 @@ def _max_query_length() -> int:
 OLLAMA_MODEL    = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 
+
+def _site_base_url() -> str:
+    """Canonical origin for OG tags, Twitter cards, and JSON-LD (no trailing slash).
+    Prefer SITE_URL or CANONICAL_URL in production so shares match your domain.
+    Otherwise uses the current request origin (set SITE_URL if behind a proxy without X-Forwarded-*).
+    """
+    fixed = (os.environ.get("SITE_URL") or os.environ.get("CANONICAL_URL") or "").strip().rstrip("/")
+    if fixed:
+        return fixed
+    try:
+        if has_request_context():
+            root = (request.url_root or "").rstrip("/")
+            if root:
+                return root
+    except Exception:
+        pass
+    return "https://www.abbieysearch.com"
+
+
+# Stable user-facing API messages (never put raw exceptions in JSON bodies).
+_PREVIEW_MSG_INVALID = "That link cannot be previewed."
+_PREVIEW_MSG_LONG = "That link is too long to preview."
+_PREVIEW_MSG_ONION = "Previews for .onion addresses are not available here. Open the site in Tor Browser instead."
+_PREVIEW_MSG_PRIVATE = "That address cannot be previewed."
+_PREVIEW_MSG_TIMEOUT = "Preview timed out. The page may be slow or unreachable."
+_PREVIEW_MSG_UNAVAILABLE = "We couldn't load a preview for this page."
+
+_CHAT_MSG_MISSING = "Run a search first, then ask a question in the research assistant."
+_CHAT_MSG_QUERY_LONG = "That search is too long for the assistant. Try a shorter query."
+_CHAT_MSG_MESSAGE_LONG = "That message is too long. Please shorten it and try again."
+_CHAT_MSG_HISTORY = "Something went wrong with the conversation. Refresh the page and try again."
+_CHAT_MSG_UNAVAILABLE = "The research assistant is temporarily unavailable. Please try again in a moment."
+
 # ---------------------------------------------------------------------------
 # Turso / libSQL persistent DB (optional upgrade — survives Vercel cold starts)
 # Set LIBSQL_URL=https://xxx.turso.io and LIBSQL_AUTH_TOKEN=<token> in Vercel
@@ -705,6 +738,7 @@ def _inject_current_user():
         "deploy_hash": DEPLOY_HASH,
         "google_site_verification": _GOOGLE_SITE_VERIFICATION,
         "google_analytics_id": _GOOGLE_ANALYTICS_ID,
+        "site_base_url": _site_base_url(),
     }
     try:
         uid = _session_user_id_int(session.get("user_id"))
@@ -2363,22 +2397,23 @@ def api_onion_proxy():
             content,
         )
         return Response(content, content_type=resp.headers.get("content-type", "text/html"))
-    except Exception as e:
+    except Exception:
+        logger.exception("onion_proxy_failed url=%s", url[:200] if url else "")
         from html import escape as _esc
-        error_type = type(e).__name__
         safe_url = _esc(url, quote=True)
         return f"""<!DOCTYPE html>
-<html><head><title>Onion Proxy Error</title></head>
-<body style="background:#0a0a0a;color:#e4e4e7;font-family:system-ui;padding:2rem;max-width:600px;margin:0 auto">
-<h2 style="color:#f87171">Cannot reach .onion site</h2>
-<p><strong>URL:</strong> <code>{safe_url}</code></p>
-<p><strong>Error:</strong> {_esc(error_type)}</p>
-<p style="color:#a1a1aa">Make sure Tor is running on port 9050. You can:</p>
-<ul style="color:#a1a1aa">
-<li>Open Tor Browser (it starts a SOCKS proxy automatically)</li>
-<li>Or run <code>tor</code> as a standalone service</li>
+<html lang="en"><head><meta charset="utf-8"><title>Onion service unavailable</title></head>
+<body style="background:#0a0a0a;color:#e4e4e7;font-family:system-ui;line-height:1.5;padding:2rem;max-width:36rem;margin:0 auto">
+<p style="font-size:1.05rem;margin:0 0 1rem">We couldn&rsquo;t open that onion service from this browser. If you use Tor, open the link in Tor Browser instead.</p>
+<details style="color:#a1a1aa;font-size:.9rem;margin-top:1.25rem">
+<summary style="cursor:pointer;color:#d4d4d8">Troubleshooting</summary>
+<ul style="margin:.75rem 0 0;padding-left:1.2rem">
+<li>This app proxies onion sites only when a Tor SOCKS proxy is available (often port 9050).</li>
+<li>Tor Browser includes Tor; a standalone <code style="background:#27272a;padding:0 .2em;border-radius:3px">tor</code> daemon also works.</li>
+<li>Requested address: <code style="word-break:break-all">{safe_url}</code></li>
 </ul>
-<p><a href="{safe_url}" style="color:#a78bfa">Try opening directly in Tor Browser &rarr;</a></p>
+<p style="margin:.75rem 0 0"><a href="{safe_url}" style="color:#a78bfa">Try in Tor Browser &rarr;</a></p>
+</details>
 </body></html>""", 502
 
 
@@ -2482,15 +2517,15 @@ def api_preview():
     """Fetch a page preview (title + description + text excerpt)."""
     url = request.args.get("url", "").strip()
     if not url or not url.startswith("http"):
-        return jsonify({"error": "Invalid URL"}), 400
+        return jsonify({"error": _PREVIEW_MSG_INVALID}), 400
     if len(url) > _MAX_PREVIEW_URL_LEN:
-        return jsonify({"error": "URL too long"}), 400
+        return jsonify({"error": _PREVIEW_MSG_LONG}), 400
     parsed_preview = urlparse(url)
     if ".onion" in (parsed_preview.netloc or ""):
-        return jsonify({"error": "Cannot preview .onion addresses without Tor Browser"}), 400
+        return jsonify({"error": _PREVIEW_MSG_ONION}), 400
     hostname = parsed_preview.hostname or ""
     if not hostname or _is_private_ip(hostname):
-        return jsonify({"error": "Invalid URL"}), 400
+        return jsonify({"error": _PREVIEW_MSG_PRIVATE}), 400
 
     try:
         resp = httpx.get(
@@ -2563,14 +2598,15 @@ def api_preview():
         })
     except httpx.TimeoutException:
         _log_event("preview_fetch_timeout")
-        return jsonify({"error": "Preview timed out — the site was too slow to respond."}), 504
+        return jsonify({"error": _PREVIEW_MSG_TIMEOUT}), 504
     except httpx.HTTPStatusError as e:
         code = e.response.status_code if e.response is not None else "?"
         _log_event("preview_fetch_http_error", status=code)
-        return jsonify({"error": f"Could not load page (HTTP {code})."}), 502
+        logger.warning("preview_fetch_http_error url=%s status=%s", url[:120], code)
+        return jsonify({"error": _PREVIEW_MSG_UNAVAILABLE}), 502
     except Exception:
         logger.exception("preview_fetch_failed")
-        return jsonify({"error": "Could not fetch preview"}), 502
+        return jsonify({"error": _PREVIEW_MSG_UNAVAILABLE}), 502
 
 
 # ---------------------------------------------------------------------------
@@ -2658,24 +2694,24 @@ def api_chat():
     history = data.get("history", [])
 
     if not query or not message:
-        return jsonify({"error": "Missing query or message"}), 400
+        return jsonify({"error": _CHAT_MSG_MISSING}), 400
     if len(query) > MAX_QUERY_LENGTH:
-        return jsonify({"error": "Query too long"}), 400
+        return jsonify({"error": _CHAT_MSG_QUERY_LONG}), 400
     if len(message) > _MAX_CHAT_MESSAGE_LEN:
-        return jsonify({"error": "Message too long"}), 400
+        return jsonify({"error": _CHAT_MSG_MESSAGE_LONG}), 400
     if not isinstance(history, list):
-        return jsonify({"error": "Invalid history"}), 400
+        return jsonify({"error": _CHAT_MSG_HISTORY}), 400
     if len(history) > _MAX_CHAT_HISTORY_TURNS * 2:
         history = history[-(_MAX_CHAT_HISTORY_TURNS * 2) :]
     for h in history:
         if not isinstance(h, dict):
-            return jsonify({"error": "Invalid history entry"}), 400
+            return jsonify({"error": _CHAT_MSG_HISTORY}), 400
         role = h.get("role", "")
         content = h.get("content", "")
         if role not in ("user", "assistant"):
-            return jsonify({"error": "Invalid history role"}), 400
+            return jsonify({"error": _CHAT_MSG_HISTORY}), 400
         if not isinstance(content, str) or len(content) > _MAX_CHAT_MESSAGE_LEN:
-            return jsonify({"error": "Invalid history content"}), 400
+            return jsonify({"error": _CHAT_MSG_HISTORY}), 400
 
     # Fetch search results for context
     context_results = _fetch_results(query, 1, "text")
@@ -2730,7 +2766,7 @@ def api_chat():
         return jsonify({"response": response})
     except Exception:
         logger.exception("chat_fallback_failed")
-        return jsonify({"error": "Chat service temporarily unavailable. Please try again."}), 503
+        return jsonify({"error": _CHAT_MSG_UNAVAILABLE}), 503
 
 
 @app.route("/api/ai-summary")
@@ -3230,7 +3266,7 @@ def admin_api_health():
 # Admin AI Chatbot — knows everything about abbiey.search
 # ---------------------------------------------------------------------------
 
-_ABBIEY_SYSTEM_PROMPT = """You are AbbeyBot, the private internal AI assistant built exclusively for the owner/admin of abbiey.search.
+_ABBIEY_SYSTEM_PROMPT = """You are the abbiey assistant, the private internal AI assistant built exclusively for the owner/admin of abbiey.search.
 
 You are an expert in every aspect of this project. You are direct, insightful, and genuinely helpful. You think like a senior full-stack engineer and product strategist who built this system from scratch.
 
@@ -3332,7 +3368,7 @@ def admin_chat():
     dashboard_context = body.get("context") or ""  # optional JSON stats snapshot
 
     if not user_message:
-        return jsonify({"error": "No message"}), 400
+        return jsonify({"error": "Please enter a message."}), 400
 
     # Build messages for LLM
     system = _ABBIEY_SYSTEM_PROMPT
@@ -3480,7 +3516,7 @@ def _abbiey_bot_fallback(msg: str, ctx: str = "") -> str:
 
     # Generic helpful response
     return (
-        f"I'm AbbeyBot — I know everything about abbiey.search. Ask me about:\n"
+        f"I'm the abbiey assistant — I know how abbiey.search is built and run. Ask me about:\n"
         "- **Deploy** — how to push changes live\n"
         "- **Performance** — latency, caching, cold starts\n"
         "- **Search** — how DDG/code/onion search works\n"
