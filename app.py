@@ -1862,6 +1862,25 @@ _TEMPLATE_DEFAULTS = dict(
 )
 
 
+def should_show_ai_summary(query: str, intent: str) -> bool:
+    """Gate AI summary card + /api/ai-summary: block obvious local/transactional queries."""
+    q = (query or "").lower()
+    hard_block = [
+        "near me",
+        "closest",
+        "open now",
+        "directions",
+        "distance",
+        "map",
+    ]
+    if any(x in q for x in hard_block):
+        return False
+    # App uses local_search; include "local" for callers that pass a short label.
+    if intent in ("transactional", "local", "local_search"):
+        return False
+    return True
+
+
 @app.route("/")
 def index():
     """Root URL shows the main search UI (same as /search). Marketing copy lives at /landing."""
@@ -2206,7 +2225,12 @@ def search():
             knowledge = _try_knowledge_panel(query)
 
     img_extras = _image_search_url_extras(image_opts)
-    show_ai_summary_block = search_type == "text" and query_ui.get("show_ai_summary", False)
+    _intent = query_ui.get("intent", "informational")
+    _ai_summary_ok = (
+        query_ui.get("show_ai_summary", False) and should_show_ai_summary(query, _intent)
+    )
+    query_ui = {**query_ui, "show_ai_summary": _ai_summary_ok}
+    show_ai_summary_block = search_type == "text" and _ai_summary_ok
     return render_template(
         "index.html",
         query=query,
@@ -2779,6 +2803,8 @@ def api_ai_summary():
 
     prep = preprocess_query(query)
     if not should_enable_ai_summary(prep):
+        return jsonify({"enabled": False})
+    if not should_show_ai_summary(query, prep.intent):
         return jsonify({"enabled": False})
 
     user_lat = _parse_request_coord("lat")

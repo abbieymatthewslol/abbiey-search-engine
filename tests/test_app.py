@@ -864,6 +864,11 @@ class TestAISummary:
         assert resp.status_code == 200
         assert resp.get_json() == {"enabled": False}
 
+    def test_ai_summary_gated_for_near_me_phrase(self, client, mock_ddg):
+        resp = client.get("/api/ai-summary?q=coffee+near+me")
+        assert resp.status_code == 200
+        assert resp.get_json() == {"enabled": False}
+
 
 # =====================================================================
 # PRIVACY BADGE
