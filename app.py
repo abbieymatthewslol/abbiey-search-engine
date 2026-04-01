@@ -3291,9 +3291,8 @@ def admin_api_health():
         health["status"] = "degraded"
     # Cache stats
     try:
-        from cachetools import TTLCache as _TC
-        health["cache_size"] = len(_result_cache)
-        health["cache_maxsize"] = _result_cache.maxsize
+        health["cache_size"] = len(_cache)
+        health["cache_maxsize"] = _cache.maxsize
     except Exception:
         pass
     return jsonify(health)
