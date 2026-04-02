@@ -382,7 +382,7 @@
             <form action="/search" method="GET" id="search-form">
                 <div class="search-box-wrapper">
                     <div class="search-box">
-                        <svg class="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                        <svg class="search-icon icon-search-glass" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><g transform="rotate(38 12 11.5)" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="11" r="5.5" stroke-width="1.65"/><path d="M9.05 9.4A3.15 3.15 0 0 1 10.95 7.72" stroke-width="1.35"/><line x1="16.2" y1="15.05" x2="20.95" y2="20.4" stroke-width="2.2"/></g></svg>
                         <input type="text" name="q" id="search-input" value="{{ query or '' }}" placeholder="Search anything…" data-placeholder-rotate="true" autocomplete="off" autofocus>
                         <button type="button" class="voice-btn" id="voice-btn" aria-label="Search by voice" title="Voice search">
                             <svg class="voice-icon-mic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2M12 19v4M8 23h8"/></svg>
@@ -394,7 +394,7 @@
                         </button>
                         {% else %}
                         <button type="submit" class="search-btn search-btn-icon" aria-label="Search">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                            <svg class="icon-search-glass" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><g transform="rotate(38 12 11.5)" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="11" r="5.5" stroke-width="1.65"/><path d="M9.05 9.4A3.15 3.15 0 0 1 10.95 7.72" stroke-width="1.35"/><line x1="16.2" y1="15.05" x2="20.95" y2="20.4" stroke-width="2.2"/></g></svg>
                         </button>
                         {% endif %}
                     </div>

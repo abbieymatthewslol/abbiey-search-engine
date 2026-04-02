@@ -407,7 +407,30 @@ body:not(.has-results) .search-box {
 }
 
 .search-icon { flex-shrink: 0; color: var(--text-muted); }
+.search-icon.icon-search-glass {
+  width: 1.25rem;
+  height: 1.25rem;
+  display: block;
+}
 .search-box:focus-within .search-icon { color: var(--text-muted); }
+
+/* Shared line-art magnifier (input, autocomplete, recent header) — currentColor, theme-safe */
+.icon-search-glass {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  opacity: 0.92;
+}
+.search-btn .icon-search-glass {
+  width: 1rem;
+  height: 1rem;
+  display: block;
+  opacity: 1;
+  color: inherit;
+}
+body:not(.has-results) .search-btn .icon-search-glass {
+  width: 1.0625rem;
+  height: 1.0625rem;
+}
 
 #search-input {
   flex: 1;
@@ -501,6 +524,21 @@ body.has-results .search-btn.search-btn-icon {
 }
 .ac-item:hover, .ac-item.active { background: var(--bg-hover); }
 .ac-item svg { color: var(--text-muted); flex-shrink: 0; }
+.ac-item-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--text-muted);
+  opacity: 0.92;
+}
+.ac-item-icon-search .icon-search-glass {
+  width: 0.9375rem;
+  height: 0.9375rem;
+  display: block;
+}
+.ac-item:hover .ac-item-icon,
+.ac-item.active .ac-item-icon { opacity: 1; }
 .ac-item-icon-clock { display: flex; align-items: center; color: var(--text-muted); }
 .ac-item-history { color: var(--text-dim); }
 .ac-item-desc { font-size: .78rem; color: var(--text-muted); margin-left: .15rem; }
@@ -1399,9 +1437,35 @@ article.result.code-result { font-size: .9rem; }
   margin-top: 1rem;
   width: 100%;
   display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: .4rem;
+}
+.trending-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: .4rem;
+  width: 100%;
+  font-size: .6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--text-muted);
+}
+.trending-header .icon-search-glass {
+  width: .75rem;
+  height: .75rem;
+  display: block;
+  opacity: 0.88;
+}
+.trending-pills {
+  display: flex;
   flex-wrap: wrap;
   gap: .375rem;
   justify-content: center;
+  width: 100%;
 }
 .recent-search-chip {
   padding: .3rem .65rem;

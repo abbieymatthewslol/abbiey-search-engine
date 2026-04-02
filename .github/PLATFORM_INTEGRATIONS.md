@@ -46,3 +46,11 @@ Two patterns work; **pick one** for production to avoid duplicate deploys:
 - Production env vars on Vercel include `**SUPABASE_DB_URL`** (or `**DATABASE_URL**`) and secrets above.
 - Either Actions deploy **or** automatic Vercel Git deploy — not both firing on every change unless intentional.
 
+## Automated checks
+
+- **Workflow:** [.github/workflows/production-readiness.yml](workflows/production-readiness.yml) runs on **every branch** `push` and on **workflow_dispatch**. It always runs `python scripts/verify_production_env.py` (advisory).
+- **Optional GitHub secrets** for a live ping: `SITE_URL` (e.g. `https://www.abbieysearch.com`) and `ADMIN_TOKEN` (same as Vercel). If both are set, the workflow also runs `--ping` against `/admin/api/health`.
+- **Local:** `python scripts/verify_production_env.py` or `python scripts/verify_production_env.py --strict` before you deploy.
+
+Vercel, Resend, and Supabase still must be configured in their own dashboards (or `vercel env`); nothing in GitHub can create those accounts for you.
+
