@@ -8,6 +8,15 @@
 document.addEventListener("DOMContentLoaded", () => {
   const html = document.documentElement;
 
+  /** Line-art search glass: tilted lens, NW highlight arc, rounded handle (suggestions + recent + inline reuse). */
+  const ICON_SEARCH_GLASS_SVG =
+    '<svg class="icon-search-glass" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
+    '<g transform="rotate(38 12 11.5)" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">' +
+    '<circle cx="12" cy="11" r="5.5" stroke-width="1.65"/>' +
+    '<path d="M9.05 9.4A3.15 3.15 0 0 1 10.95 7.72" stroke-width="1.35"/>' +
+    '<line x1="16.2" y1="15.05" x2="20.95" y2="20.4" stroke-width="2.2"/>' +
+    "</g></svg>";
+
   /** Append &lat=&lon= for local ranking when browser or prior search shared coordinates. */
   function geoQuerySuffix() {
     const la = document.getElementById("geo-lat-input");
@@ -1088,7 +1097,7 @@ document.addEventListener("DOMContentLoaded", () => {
     function renderSuggestions(items) {
       if (!items.length) { hideDropdown(); return; }
       dropdown.innerHTML = items.map((text, i) =>
-        `<div class="ac-item" data-idx="${i}"><span class="ac-item-icon">\u{1F50D}</span><span class="ac-item-text">${esc(text)}</span></div>`
+        `<div class="ac-item" data-idx="${i}"><span class="ac-item-icon ac-item-icon-search">${ICON_SEARCH_GLASS_SVG}</span><span class="ac-item-text">${esc(text)}</span></div>`
       ).join("");
       activeIdx = -1;
       showDropdown();
@@ -2264,7 +2273,7 @@ document.addEventListener("DOMContentLoaded", () => {
         ).join("");
         container.innerHTML =
           `<div class="trending-header">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            ${ICON_SEARCH_GLASS_SVG}
             Recent
           </div>
           <div class="trending-pills">${chips}</div>`;
