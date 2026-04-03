@@ -98,12 +98,20 @@
 
 {% block extra_scripts %}
 {% if supabase_auth %}
+<script>
+// Google OAuth — no SDK dependency
+document.getElementById('sb-google-btn').addEventListener('click', function () {
+    var btn = this;
+    btn.disabled = true;
+    btn.textContent = 'Redirecting to Google\u2026';
+    var redirectTo = encodeURIComponent(window.location.origin + '/auth/confirm');
+    window.location.href = {{ supabase_url | tojson }} + '/auth/v1/authorize?provider=google&redirect_to=' + redirectTo;
+});
+</script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script>
 (function () {
-    var SB_URL = {{ supabase_url | tojson }};
-    var SB_KEY = {{ supabase_anon_key | tojson }};
-    var sb = window.supabase.createClient(SB_URL, SB_KEY);
+    var sb = window.supabase.createClient({{ supabase_url | tojson }}, {{ supabase_anon_key | tojson }});
     var errEl = document.getElementById('sb-error');
     var form = document.getElementById('sb-login-form');
     var submitBtn = document.getElementById('login-submit');
@@ -131,22 +139,6 @@
             showErr('Signed in but could not sync session. Please try again.');
         } catch (err) { showErr('Something went wrong. Please try again.'); }
         submitBtn.disabled = false;
-    });
-
-    document.getElementById('sb-google-btn').addEventListener('click', async function () {
-        var btn = this;
-        var origHTML = btn.innerHTML;
-        btn.disabled = true;
-        btn.textContent = 'Redirecting to Google\u2026';
-        try {
-            var res = await sb.auth.signInWithOAuth({
-                provider: 'google',
-                options: { redirectTo: window.location.origin + '/auth/confirm', skipBrowserRedirect: true }
-            });
-            if (res.error) { showErr(res.error.message); btn.disabled = false; btn.innerHTML = origHTML; return; }
-            if (res.data && res.data.url) { window.location.href = res.data.url; return; }
-            showErr('Could not start Google sign-in.'); btn.disabled = false; btn.innerHTML = origHTML;
-        } catch (err) { showErr('Could not connect to Google. Try again.'); btn.disabled = false; btn.innerHTML = origHTML; }
     });
 })();
 </script>
