@@ -7044,5 +7044,17 @@ def _set_cache_headers(response):
 
 
 if __name__ == "__main__":
+    import os
+
+    env = os.environ.get("ENV", "dev").lower()
     port = int(os.environ.get("PORT", 8000))
-    app.run(host="0.0.0.0", port=port, debug=False)
+
+    is_dev = env in ("dev", "development", "local")
+
+    app.run(
+        host="127.0.0.1" if is_dev else "0.0.0.0",
+        port=port,
+        debug=is_dev,
+        use_reloader=is_dev,
+        threaded=True
+    )

@@ -112,16 +112,6 @@
 
 {% block extra_scripts %}
 {% if supabase_auth %}
-<script>
-// Google OAuth — no SDK dependency
-document.getElementById('sb-google-btn').addEventListener('click', function () {
-    var btn = this;
-    btn.disabled = true;
-    btn.textContent = 'Redirecting to Google\u2026';
-    var redirectTo = encodeURIComponent(window.location.origin + '/auth/confirm');
-    window.location.href = {{ supabase_url | tojson }} + '/auth/v1/authorize?provider=google&redirect_to=' + redirectTo;
-});
-</script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script>
 (function () {
@@ -129,8 +119,33 @@ document.getElementById('sb-google-btn').addEventListener('click', function () {
     var errEl = document.getElementById('sb-error');
     var form = document.getElementById('sb-signup-form');
     var submitBtn = document.getElementById('signup-submit');
+    var googleBtn = document.getElementById('sb-google-btn');
 
     function showErr(msg) { errEl.style.display = 'block'; errEl.innerHTML = '<p>' + msg + '</p>'; }
+
+    if (googleBtn) {
+        var googleBtnHtml = googleBtn.innerHTML;
+        googleBtn.addEventListener('click', async function () {
+            errEl.style.display = 'none';
+            googleBtn.disabled = true;
+            googleBtn.innerHTML = 'Redirecting to Google\u2026';
+            try {
+                var res = await sb.auth.signInWithOAuth({
+                    provider: 'google',
+                    options: { redirectTo: window.location.origin + '/auth/confirm' }
+                });
+                if (res.error) {
+                    showErr(res.error.message || 'Google sign-in failed.');
+                    googleBtn.disabled = false;
+                    googleBtn.innerHTML = googleBtnHtml;
+                }
+            } catch (err) {
+                showErr('Something went wrong. Please try again.');
+                googleBtn.disabled = false;
+                googleBtn.innerHTML = googleBtnHtml;
+            }
+        });
+    }
 
     form.addEventListener('submit', async function (e) {
         e.preventDefault();

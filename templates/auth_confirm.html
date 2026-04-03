@@ -50,6 +50,12 @@
         }
     });
 
+    // Ensure OAuth ?code= in URL is exchanged (getSession triggers detectSessionInUrl)
+    sb.auth.getSession().then(function (result) {
+        var sess = result && result.data && result.data.session;
+        if (sess) syncAndRedirect(sess);
+    });
+
     // Timeout fallback
     setTimeout(function () {
         if (!done) showErr('Could not complete sign-in. <a href="/login">Try again</a>.');
