@@ -22,6 +22,11 @@
     <meta name="deploy-hash" content="{{ deploy_hash }}">
     {% include 'includes/google_site_verification.html' %}
     {% include 'includes/google_analytics.html' %}
+    <!-- Vercel Speed Insights -->
+    <script>
+        window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
+    </script>
+    <script defer src="/_vercel/speed-insights/script.js"></script>
     <!-- SEO meta tags -->
     {% if query %}
     <meta name="description" content="Private search results for {{ query }} — no tracking, no profiling.">
