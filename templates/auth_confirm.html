@@ -1,0 +1,44 @@
+{% extends "auth_base.html" %}
+{% block title %}Signing you in · abbiey.search{% endblock %}
+
+{% block auth_content %}
+<div class="auth-heading">
+    <h1 class="auth-title">Signing you in…</h1>
+    <p class="auth-subtitle" id="status-msg">Please wait while we finish setting up your session.</p>
+</div>
+<div class="auth-errors" id="sb-error" role="alert" aria-live="polite" style="display:none"></div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script>
+(async function () {
+    var SB_URL = {{ supabase_url | tojson }};
+    var SB_KEY = {{ supabase_anon_key | tojson }};
+    var sb = window.supabase.createClient(SB_URL, SB_KEY);
+    var errEl = document.getElementById('sb-error');
+    function showErr(msg) { errEl.style.display = 'block'; errEl.innerHTML = '<p>' + msg + '</p>'; }
+
+    try {
+        var { data, error } = await sb.auth.getSession();
+        if (error || !data.session) {
+            showErr('Could not complete sign-in. <a href="/login">Try again</a>.');
+            return;
+        }
+        var user = data.session.user;
+        var cb = await fetch('/auth/callback', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: user.email, display_name: (user.user_metadata || {}).full_name || '' })
+        });
+        if (cb.ok) {
+            window.location.href = '/search';
+        } else {
+            showErr('Session sync failed. <a href="/login">Try again</a>.');
+        }
+    } catch (e) {
+        showErr('Something went wrong. <a href="/login">Try again</a>.');
+    }
+})();
+</script>
+{% endblock %}

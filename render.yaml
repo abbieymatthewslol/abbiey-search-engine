@@ -11,4 +11,12 @@ services:
         generateValue: true
       - key: BASE_URL
         value: https://abbieysearch.com
-    healthCheckPath: /
+      - key: SITE_URL
+        value: https://www.abbieysearch.com
+      - key: SUPABASE_URL
+        value: https://xwxscvllmghyogddpmii.supabase.co
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_DB_URL
+        sync: false
+    healthCheckPath: /health

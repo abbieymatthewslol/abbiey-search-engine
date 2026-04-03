@@ -944,12 +944,15 @@
         {% endif %}
 
         {# ===== ONION WARNING BANNER ===== #}
-        {% if search_type == 'onion' %}
-        <div class="onion-warning">
-            <span class="onion-warning-icon">&#9888;&#65039;</span>
-            <span>Deep web results contain <strong>.onion links</strong> that require the <a href="https://www.torproject.org/download/" target="_blank" rel="noopener">Tor Browser</a> to access. Browse safely.</span>
-        </div>
-        {% endif %}
+            {% if search_type == 'onion' %}
+            <div class="onion-warning">
+                <span class="onion-warning-icon">&#9888;&#65039;</span>
+                <span>Deep web results contain <strong>.onion links</strong> that require the <a href="https://www.torproject.org/download/" target="_blank" rel="noopener">Tor Browser</a> to access. Browse safely.</span>
+            </div>
+            {% endif %}
+            {% if search_notice %}
+            <div class="search-status-banner" role="status">{{ search_notice }}</div>
+            {% endif %}
 
         {# ===== MAIN RESULTS ===== #}
         <div id="results" class="results-container" data-type="{{ search_type }}">
@@ -1174,13 +1177,13 @@
         <p>abbiey.search &mdash; Search with clarity.</p>
     </footer>
 
-    {% if query %}
     <script>
+        window.__currentUser = {{ (({"id": current_user.id, "username": current_user.username} if current_user else none)) | tojson }};
+        window.__currentUserHasPaidAccess = {{ current_user_has_paid_access|tojson }};
         window.__searchQuery = {{ query|tojson }};
         window.__searchType = {{ search_type|tojson }};
         window.__queryUi = {{ query_ui|tojson }};
     </script>
-    {% endif %}
 
     {% if query and search_type == 'code' %}
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">

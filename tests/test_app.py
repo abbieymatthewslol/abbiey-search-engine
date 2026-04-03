@@ -1104,6 +1104,107 @@ class TestDeveloperPage:
         assert r.status_code == 200
         assert b"buy.stripe.com" in r.data
 
+
+def _login_test_user(client, prefix: str = "acct") -> int:
+    import uuid
+
+    from app import _users_execute
+    from werkzeug.security import generate_password_hash
+
+    suffix = uuid.uuid4().hex[:10]
+    rows = _users_execute(
+        "INSERT INTO users (username, email, password_hash) VALUES (?,?,?)",
+        [f"{prefix}_{suffix}", f"{prefix}_{suffix}@example.com", generate_password_hash("password123")],
+        return_id=True,
+    )
+    uid = rows[0]["id"]
+    with client.session_transaction() as sess:
+        sess["user_id"] = uid
+    return uid
+
+
+class TestBookmarkSyncHardening:
+    def test_bookmarks_sync_returns_readback_and_delete_by_url(self, client):
+        _login_test_user(client, "bmsync")
+
+        sync_resp = client.post(
+            "/api/user/bookmarks/sync",
+            json={
+                "bookmarks": [
+                    {
+                        "url": "https://example.com/bookmark",
+                        "title": "Example bookmark",
+                        "snippet": "Saved from pytest",
+                    }
+                ]
+            },
+        )
+        assert sync_resp.status_code == 200
+        sync_data = sync_resp.get_json()
+        assert sync_data["ok"] is True
+        assert len(sync_data["bookmarks"]) == 1
+        assert sync_data["bookmarks"][0]["url"] == "https://example.com/bookmark"
+
+        delete_resp = client.delete(
+            "/api/user/bookmarks",
+            query_string={"url": "https://example.com/bookmark"},
+        )
+        assert delete_resp.status_code == 200
+        assert delete_resp.get_json()["ok"] is True
+
+        get_resp = client.get("/api/user/bookmarks")
+        assert get_resp.status_code == 200
+        assert get_resp.get_json() == {"bookmarks": []}
+
+
+class TestSearchAccessPersistence:
+    def test_prepare_claim_and_status_round_trip(self, client):
+        prep = client.post("/api/search-access/prepare-checkout")
+        assert prep.status_code == 200
+        assert prep.get_json()["ok"] is True
+
+        claim = client.post("/api/search-access/claim")
+        assert claim.status_code == 200
+        claim_data = claim.get_json()
+        assert claim_data["ok"] is True
+        assert claim_data["unlocked"] is True
+        assert "abbiey_search_unlock=" in (claim.headers.get("Set-Cookie") or "")
+
+        status = client.get("/api/search-access")
+        assert status.status_code == 200
+        assert status.get_json()["unlocked"] is True
+
+
+class TestHealthProbe:
+    def test_public_health_endpoint_omits_sensitive_endpoint(self, client):
+        resp = client.get("/health")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert "status" in data
+        assert "analytics_db" in data
+        assert "db_endpoint" not in data
+
+
+class TestOnionFallbackNotice:
+    def test_onion_fallback_notice_rendered(self, client):
+        fallback_payload = {
+            "results": [
+                {
+                    "title": "Mirror page",
+                    "url": "https://example.com/onion-reference",
+                    "body": "Reference to an onion address",
+                    "onion": False,
+                }
+            ],
+            "has_more": False,
+            "page": 1,
+            "notice": "Ahmia is temporarily unavailable, so these results come from a web fallback and may reference onion sites rather than link to them directly.",
+        }
+        with patch("app._fetch_results", return_value=fallback_payload):
+            resp = client.get("/search?q=test&type=onion")
+        assert resp.status_code == 200
+        assert b"Ahmia is temporarily unavailable" in resp.data
+
     def test_developer_billing_success_message(self, client):
         r = client.get("/developer?billing=success")
         assert r.status_code == 200

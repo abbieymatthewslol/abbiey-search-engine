@@ -53,6 +53,37 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     return s;
   }
+  function userFacingApiError(msg, fallback) {
+    const s = msg != null ? String(msg).trim() : "";
+    if (!s || s.length > 240 || /traceback|exception|^error:/i.test(s)) {
+      return fallback;
+    }
+    return s;
+  }
+  function showToast(message, kind = "success") {
+    if (!message) return;
+    const toast = document.createElement("div");
+    toast.className = `toast ${kind}`;
+    toast.textContent = String(message);
+    document.body.appendChild(toast);
+    window.setTimeout(() => toast.remove(), 3200);
+  }
+  async function fetchJson(url, options = {}) {
+    const opts = {
+      credentials: "same-origin",
+      headers: { Accept: "application/json", ...(options.headers || {}) },
+      ...options,
+    };
+    const resp = await fetch(url, opts);
+    let data = null;
+    try {
+      const text = await resp.text();
+      data = text ? JSON.parse(text) : null;
+    } catch (_) {
+      data = null;
+    }
+    return { ok: resp.ok, status: resp.status, data, response: resp };
+  }
 
   if (navigator.geolocation) {
     navigator.geolocation.getCurrentPosition(
@@ -80,18 +111,24 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // ===== Soft paywall: 7 free searches, Stripe $7, or 24h wait (client-side) =====
-  (function initPaywall() {
+  (async function initPaywall() {
     const LS = {
       count: "abbiey_search_count",
       unlocked: "abbiey_unlocked",
       resume: "abbiey_paywall_resume_at",
       sessUrl: "abbiey_counted_search_url",
     };
+    const ACCESS_URLS = {
+      status: "/api/search-access",
+      claim: "/api/search-access/claim",
+      prepare: "/api/search-access/prepare-checkout",
+    };
     const UNLOCK_COOKIE = "abbiey_search_unlocked";
     /** ~10 years — paid search unlock is meant to persist (API key checkout uses /developer?billing= only, never paid=1). */
     const UNLOCK_COOKIE_MAX_AGE = 315360000;
     const FREE_LIMIT = 7;
     const DAY_MS = 24 * 60 * 60 * 1000;
+    let hasServerUnlock = window.__currentUserHasPaidAccess === true;
 
     function hasUnlockCookie() {
       try {
@@ -122,8 +159,53 @@ document.addEventListener("DOMContentLoaded", () => {
           (secure ? "; secure" : "");
       } catch (_) {}
     }
+    function applyLocalUnlock() {
+      hasServerUnlock = true;
+      setPaidUnlockPersistence();
+      clearQuotaState();
+    }
+    async function refreshServerUnlock(silent = true) {
+      try {
+        const result = await fetchJson(ACCESS_URLS.status);
+        if (result.ok && result.data && result.data.unlocked) {
+          applyLocalUnlock();
+          return true;
+        }
+      } catch (_) {}
+      if (!silent) {
+        showToast("We couldn't confirm your unlimited access right now.", "error");
+      }
+      return false;
+    }
+    async function claimReturnedUnlock() {
+      try {
+        const result = await fetchJson(ACCESS_URLS.claim, { method: "POST" });
+        if (result.ok && result.data && result.data.unlocked) {
+          applyLocalUnlock();
+          return true;
+        }
+        showToast(
+          userFacingApiError(result.data && result.data.message, "We couldn't sync your unlimited access yet."),
+          "error"
+        );
+      } catch (_) {
+        showToast("We couldn't sync your unlimited access yet.", "error");
+      }
+      return false;
+    }
+    function markCheckoutPending() {
+      try {
+        if (navigator.sendBeacon && navigator.sendBeacon(ACCESS_URLS.prepare)) {
+          return;
+        }
+      } catch (_) {}
+      try {
+        fetch(ACCESS_URLS.prepare, { method: "POST", credentials: "same-origin", keepalive: true }).catch(() => {});
+      } catch (_) {}
+    }
 
     function unlocked() {
+      if (hasServerUnlock || window.__currentUserHasPaidAccess === true) return true;
       if (localStorage.getItem(LS.unlocked) === "1") return true;
       if (hasUnlockCookie()) {
         try {
@@ -152,8 +234,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const params = new URLSearchParams(window.location.search);
     if (params.get("unlocked") === "1" || params.get("paid") === "1") {
-      setPaidUnlockPersistence();
-      clearQuotaState();
+      const restored = await claimReturnedUnlock();
+      if (!restored) {
+        applyLocalUnlock();
+      }
       params.delete("unlocked");
       params.delete("paid");
       const qs = params.toString();
@@ -161,6 +245,7 @@ document.addEventListener("DOMContentLoaded", () => {
       window.history.replaceState({}, "", nu);
     }
 
+    await refreshServerUnlock(true);
     unlocked();
 
     const resumeAt = getResume();
@@ -294,6 +379,7 @@ document.addEventListener("DOMContentLoaded", () => {
       payStripe.addEventListener(
         "click",
         () => {
+          markCheckoutPending();
           try {
             const u = new URL(window.location.href);
             const input = document.getElementById("search-input");
@@ -941,44 +1027,49 @@ document.addEventListener("DOMContentLoaded", () => {
     if (window.__queryUi && window.__queryUi.show_ai_summary === false) {
       aiCard.classList.add("ai-hidden");
     } else {
-    const aiQ = `/api/ai-summary?q=${encodeURIComponent(window.__searchQuery)}${geoQuerySuffix()}`;
-    fetch(aiQ)
-      .then(r => r.json())
-      .then(data => {
-        if (data.enabled === false) {
-          aiCard.classList.add("ai-hidden");
-          return;
-        }
-        if (data.error === "rate_limited") {
-          aiBody.innerHTML = `<div class="ai-summary-text ai-unavailable">Summary temporarily unavailable &mdash; too many requests. Results are shown below.</div>`;
-          return;
-        }
-        if (data.error) { aiCard.classList.add("ai-hidden"); return; }
-        // Render summary with clickable citations
-        let summary = esc(data.summary);
-        // Make [1], [2] etc into clickable links
-        summary = summary.replace(/\[(\d+)\]/g, (match, num) => {
-          const idx = parseInt(num) - 1;
-          if (data.sources && data.sources[idx]) {
-            const url = data.sources[idx].url;
-            // Only allow http/https URLs
-            if (url && /^https?:\/\//i.test(url)) {
-              return `<a class="ai-citation" href="${esc(url)}" target="_blank" rel="noopener">${num}</a>`;
-            }
+      const aiQ = `/api/ai-summary?q=${encodeURIComponent(window.__searchQuery)}${geoQuerySuffix()}`;
+      fetchJson(aiQ)
+        .then(({ ok, data }) => {
+          if (!data) {
+            throw new Error("No summary payload");
           }
-          return match;
+          if (data.enabled === false) {
+            aiCard.classList.add("ai-hidden");
+            return;
+          }
+          if (!ok || data.error) {
+            const msg = userFacingApiError(
+              data.message || data.error,
+              "Summary temporarily unavailable. Results are shown below."
+            );
+            aiBody.innerHTML = `<div class="ai-summary-text ai-unavailable">${esc(msg)}</div>`;
+            aiSources.innerHTML = "";
+            return;
+          }
+          let summary = esc(data.summary);
+          summary = summary.replace(/\[(\d+)\]/g, (match, num) => {
+            const idx = parseInt(num) - 1;
+            if (data.sources && data.sources[idx]) {
+              const url = data.sources[idx].url;
+              if (url && /^https?:\/\//i.test(url)) {
+                return `<a class="ai-citation" href="${esc(url)}" target="_blank" rel="noopener">${num}</a>`;
+              }
+            }
+            return match;
+          });
+          aiBody.innerHTML = `<div class="ai-summary-text">${summary}</div>`;
+          if (data.sources && data.sources.length) {
+            aiSources.innerHTML = data.sources
+              .filter(s => s.url && /^https?:\/\//i.test(s.url))
+              .map((s, i) =>
+                `<a class="ai-source-pill" href="${esc(s.url)}" target="_blank" rel="noopener">[${i+1}] ${esc(s.title).slice(0, 40)}</a>`
+              ).join("");
+          }
+        })
+        .catch(() => {
+          aiBody.innerHTML = '<div class="ai-summary-text ai-unavailable">Summary temporarily unavailable. Results are shown below.</div>';
+          aiSources.innerHTML = "";
         });
-        aiBody.innerHTML = `<div class="ai-summary-text">${summary}</div>`;
-        // Render source pills
-        if (data.sources && data.sources.length) {
-          aiSources.innerHTML = data.sources
-            .filter(s => s.url && /^https?:\/\//i.test(s.url))
-            .map((s, i) =>
-              `<a class="ai-source-pill" href="${esc(s.url)}" target="_blank" rel="noopener">[${i+1}] ${esc(s.title).slice(0, 40)}</a>`
-            ).join("");
-        }
-      })
-      .catch(() => { aiCard.classList.add("ai-hidden"); });
     }
   }
 
@@ -2133,24 +2224,142 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // ===== Bookmarking =====
   const BOOKMARKS_KEY = "abbiey_bookmarks";
+  const bookmarkAccountUser = window.__currentUser || null;
+  let bookmarkServerIds = new Map();
+  let bookmarkSyncPromise = null;
 
+  function bookmarkSavedTs(value) {
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    const parsed = Date.parse(value || "");
+    return Number.isNaN(parsed) ? 0 : parsed;
+  }
+  function normalizeBookmarkItem(item) {
+    const url = String((item && item.url) || "").trim();
+    if (!url) return null;
+    return {
+      id: item && item.id ? item.id : null,
+      url,
+      title: String((item && item.title) || "").trim().slice(0, 300) || url,
+      snippet: String((item && item.snippet) || "").trim().slice(0, 500),
+      saved: bookmarkSavedTs(item && (item.saved ?? item.saved_at)) || Date.now(),
+    };
+  }
+  function dedupeBookmarks(items) {
+    const byUrl = new Map();
+    (items || []).forEach((raw) => {
+      const item = normalizeBookmarkItem(raw);
+      if (!item) return;
+      const prev = byUrl.get(item.url);
+      if (!prev || item.saved >= prev.saved) byUrl.set(item.url, item);
+    });
+    return Array.from(byUrl.values()).sort((a, b) => (b.saved || 0) - (a.saved || 0));
+  }
   function getBookmarks() {
-    try { return JSON.parse(localStorage.getItem(BOOKMARKS_KEY)) || []; }
+    try { return dedupeBookmarks(JSON.parse(localStorage.getItem(BOOKMARKS_KEY)) || []); }
     catch { return []; }
   }
   function saveBookmarks(items) {
-    try { localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(items)); } catch {}
+    try { localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(dedupeBookmarks(items))); } catch {}
+  }
+  function mergeBookmarks(localItems, remoteItems) {
+    return dedupeBookmarks([...(localItems || []), ...(remoteItems || [])]);
+  }
+  function updateBookmarkServerIds(items) {
+    bookmarkServerIds = new Map();
+    (items || []).forEach((item) => {
+      if (item && item.url && item.id != null) {
+        bookmarkServerIds.set(item.url, item.id);
+      }
+    });
   }
   function isBookmarked(url) {
     return getBookmarks().some(b => b.url === url);
   }
+  async function syncBookmarksWithServer(options = {}) {
+    const silent = options.silent === true;
+    if (!bookmarkAccountUser) return getBookmarks();
+    if (bookmarkSyncPromise) return bookmarkSyncPromise;
+    bookmarkSyncPromise = (async () => {
+      const local = getBookmarks();
+      const remoteResp = await fetchJson("/api/user/bookmarks");
+      if (remoteResp.status === 401) return local;
+      if (!remoteResp.ok) {
+        throw new Error(userFacingApiError(remoteResp.data && remoteResp.data.error, "Bookmarks couldn't sync right now."));
+      }
+      const remoteItems = Array.isArray(remoteResp.data && remoteResp.data.bookmarks)
+        ? remoteResp.data.bookmarks
+        : [];
+      updateBookmarkServerIds(remoteItems);
+      const merged = mergeBookmarks(local, remoteItems);
+      saveBookmarks(merged);
+      const syncResp = await fetchJson("/api/user/bookmarks/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bookmarks: merged }),
+      });
+      if (syncResp.status !== 401 && !syncResp.ok) {
+        throw new Error(userFacingApiError(syncResp.data && syncResp.data.error, "Bookmarks couldn't sync right now."));
+      }
+      if (syncResp.ok && Array.isArray(syncResp.data && syncResp.data.bookmarks)) {
+        updateBookmarkServerIds(syncResp.data.bookmarks);
+        saveBookmarks(mergeBookmarks(merged, syncResp.data.bookmarks));
+      }
+      return getBookmarks();
+    })()
+      .catch((err) => {
+        if (!silent) {
+          showToast(err && err.message ? err.message : "Bookmarks couldn't sync right now.", "error");
+        }
+        return getBookmarks();
+      })
+      .finally(() => {
+        bookmarkSyncPromise = null;
+        updateBookmarkBadge();
+        if (window.__searchType === "saved") renderSavedBookmarks();
+        initBookmarkBtns();
+      });
+    return bookmarkSyncPromise;
+  }
+  async function persistBookmarkAdd(item) {
+    if (!bookmarkAccountUser) return;
+    const resp = await fetchJson("/api/user/bookmarks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: item.url, title: item.title, snippet: item.snippet }),
+    });
+    if (resp.ok && resp.data && resp.data.id != null) {
+      bookmarkServerIds.set(item.url, resp.data.id);
+      return;
+    }
+    if (resp.status !== 401) {
+      showToast(userFacingApiError(resp.data && resp.data.error, "Bookmark saved locally, but account sync failed."), "error");
+    }
+  }
+  async function persistBookmarkRemove(url) {
+    if (!bookmarkAccountUser) return;
+    const id = bookmarkServerIds.get(url);
+    const target = id != null
+      ? `/api/user/bookmarks/${encodeURIComponent(String(id))}`
+      : `/api/user/bookmarks?url=${encodeURIComponent(url)}`;
+    const resp = await fetchJson(target, { method: "DELETE" });
+    if (resp.ok) {
+      bookmarkServerIds.delete(url);
+      return;
+    }
+    if (resp.status !== 401) {
+      showToast(userFacingApiError(resp.data && resp.data.error, "Bookmark removal synced locally, but account sync failed."), "error");
+    }
+  }
   function addBookmark(url, title, snippet) {
+    const item = normalizeBookmarkItem({ url, title, snippet, saved: Date.now() });
     const items = getBookmarks().filter(b => b.url !== url);
-    items.unshift({ url, title, snippet, saved: Date.now() });
+    if (item) items.unshift(item);
     saveBookmarks(items);
+    if (item) persistBookmarkAdd(item).catch(() => {});
   }
   function removeBookmark(url) {
     saveBookmarks(getBookmarks().filter(b => b.url !== url));
+    persistBookmarkRemove(url).catch(() => {});
   }
   function updateBookmarkBadge() {
     const badge = document.getElementById("bookmark-count-badge");
@@ -2175,41 +2384,42 @@ document.addEventListener("DOMContentLoaded", () => {
           btn.classList.add("bookmarked");
         }
         updateBookmarkBadge();
+        if (window.__searchType === "saved") renderSavedBookmarks();
+      });
+    });
+  }
+  function renderSavedBookmarks() {
+    const savedContainer = document.getElementById("saved-results-container");
+    if (!savedContainer) return;
+    const bookmarks = getBookmarks();
+    if (!bookmarks.length) {
+      savedContainer.innerHTML = '<p class="no-results">No saved results yet. Click the bookmark icon on any result to save it.</p>';
+      return;
+    }
+    savedContainer.innerHTML = bookmarks.map(b => `
+      <article class="result saved-result" data-url="${esc(b.url)}">
+        <button class="bookmark-remove-btn" data-url="${esc(b.url)}" aria-label="Remove bookmark" title="Remove">&#10005;</button>
+        <a href="${esc(b.url)}" target="_blank" rel="noopener" class="result-title">${esc(b.title)}</a>
+        <cite class="result-url">${esc(b.url)}</cite>
+        <p class="result-snippet">${esc(b.snippet || "")}</p>
+      </article>
+    `).join("");
+    savedContainer.querySelectorAll(".bookmark-remove-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        removeBookmark(btn.dataset.url);
+        renderSavedBookmarks();
+        updateBookmarkBadge();
       });
     });
   }
 
   initBookmarkBtns();
   updateBookmarkBadge();
-
-  // Render saved tab
   if (window.__searchType === "saved") {
-    const savedContainer = document.getElementById("saved-results-container");
-    if (savedContainer) {
-      const bookmarks = getBookmarks();
-      if (!bookmarks.length) {
-        savedContainer.innerHTML = '<p class="no-results">No saved results yet. Click the bookmark icon on any result to save it.</p>';
-      } else {
-        savedContainer.innerHTML = bookmarks.map(b => `
-          <article class="result saved-result" data-url="${esc(b.url)}">
-            <button class="bookmark-remove-btn" data-url="${esc(b.url)}" aria-label="Remove bookmark" title="Remove">&#10005;</button>
-            <a href="${esc(b.url)}" target="_blank" rel="noopener" class="result-title">${esc(b.title)}</a>
-            <cite class="result-url">${esc(b.url)}</cite>
-            <p class="result-snippet">${esc(b.snippet || "")}</p>
-          </article>
-        `).join("");
-        savedContainer.querySelectorAll(".bookmark-remove-btn").forEach(btn => {
-          btn.addEventListener("click", () => {
-            removeBookmark(btn.dataset.url);
-            btn.closest(".saved-result").remove();
-            updateBookmarkBadge();
-            if (!getBookmarks().length) {
-              savedContainer.innerHTML = '<p class="no-results">No saved results.</p>';
-            }
-          });
-        });
-      }
-    }
+    renderSavedBookmarks();
+  }
+  if (bookmarkAccountUser) {
+    syncBookmarksWithServer({ silent: true }).catch(() => {});
   }
 
   // ===== Related Searches =====
