@@ -115,7 +115,13 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script>
 (function () {
-    var sb = window.supabase.createClient({{ supabase_url | tojson }}, {{ supabase_anon_key | tojson }});
+    var sb = window.supabase.createClient({{ supabase_url | tojson }}, {{ supabase_anon_key | tojson }}, {
+        auth: {
+            detectSessionInUrl: true,
+            persistSession: true,
+            autoRefreshToken: true
+        }
+    });
     var errEl = document.getElementById('sb-error');
     var form = document.getElementById('sb-signup-form');
     var submitBtn = document.getElementById('signup-submit');
