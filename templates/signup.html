@@ -132,10 +132,19 @@
             try {
                 var res = await sb.auth.signInWithOAuth({
                     provider: 'google',
-                    options: { redirectTo: window.location.origin + '/auth/confirm' }
+                    options: {
+                        redirectTo: window.location.origin + '/auth/confirm',
+                        skipBrowserRedirect: true
+                    }
                 });
                 if (res.error) {
                     showErr(res.error.message || 'Google sign-in failed.');
+                    googleBtn.disabled = false;
+                    googleBtn.innerHTML = googleBtnHtml;
+                } else if (res.data && res.data.url) {
+                    window.location.href = res.data.url;
+                } else {
+                    showErr('Could not start Google sign-in.');
                     googleBtn.disabled = false;
                     googleBtn.innerHTML = googleBtnHtml;
                 }
