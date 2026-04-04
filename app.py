@@ -46,7 +46,9 @@ from retrieval.pipeline import run_text_retrieval_pipeline_sync
 try:
     from dotenv import load_dotenv
 
-    load_dotenv()
+    _env_root = os.path.dirname(os.path.abspath(__file__))
+    load_dotenv(os.path.join(_env_root, ".env"))
+    load_dotenv(os.path.join(_env_root, ".env.local"), override=True)
 except ImportError:
     pass
 
