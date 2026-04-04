@@ -19,14 +19,14 @@ Last updated: 2026-04-04
 - [x] **Deep Web tab fallback** — surfaces clear `_ONION_UNAVAILABLE_MSG` when Ahmia is unreachable; DDG onion fallback attempted first
 - [x] **AI summary error handling** — graceful fallback messages for rate-limit, timeout, and no-context scenarios
 - [x] **Keyboard navigation** — j/k navigation with preview panel, "/" to focus search, "o" to open, Escape to close
-- [ ] **Mobile responsiveness audit** — test on 375 px viewport; fix any overflow in operator chips and settings modal
-- [ ] **Related searches** — surface `/api/related` results in the UI below main results
+- [x] **Mobile responsiveness audit** — 375 px refinements: settings rows stack, filter controls constrained, operator chips scroll-safe
+- [x] **Related searches** — `.related-pill` CSS bug fixed; pills now render with correct styles below results
 
 ---
 
 ## 🟢 Low Priority (nice to have)
 
-- [ ] **Export bookmarks** — allow CSV/JSON export of saved bookmarks
+- [x] **Export bookmarks** — Download JSON from Settings → Privacy panel
 - [ ] **Search history management** — UI to view and clear autocomplete history (privacy feature)
 - [x] **Rate limit feedback** — toast notification shown when server returns 429
 - [x] **Dockerfile hardening** — base image pinned; health check endpoint active
@@ -53,6 +53,6 @@ Last updated: 2026-04-04
 
 ## 📦 Infra / Ops
 
-- [ ] Add `CHANGELOG.md` — track version history going forward
+- [x] Add `CHANGELOG.md` — version history established
 - [x] Set up GitHub Actions CI — `pytest` runs on push to master; deploy workflow gates on test pass
 - [ ] Update `project-index.md` entry with current status and last feature set

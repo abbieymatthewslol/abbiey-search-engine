@@ -933,6 +933,24 @@ document.addEventListener("DOMContentLoaded", () => {
       setTimeout(() => { clearHistBtn.textContent = "Clear"; }, 1500);
     });
   }
+
+  const exportBookmarksBtn = document.getElementById("export-bookmarks-btn");
+  if (exportBookmarksBtn) {
+    exportBookmarksBtn.addEventListener("click", () => {
+      const items = getBookmarks();
+      if (!items.length) { showToast("No bookmarks to export.", "error"); return; }
+      const json = JSON.stringify(items, null, 2);
+      const blob = new Blob([json], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `abbiey-bookmarks-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+      showToast(`Exported ${items.length} bookmark${items.length !== 1 ? "s" : ""}.`);
+    });
+  }
   const clearAllBtn = document.getElementById("clear-all-btn");
   if (clearAllBtn) {
     clearAllBtn.addEventListener("click", () => {
