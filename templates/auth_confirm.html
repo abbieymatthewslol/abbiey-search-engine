@@ -1,0 +1,102 @@
+{% extends "auth_base.html" %}
+{% block title %}Signing you in · abbiey.search{% endblock %}
+
+{% block auth_content %}
+<div class="auth-heading">
+    <h1 class="auth-title">Signing you in…</h1>
+    <p class="auth-subtitle" id="status-msg">Please wait while we finish setting up your session.</p>
+</div>
+<div class="auth-errors" id="sb-error" role="alert" aria-live="polite" style="display:none"></div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script>
+(function () {
+    var SB_URL = {{ supabase_url | tojson }};
+    var SB_KEY = {{ supabase_anon_key | tojson }};
+
+    var sb = window.supabase.createClient(SB_URL, SB_KEY, {
+        auth: {
+            detectSessionInUrl: true,
+            persistSession: true,
+            autoRefreshToken: true
+        }
+    });
+
+    var errEl = document.getElementById('sb-error');
+    var statusEl = document.getElementById('status-msg');
+    var done = false;
+
+    function showErr(msg) {
+        errEl.style.display = 'block';
+        errEl.innerHTML = '<p>' + msg + '</p>';
+    }
+
+    async function syncAndRedirect(session) {
+        if (done) return;
+        done = true;
+
+        if (!session || !session.user) {
+            showErr('Invalid session. <a href="/login">Try again</a>.');
+            return;
+        }
+
+        statusEl.textContent = 'Almost there…';
+
+        try {
+            await sb.auth.refreshSession();
+
+            var user = session.user;
+
+            var cb = await fetch('/auth/callback', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    email: user.email,
+                    display_name: (user.user_metadata || {}).full_name || ''
+                })
+            });
+
+            var data = await cb.json().catch(() => null);
+
+            if (cb.ok && data && data.ok) {
+                window.location.href = '/search';
+            } else {
+                showErr('Session sync failed. <a href="/login">Try again</a>.');
+            }
+
+        } catch (e) {
+            showErr('Something went wrong. <a href="/login">Try again</a>.');
+        }
+    }
+
+    (async function () {
+        try {
+            var { data } = await sb.auth.getSession();
+
+            if (data && data.session) {
+                await syncAndRedirect(data.session);
+                return;
+            }
+
+            sb.auth.onAuthStateChange(async function (event, session) {
+                if (session && !done) {
+                    await syncAndRedirect(session);
+                }
+            });
+
+        } catch (e) {
+            showErr('Auth init failed. <a href="/login">Try again</a>.');
+        }
+    })();
+
+    setTimeout(function () {
+        if (!done) {
+            showErr('Could not complete sign-in. <a href="/login">Try again</a>.');
+        }
+    }, 25000);
+
+})();
+</script>
+{% endblock %}

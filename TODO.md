@@ -1,37 +1,36 @@
 # abbiey.search — TODO
 
-Last updated: 2026-03-04
-Last commit: feat: add time filter, bookmarks, QR cards, and full settings modal
+Last updated: 2026-04-04
 
 ---
 
 ## 🔴 High Priority (bugs / stability)
 
-- [ ] **Run full test suite** — confirm all tests pass on current branch; fix any regressions from last commit
-- [ ] **Verify bookmarks persistence** — confirm bookmarks survive page reload (localStorage vs. in-memory)
-- [ ] **QR card edge cases** — test QR generation for very long URLs and non-ASCII queries
-- [ ] **Time filter wiring** — confirm time filter param is passed correctly to DDG backend and reflected in results
+- [x] **Run full test suite** — all tests pass; CI runs on push
+- [x] **Verify bookmarks persistence** — bookmarks persist via localStorage with server sync for logged-in users
+- [x] **QR card edge cases** — gracefully rejects URLs > 500 chars; non-ASCII handled via URL encoding
+- [x] **Time filter wiring** — `df` param flows from UI → backend → DDG `timelimit` kwarg
 
 ---
 
 ## 🟡 Medium Priority (features / polish)
 
-- [ ] **Settings modal persistence** — save accent color, density, region to localStorage so they survive reload
-- [ ] **Deep Web tab fallback** — if Ahmia.fi is unreachable, surface a clear error rather than a blank results list
-- [ ] **AI summary error handling** — show graceful fallback message when DDG AI chat is rate-limited or times out
-- [ ] **Keyboard navigation** — audit j/k preview panel nav; ensure it works on all tabs (Images, News, Videos)
-- [ ] **Mobile responsiveness audit** — test on 375px viewport; fix any overflow in operator chips and settings modal
-- [ ] **Related searches** — surface `/api/related` results in the UI below main results
+- [x] **Settings modal persistence** — accent color, density, region, font saved to localStorage and restored on load
+- [x] **Deep Web tab fallback** — surfaces clear `_ONION_UNAVAILABLE_MSG` when Ahmia is unreachable; DDG onion fallback attempted first
+- [x] **AI summary error handling** — graceful fallback messages for rate-limit, timeout, and no-context scenarios
+- [x] **Keyboard navigation** — j/k navigation with preview panel, "/" to focus search, "o" to open, Escape to close
+- [x] **Mobile responsiveness audit** — 375 px refinements: settings rows stack, filter controls constrained, operator chips scroll-safe
+- [x] **Related searches** — `.related-pill` CSS bug fixed; pills now render with correct styles below results
 
 ---
 
 ## 🟢 Low Priority (nice to have)
 
-- [ ] **Export bookmarks** — allow CSV/JSON export of saved bookmarks
+- [x] **Export bookmarks** — Download JSON from Settings → Privacy panel
 - [ ] **Search history management** — UI to view and clear autocomplete history (privacy feature)
-- [ ] **Rate limit feedback** — show user-friendly toast when Flask-Limiter blocks a request (currently silent)
-- [ ] **Dockerfile hardening** — pin base image version; add health check endpoint (`/health`)
-- [ ] **Favicon + PWA manifest** — add `manifest.json` so the app is installable as a PWA
+- [x] **Rate limit feedback** — toast notification shown when server returns 429
+- [x] **Dockerfile hardening** — base image pinned; health check endpoint active
+- [x] **Favicon + PWA manifest** — manifest.json served, icons linked, app installable as PWA
 
 ---
 
@@ -47,7 +46,6 @@ Last commit: feat: add time filter, bookmarks, QR cards, and full settings modal
 
 ## 🧪 Testing
 
-- [ ] Add tests for: bookmarks API (if any), QR card route, time filter param propagation
 - [ ] Add integration test for Deep Web tab with mocked Ahmia response
 - [ ] Add test for settings persistence (JS unit test or Playwright smoke test)
 
@@ -55,6 +53,6 @@ Last commit: feat: add time filter, bookmarks, QR cards, and full settings modal
 
 ## 📦 Infra / Ops
 
-- [ ] Add `CHANGELOG.md` — track version history going forward
-- [ ] Set up GitHub Actions CI — run `pytest` on push to main
+- [x] Add `CHANGELOG.md` — version history established
+- [x] Set up GitHub Actions CI — `pytest` runs on push to master; deploy workflow gates on test pass
 - [ ] Update `project-index.md` entry with current status and last feature set

@@ -53,6 +53,40 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     return s;
   }
+  function userFacingApiError(msg, fallback) {
+    const s = msg != null ? String(msg).trim() : "";
+    if (!s || s.length > 240 || /traceback|exception|^error:/i.test(s)) {
+      return fallback;
+    }
+    return s;
+  }
+  function showToast(message, kind = "success") {
+    if (!message) return;
+    const toast = document.createElement("div");
+    toast.className = `toast ${kind}`;
+    toast.textContent = String(message);
+    document.body.appendChild(toast);
+    window.setTimeout(() => toast.remove(), 3200);
+  }
+  async function fetchJson(url, options = {}) {
+    const opts = {
+      credentials: "same-origin",
+      headers: { Accept: "application/json", ...(options.headers || {}) },
+      ...options,
+    };
+    const resp = await fetch(url, opts);
+    let data = null;
+    try {
+      const text = await resp.text();
+      data = text ? JSON.parse(text) : null;
+    } catch (_) {
+      data = null;
+    }
+    if (resp.status === 429) {
+      showToast("You're sending requests too quickly. Please wait a moment and try again.");
+    }
+    return { ok: resp.ok, status: resp.status, data, response: resp };
+  }
 
   if (navigator.geolocation) {
     navigator.geolocation.getCurrentPosition(
@@ -80,18 +114,24 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // ===== Soft paywall: 7 free searches, Stripe $7, or 24h wait (client-side) =====
-  (function initPaywall() {
+  (async function initPaywall() {
     const LS = {
       count: "abbiey_search_count",
       unlocked: "abbiey_unlocked",
       resume: "abbiey_paywall_resume_at",
       sessUrl: "abbiey_counted_search_url",
     };
+    const ACCESS_URLS = {
+      status: "/api/search-access",
+      claim: "/api/search-access/claim",
+      prepare: "/api/search-access/prepare-checkout",
+    };
     const UNLOCK_COOKIE = "abbiey_search_unlocked";
     /** ~10 years — paid search unlock is meant to persist (API key checkout uses /developer?billing= only, never paid=1). */
     const UNLOCK_COOKIE_MAX_AGE = 315360000;
     const FREE_LIMIT = 7;
     const DAY_MS = 24 * 60 * 60 * 1000;
+    let hasServerUnlock = window.__currentUserHasPaidAccess === true;
 
     function hasUnlockCookie() {
       try {
@@ -122,8 +162,64 @@ document.addEventListener("DOMContentLoaded", () => {
           (secure ? "; secure" : "");
       } catch (_) {}
     }
+    function applyLocalUnlock() {
+      hasServerUnlock = true;
+      setPaidUnlockPersistence();
+      clearQuotaState();
+    }
+    async function refreshServerUnlock(silent = true) {
+      try {
+        const result = await fetchJson(ACCESS_URLS.status);
+        if (result.ok && result.data && result.data.unlocked) {
+          applyLocalUnlock();
+          return true;
+        }
+      } catch (_) {}
+      if (!silent) {
+        showToast("We couldn't confirm your unlimited access right now.", "error");
+      }
+      return false;
+    }
+    async function claimReturnedUnlock() {
+      // Retrieve the checkout token stored before redirect to Stripe
+      var checkoutToken = "";
+      try { checkoutToken = localStorage.getItem("abbiey_checkout_token") || ""; } catch (_) {}
+      try {
+        const result = await fetchJson(ACCESS_URLS.claim, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ checkout_token: checkoutToken }),
+        });
+        if (result.ok && result.data && result.data.unlocked) {
+          try { localStorage.removeItem("abbiey_checkout_token"); } catch (_) {}
+          applyLocalUnlock();
+          return true;
+        }
+        showToast(
+          userFacingApiError(result.data && result.data.message, "We couldn't sync your unlimited access yet."),
+          "error"
+        );
+      } catch (_) {
+        showToast("We couldn't sync your unlimited access yet.", "error");
+      }
+      return false;
+    }
+    async function markCheckoutPending() {
+      // Use fetch (not sendBeacon) so the response cookie gets stored
+      try {
+        const result = await fetchJson(ACCESS_URLS.prepare, { method: "POST" });
+        if (result.ok && result.data) {
+          return {
+            checkoutToken: result.data.checkout_token || "",
+            checkoutUrl: result.data.checkout_url || "",
+          };
+        }
+      } catch (_) {}
+      return null;
+    }
 
     function unlocked() {
+      if (hasServerUnlock || window.__currentUserHasPaidAccess === true) return true;
       if (localStorage.getItem(LS.unlocked) === "1") return true;
       if (hasUnlockCookie()) {
         try {
@@ -152,8 +248,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const params = new URLSearchParams(window.location.search);
     if (params.get("unlocked") === "1" || params.get("paid") === "1") {
-      setPaidUnlockPersistence();
-      clearQuotaState();
+      let restored = await claimReturnedUnlock();
+      if (!restored) {
+        restored = await refreshServerUnlock(true);
+      }
+      if (!restored) {
+        applyLocalUnlock();
+      }
       params.delete("unlocked");
       params.delete("paid");
       const qs = params.toString();
@@ -161,6 +262,7 @@ document.addEventListener("DOMContentLoaded", () => {
       window.history.replaceState({}, "", nu);
     }
 
+    await refreshServerUnlock(true);
     unlocked();
 
     const resumeAt = getResume();
@@ -293,13 +395,26 @@ document.addEventListener("DOMContentLoaded", () => {
     if (payStripe) {
       payStripe.addEventListener(
         "click",
-        () => {
+        async (e) => {
+          e.preventDefault();
+          // Prepare checkout and get a reference token
+          const pending = await markCheckoutPending();
+          const baseUrl = (pending && pending.checkoutUrl) || payStripe.href;
+          let stripeUrl = baseUrl;
+          if (pending && pending.checkoutToken) {
+            try {
+              localStorage.setItem("abbiey_checkout_token", pending.checkoutToken);
+              const su = new URL(baseUrl);
+              su.searchParams.set("client_reference_id", pending.checkoutToken);
+              stripeUrl = su.toString();
+            } catch (_) {}
+          }
           try {
             const u = new URL(window.location.href);
             const input = document.getElementById("search-input");
-            const pending = input && input.value.trim() ? input.value.trim() : "";
-            if (pending && !u.searchParams.get("q")) {
-              u.searchParams.set("q", pending);
+            const val = input && input.value.trim() ? input.value.trim() : "";
+            if (val && !u.searchParams.get("q")) {
+              u.searchParams.set("q", val);
             }
             u.searchParams.delete("page");
             const p = u.searchParams;
@@ -311,6 +426,7 @@ document.addEventListener("DOMContentLoaded", () => {
               JSON.stringify({ kind: "search", path })
             );
           } catch (_) {}
+          window.open(stripeUrl, "_blank", "noopener,noreferrer");
         },
         true
       );
@@ -817,6 +933,24 @@ document.addEventListener("DOMContentLoaded", () => {
       setTimeout(() => { clearHistBtn.textContent = "Clear"; }, 1500);
     });
   }
+
+  const exportBookmarksBtn = document.getElementById("export-bookmarks-btn");
+  if (exportBookmarksBtn) {
+    exportBookmarksBtn.addEventListener("click", () => {
+      const items = getBookmarks();
+      if (!items.length) { showToast("No bookmarks to export.", "error"); return; }
+      const json = JSON.stringify(items, null, 2);
+      const blob = new Blob([json], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `abbiey-bookmarks-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+      showToast(`Exported ${items.length} bookmark${items.length !== 1 ? "s" : ""}.`);
+    });
+  }
   const clearAllBtn = document.getElementById("clear-all-btn");
   if (clearAllBtn) {
     clearAllBtn.addEventListener("click", () => {
@@ -941,44 +1075,49 @@ document.addEventListener("DOMContentLoaded", () => {
     if (window.__queryUi && window.__queryUi.show_ai_summary === false) {
       aiCard.classList.add("ai-hidden");
     } else {
-    const aiQ = `/api/ai-summary?q=${encodeURIComponent(window.__searchQuery)}${geoQuerySuffix()}`;
-    fetch(aiQ)
-      .then(r => r.json())
-      .then(data => {
-        if (data.enabled === false) {
-          aiCard.classList.add("ai-hidden");
-          return;
-        }
-        if (data.error === "rate_limited") {
-          aiBody.innerHTML = `<div class="ai-summary-text ai-unavailable">Summary temporarily unavailable &mdash; too many requests. Results are shown below.</div>`;
-          return;
-        }
-        if (data.error) { aiCard.classList.add("ai-hidden"); return; }
-        // Render summary with clickable citations
-        let summary = esc(data.summary);
-        // Make [1], [2] etc into clickable links
-        summary = summary.replace(/\[(\d+)\]/g, (match, num) => {
-          const idx = parseInt(num) - 1;
-          if (data.sources && data.sources[idx]) {
-            const url = data.sources[idx].url;
-            // Only allow http/https URLs
-            if (url && /^https?:\/\//i.test(url)) {
-              return `<a class="ai-citation" href="${esc(url)}" target="_blank" rel="noopener">${num}</a>`;
-            }
+      const aiQ = `/api/ai-summary?q=${encodeURIComponent(window.__searchQuery)}${geoQuerySuffix()}`;
+      fetchJson(aiQ)
+        .then(({ ok, data }) => {
+          if (!data) {
+            throw new Error("No summary payload");
           }
-          return match;
+          if (data.enabled === false) {
+            aiCard.classList.add("ai-hidden");
+            return;
+          }
+          if (!ok || data.error) {
+            const msg = userFacingApiError(
+              data.message || data.error,
+              "Summary temporarily unavailable. Results are shown below."
+            );
+            aiBody.innerHTML = `<div class="ai-summary-text ai-unavailable">${esc(msg)}</div>`;
+            aiSources.innerHTML = "";
+            return;
+          }
+          let summary = esc(data.summary);
+          summary = summary.replace(/\[(\d+)\]/g, (match, num) => {
+            const idx = parseInt(num) - 1;
+            if (data.sources && data.sources[idx]) {
+              const url = data.sources[idx].url;
+              if (url && /^https?:\/\//i.test(url)) {
+                return `<a class="ai-citation" href="${esc(url)}" target="_blank" rel="noopener">${num}</a>`;
+              }
+            }
+            return match;
+          });
+          aiBody.innerHTML = `<div class="ai-summary-text">${summary}</div>`;
+          if (data.sources && data.sources.length) {
+            aiSources.innerHTML = data.sources
+              .filter(s => s.url && /^https?:\/\//i.test(s.url))
+              .map((s, i) =>
+                `<a class="ai-source-pill" href="${esc(s.url)}" target="_blank" rel="noopener">[${i+1}] ${esc(s.title).slice(0, 40)}</a>`
+              ).join("");
+          }
+        })
+        .catch(() => {
+          aiBody.innerHTML = '<div class="ai-summary-text ai-unavailable">Summary temporarily unavailable. Results are shown below.</div>';
+          aiSources.innerHTML = "";
         });
-        aiBody.innerHTML = `<div class="ai-summary-text">${summary}</div>`;
-        // Render source pills
-        if (data.sources && data.sources.length) {
-          aiSources.innerHTML = data.sources
-            .filter(s => s.url && /^https?:\/\//i.test(s.url))
-            .map((s, i) =>
-              `<a class="ai-source-pill" href="${esc(s.url)}" target="_blank" rel="noopener">[${i+1}] ${esc(s.title).slice(0, 40)}</a>`
-            ).join("");
-        }
-      })
-      .catch(() => { aiCard.classList.add("ai-hidden"); });
     }
   }
 
@@ -1971,7 +2110,7 @@ document.addEventListener("DOMContentLoaded", () => {
         .then(data => {
           removeMessage(typingId);
           if (data.error) appendMessage("assistant", userFacingChatError(data.error));
-          else { appendMessage("assistant", data.response); chatHistory.push({ role: "user", content: msg }); chatHistory.push({ role: "assistant", content: data.response }); }
+          else { streamMessage("assistant", data.response); chatHistory.push({ role: "user", content: msg }); chatHistory.push({ role: "assistant", content: data.response }); }
         })
         .catch(() => { removeMessage(typingId); appendMessage("assistant", "Connection error. Please try again."); })
         .finally(() => { chatInput.disabled = false; chatSend.disabled = false; chatInput.focus(); });
@@ -1981,33 +2120,93 @@ document.addEventListener("DOMContentLoaded", () => {
     if (chatInput) chatInput.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } });
 
     let msgCounter = 0;
+
+    // Formats raw markdown-lite content to safe HTML
+    function formatChatContent(raw) {
+      return esc(raw)
+        .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+        .replace(/\[(.*?)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
+        .replace(/(?<!="|">)(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>')
+        .replace(/\n/g, "<br>");
+    }
+
     function appendTyping() {
       const id = `msg-${msgCounter++}`;
       const div = document.createElement("div");
-      div.className = "chat-msg chat-msg-assistant typing";
+      div.className = "chat-message assistant typing";
       div.id = id;
       div.innerHTML = `<div class="chat-msg-content">Researching <span class="typing-dots"><span></span><span></span><span></span></span></div>`;
       chatMessages.appendChild(div);
       chatBody.scrollTop = chatBody.scrollHeight;
       return id;
     }
+
     function appendMessage(role, content) {
       const id = `msg-${msgCounter++}`;
       const div = document.createElement("div");
-      div.className = `chat-msg chat-msg-${role}`;
+      div.className = `chat-message ${role}`;
       div.id = id;
-      let formatted = esc(content)
-        .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
-        .replace(/\[(.*?)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
-        .replace(/(?<!="|">)(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>')
-        .replace(/\n/g, "<br>");
-      div.innerHTML = `<div class="chat-msg-content">${formatted}</div>`;
+      div.innerHTML = `<div class="chat-msg-content">${formatChatContent(content)}</div>`;
       chatMessages.appendChild(div);
       chatBody.scrollTop = chatBody.scrollHeight;
       return id;
     }
+
+    // Word-by-word streaming reveal with speed ramp
+    function streamMessage(role, rawContent) {
+      if (!rawContent || rawContent.length < 30) { appendMessage(role, rawContent); return; }
+      const id = `msg-${msgCounter++}`;
+      const div = document.createElement("div");
+      div.className = `chat-message ${role}`;
+      div.id = id;
+      const inner = document.createElement("div");
+      inner.className = "chat-msg-content";
+      div.appendChild(inner);
+      chatMessages.appendChild(div);
+
+      const tokens = rawContent.split(/(\s+)/);
+      let buf = "";
+      let idx = 0;
+
+      function tick() {
+        if (idx >= tokens.length) {
+          inner.innerHTML = formatChatContent(buf);
+          chatBody.scrollTop = chatBody.scrollHeight;
+          return;
+        }
+        buf += tokens[idx++];
+        inner.innerHTML = formatChatContent(buf) + '<span class="chat-cursor"></span>';
+        chatBody.scrollTop = chatBody.scrollHeight;
+        const delay = idx <= 4 ? 68 : idx <= 12 ? 42 : 22;
+        setTimeout(tick, delay);
+      }
+      tick();
+      return id;
+    }
+
     function removeMessage(id) { const el = document.getElementById(id); if (el) el.remove(); }
-  }
+
+    // Auto-collapse to visible strip on results pages so the assistant is discoverable
+    if (searchQuery) {
+      chatOpen = true;
+      chatPanel.classList.add("open", "collapsed");
+      chatFab.classList.add("hidden");
+      // Pulse FAB once when panel collapses back (so user knows it's there)
+    }
+
+    // Header click expands from collapsed state
+    const chatHeader = chatPanel.querySelector(".chat-header");
+    if (chatHeader) {
+      chatHeader.addEventListener("click", (e) => {
+        if (e.target.closest("button")) return;
+        if (chatPanel.classList.contains("collapsed")) {
+          chatPanel.classList.remove("collapsed");
+          if (chatInput) chatInput.focus();
+        }
+      });
+    }
+
+  }  // end if (chatPanel && chatFab)
 
   // ===== Onion Link Verification =====
   if (window.__searchType === "onion") {
@@ -2133,24 +2332,142 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // ===== Bookmarking =====
   const BOOKMARKS_KEY = "abbiey_bookmarks";
+  const bookmarkAccountUser = window.__currentUser || null;
+  let bookmarkServerIds = new Map();
+  let bookmarkSyncPromise = null;
 
+  function bookmarkSavedTs(value) {
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    const parsed = Date.parse(value || "");
+    return Number.isNaN(parsed) ? 0 : parsed;
+  }
+  function normalizeBookmarkItem(item) {
+    const url = String((item && item.url) || "").trim();
+    if (!url) return null;
+    return {
+      id: item && item.id ? item.id : null,
+      url,
+      title: String((item && item.title) || "").trim().slice(0, 300) || url,
+      snippet: String((item && item.snippet) || "").trim().slice(0, 500),
+      saved: bookmarkSavedTs(item && (item.saved ?? item.saved_at)) || Date.now(),
+    };
+  }
+  function dedupeBookmarks(items) {
+    const byUrl = new Map();
+    (items || []).forEach((raw) => {
+      const item = normalizeBookmarkItem(raw);
+      if (!item) return;
+      const prev = byUrl.get(item.url);
+      if (!prev || item.saved >= prev.saved) byUrl.set(item.url, item);
+    });
+    return Array.from(byUrl.values()).sort((a, b) => (b.saved || 0) - (a.saved || 0));
+  }
   function getBookmarks() {
-    try { return JSON.parse(localStorage.getItem(BOOKMARKS_KEY)) || []; }
+    try { return dedupeBookmarks(JSON.parse(localStorage.getItem(BOOKMARKS_KEY)) || []); }
     catch { return []; }
   }
   function saveBookmarks(items) {
-    try { localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(items)); } catch {}
+    try { localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(dedupeBookmarks(items))); } catch {}
+  }
+  function mergeBookmarks(localItems, remoteItems) {
+    return dedupeBookmarks([...(localItems || []), ...(remoteItems || [])]);
+  }
+  function updateBookmarkServerIds(items) {
+    bookmarkServerIds = new Map();
+    (items || []).forEach((item) => {
+      if (item && item.url && item.id != null) {
+        bookmarkServerIds.set(item.url, item.id);
+      }
+    });
   }
   function isBookmarked(url) {
     return getBookmarks().some(b => b.url === url);
   }
+  async function syncBookmarksWithServer(options = {}) {
+    const silent = options.silent === true;
+    if (!bookmarkAccountUser) return getBookmarks();
+    if (bookmarkSyncPromise) return bookmarkSyncPromise;
+    bookmarkSyncPromise = (async () => {
+      const local = getBookmarks();
+      const remoteResp = await fetchJson("/api/user/bookmarks");
+      if (remoteResp.status === 401) return local;
+      if (!remoteResp.ok) {
+        throw new Error(userFacingApiError(remoteResp.data && remoteResp.data.error, "Bookmarks couldn't sync right now."));
+      }
+      const remoteItems = Array.isArray(remoteResp.data && remoteResp.data.bookmarks)
+        ? remoteResp.data.bookmarks
+        : [];
+      updateBookmarkServerIds(remoteItems);
+      const merged = mergeBookmarks(local, remoteItems);
+      saveBookmarks(merged);
+      const syncResp = await fetchJson("/api/user/bookmarks/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bookmarks: merged }),
+      });
+      if (syncResp.status !== 401 && !syncResp.ok) {
+        throw new Error(userFacingApiError(syncResp.data && syncResp.data.error, "Bookmarks couldn't sync right now."));
+      }
+      if (syncResp.ok && Array.isArray(syncResp.data && syncResp.data.bookmarks)) {
+        updateBookmarkServerIds(syncResp.data.bookmarks);
+        saveBookmarks(mergeBookmarks(merged, syncResp.data.bookmarks));
+      }
+      return getBookmarks();
+    })()
+      .catch((err) => {
+        if (!silent) {
+          showToast(err && err.message ? err.message : "Bookmarks couldn't sync right now.", "error");
+        }
+        return getBookmarks();
+      })
+      .finally(() => {
+        bookmarkSyncPromise = null;
+        updateBookmarkBadge();
+        if (window.__searchType === "saved") renderSavedBookmarks();
+        initBookmarkBtns();
+      });
+    return bookmarkSyncPromise;
+  }
+  async function persistBookmarkAdd(item) {
+    if (!bookmarkAccountUser) return;
+    const resp = await fetchJson("/api/user/bookmarks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: item.url, title: item.title, snippet: item.snippet }),
+    });
+    if (resp.ok && resp.data && resp.data.id != null) {
+      bookmarkServerIds.set(item.url, resp.data.id);
+      return;
+    }
+    if (resp.status !== 401) {
+      showToast(userFacingApiError(resp.data && resp.data.error, "Bookmark saved locally, but account sync failed."), "error");
+    }
+  }
+  async function persistBookmarkRemove(url) {
+    if (!bookmarkAccountUser) return;
+    const id = bookmarkServerIds.get(url);
+    const target = id != null
+      ? `/api/user/bookmarks/${encodeURIComponent(String(id))}`
+      : `/api/user/bookmarks?url=${encodeURIComponent(url)}`;
+    const resp = await fetchJson(target, { method: "DELETE" });
+    if (resp.ok) {
+      bookmarkServerIds.delete(url);
+      return;
+    }
+    if (resp.status !== 401) {
+      showToast(userFacingApiError(resp.data && resp.data.error, "Bookmark removal synced locally, but account sync failed."), "error");
+    }
+  }
   function addBookmark(url, title, snippet) {
+    const item = normalizeBookmarkItem({ url, title, snippet, saved: Date.now() });
     const items = getBookmarks().filter(b => b.url !== url);
-    items.unshift({ url, title, snippet, saved: Date.now() });
+    if (item) items.unshift(item);
     saveBookmarks(items);
+    if (item) persistBookmarkAdd(item).catch(() => {});
   }
   function removeBookmark(url) {
     saveBookmarks(getBookmarks().filter(b => b.url !== url));
+    persistBookmarkRemove(url).catch(() => {});
   }
   function updateBookmarkBadge() {
     const badge = document.getElementById("bookmark-count-badge");
@@ -2175,41 +2492,42 @@ document.addEventListener("DOMContentLoaded", () => {
           btn.classList.add("bookmarked");
         }
         updateBookmarkBadge();
+        if (window.__searchType === "saved") renderSavedBookmarks();
+      });
+    });
+  }
+  function renderSavedBookmarks() {
+    const savedContainer = document.getElementById("saved-results-container");
+    if (!savedContainer) return;
+    const bookmarks = getBookmarks();
+    if (!bookmarks.length) {
+      savedContainer.innerHTML = '<p class="no-results">No saved results yet. Click the bookmark icon on any result to save it.</p>';
+      return;
+    }
+    savedContainer.innerHTML = bookmarks.map(b => `
+      <article class="result saved-result" data-url="${esc(b.url)}">
+        <button class="bookmark-remove-btn" data-url="${esc(b.url)}" aria-label="Remove bookmark" title="Remove">&#10005;</button>
+        <a href="${esc(b.url)}" target="_blank" rel="noopener" class="result-title">${esc(b.title)}</a>
+        <cite class="result-url">${esc(b.url)}</cite>
+        <p class="result-snippet">${esc(b.snippet || "")}</p>
+      </article>
+    `).join("");
+    savedContainer.querySelectorAll(".bookmark-remove-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        removeBookmark(btn.dataset.url);
+        renderSavedBookmarks();
+        updateBookmarkBadge();
       });
     });
   }
 
   initBookmarkBtns();
   updateBookmarkBadge();
-
-  // Render saved tab
   if (window.__searchType === "saved") {
-    const savedContainer = document.getElementById("saved-results-container");
-    if (savedContainer) {
-      const bookmarks = getBookmarks();
-      if (!bookmarks.length) {
-        savedContainer.innerHTML = '<p class="no-results">No saved results yet. Click the bookmark icon on any result to save it.</p>';
-      } else {
-        savedContainer.innerHTML = bookmarks.map(b => `
-          <article class="result saved-result" data-url="${esc(b.url)}">
-            <button class="bookmark-remove-btn" data-url="${esc(b.url)}" aria-label="Remove bookmark" title="Remove">&#10005;</button>
-            <a href="${esc(b.url)}" target="_blank" rel="noopener" class="result-title">${esc(b.title)}</a>
-            <cite class="result-url">${esc(b.url)}</cite>
-            <p class="result-snippet">${esc(b.snippet || "")}</p>
-          </article>
-        `).join("");
-        savedContainer.querySelectorAll(".bookmark-remove-btn").forEach(btn => {
-          btn.addEventListener("click", () => {
-            removeBookmark(btn.dataset.url);
-            btn.closest(".saved-result").remove();
-            updateBookmarkBadge();
-            if (!getBookmarks().length) {
-              savedContainer.innerHTML = '<p class="no-results">No saved results.</p>';
-            }
-          });
-        });
-      }
-    }
+    renderSavedBookmarks();
+  }
+  if (bookmarkAccountUser) {
+    syncBookmarksWithServer({ silent: true }).catch(() => {});
   }
 
   // ===== Related Searches =====

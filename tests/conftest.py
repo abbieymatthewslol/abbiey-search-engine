@@ -90,10 +90,14 @@ def disable_retrieval_pipeline(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def clear_cache():
-    """Clear the result cache before each test."""
-    from app import _cache, _cache_lock
+    """Clear the result cache and search counters before each test."""
+    from app import _cache, _cache_lock, _search_counters, _search_counter_lock
     with _cache_lock:
         _cache.clear()
+    with _search_counter_lock:
+        _search_counters.clear()
     yield
     with _cache_lock:
         _cache.clear()
+    with _search_counter_lock:
+        _search_counters.clear()

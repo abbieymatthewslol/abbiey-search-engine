@@ -10,6 +10,14 @@
     <meta name="deploy-hash" content="{{ deploy_hash }}">
     {% include 'includes/google_site_verification.html' %}
     {% include 'includes/google_analytics.html' %}
+    {% block canonical %}
+    <link rel="canonical" href="{{ site_base_url }}{{ request.path }}">
+    {% endblock %}
+    <!-- Vercel Speed Insights -->
+    <script>
+        window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
+    </script>
+    <script defer src="/_vercel/speed-insights/script.js"></script>
     <!-- SEO & PWA -->
     <meta name="description" content="{% block meta_description %}abbiey.search — Private, fast, no-tracking search engine.{% endblock %}">
     <meta property="og:type" content="website">

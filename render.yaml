@@ -10,5 +10,13 @@ services:
       - key: SECRET_KEY
         generateValue: true
       - key: BASE_URL
-        value: https://abbieysearch.com
-    healthCheckPath: /
+        sync: false
+      - key: SITE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_DB_URL
+        sync: false
+    healthCheckPath: /health

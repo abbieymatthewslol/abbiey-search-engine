@@ -7,7 +7,12 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=deploy_hash) }}">
     {% include 'includes/google_site_verification.html' %}
     {% include 'includes/google_analytics.html' %}
-    <meta name="description" content="Private search — no logs, no profiling. Nobody's watching.">
+    <!-- Vercel Speed Insights -->
+    <script>
+        window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
+    </script>
+    <script defer src="/_vercel/speed-insights/script.js"></script>
+    <meta name="description" content="Private search — no logs, no profiling. Your searches stay yours.">
     <link rel="canonical" href="{{ site_base_url }}/landing">
 </head>
 <body>
@@ -19,12 +24,12 @@
         <h1>Search with clarity</h1>
         <p class="landing-lead">
             abbiey.search is for people who want results — not a dossier. We do not log your queries,
-            sell your interests, or train on what you type. <strong>nobody's watching</strong> over your shoulder.
+            sell your interests, or train on what you type. <strong>Your searches stay yours.</strong>
         </p>
         <ul class="landing-points">
-            <li>answers over obstacles</li>
-            <li>context over constraints</li>
-            <li>clarity over confusion</li>
+            <li>Answers over obstacles</li>
+            <li>Context over constraints</li>
+            <li>Clarity over confusion</li>
         </ul>
         <p><a href="/search" class="header-btn">Start searching</a></p>
     </main>
