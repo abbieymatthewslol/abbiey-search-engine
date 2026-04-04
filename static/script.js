@@ -82,6 +82,9 @@ document.addEventListener("DOMContentLoaded", () => {
     } catch (_) {
       data = null;
     }
+    if (resp.status === 429) {
+      showToast("You're sending requests too quickly. Please wait a moment and try again.");
+    }
     return { ok: resp.ok, status: resp.status, data, response: resp };
   }
 

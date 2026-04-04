@@ -82,7 +82,7 @@
     // (no rewrite needed, they're just text)
 
     updateModeIndicator();
-    if (count) console.log(`[onion-rewriter] Rewrote ${count} links (mode: ${activeMode})`);
+    // rewrite complete — no-op in production
   }
 
   // ---------------------------------------------------------------------------

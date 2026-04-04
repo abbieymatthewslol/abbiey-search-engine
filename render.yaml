@@ -10,11 +10,11 @@ services:
       - key: SECRET_KEY
         generateValue: true
       - key: BASE_URL
-        value: https://abbieysearch.com
+        sync: false
       - key: SITE_URL
-        value: https://www.abbieysearch.com
+        sync: false
       - key: SUPABASE_URL
-        value: https://xwxscvllmghyogddpmii.supabase.co
+        sync: false
       - key: SUPABASE_ANON_KEY
         sync: false
       - key: SUPABASE_DB_URL
