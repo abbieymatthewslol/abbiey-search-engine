@@ -127,6 +127,15 @@ STRIPE_API_KEYS_CHECKOUT_URL = os.environ.get(
     "STRIPE_API_KEYS_CHECKOUT_URL",
     "https://buy.stripe.com/5kQ7sK9wgboE26GfFlb7y0c",
 )
+STRIPE_SEARCH_CHECKOUT_URL = os.environ.get(
+    "STRIPE_SEARCH_CHECKOUT_URL",
+    "https://buy.stripe.com/28E7sKbEo0K07r0al1b7y0b",
+)
+STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+try:
+    import stripe as _stripe_mod
+except ImportError:
+    _stripe_mod = None
 ABBIEY_API_KEY_PREFIX = "abb_sk_live_"
 _MAX_API_KEYS_PER_USER = 10
 
@@ -207,6 +216,13 @@ _SEARCH_UNLOCK_COOKIE = "abbiey_search_unlock"
 _SEARCH_UNLOCK_COOKIE_MAX_AGE = 315360000
 _SEARCH_CHECKOUT_PENDING_SESSION_KEY = "abbiey_search_checkout_started_at"
 _SEARCH_CHECKOUT_PENDING_WINDOW_SECONDS = 4 * 60 * 60
+_SEARCH_CHECKOUT_PENDING_COOKIE = "abbiey_search_checkout_pending"
+_SEARCH_CHECKOUT_PENDING_COOKIE_MAX_AGE = 4 * 60 * 60
+_SERVER_FREE_SEARCH_LIMIT = int(os.environ.get("ABBIEY_FREE_SEARCH_LIMIT", "15"))
+
+# In-memory daily search counter per IP (reset daily; supplements client-side limit)
+_search_counter_lock = threading.Lock()
+_search_counters: dict[str, dict] = {}  # ip -> {"count": int, "date": str}
 
 # ---------------------------------------------------------------------------
 # Turso / libSQL persistent DB (optional upgrade — survives Vercel cold starts)
@@ -454,6 +470,29 @@ def _init_pg_tables():
             last_seen    TIMESTAMPTZ DEFAULT NOW()
         );
         CREATE INDEX IF NOT EXISTS idx_search_unlocks_user ON search_unlocks(user_id);
+
+        CREATE TABLE IF NOT EXISTS pending_checkouts (
+            id              SERIAL PRIMARY KEY,
+            checkout_token  TEXT UNIQUE NOT NULL,
+            user_id         INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            client_ip       TEXT DEFAULT '',
+            status          TEXT NOT NULL DEFAULT 'pending',
+            created_at      TIMESTAMPTZ DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_pc_token ON pending_checkouts(checkout_token);
+
+        CREATE TABLE IF NOT EXISTS payment_events (
+            id                  SERIAL PRIMARY KEY,
+            stripe_event_id     TEXT UNIQUE,
+            stripe_session_id   TEXT,
+            checkout_token      TEXT,
+            customer_email      TEXT DEFAULT '',
+            amount_cents        INTEGER DEFAULT 0,
+            currency            TEXT DEFAULT 'usd',
+            status              TEXT NOT NULL DEFAULT 'completed',
+            created_at          TIMESTAMPTZ DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_pe_checkout ON payment_events(checkout_token);
 
         CREATE TABLE IF NOT EXISTS waitlist (
             id         SERIAL PRIMARY KEY,
@@ -731,6 +770,30 @@ def _init_users_db():
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
             );
             CREATE INDEX IF NOT EXISTS idx_search_unlocks_user ON search_unlocks(user_id);
+
+            CREATE TABLE IF NOT EXISTS pending_checkouts (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                checkout_token  TEXT UNIQUE NOT NULL,
+                user_id         INTEGER,
+                client_ip       TEXT DEFAULT '',
+                status          TEXT NOT NULL DEFAULT 'pending',
+                created_at      TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_pc_token ON pending_checkouts(checkout_token);
+
+            CREATE TABLE IF NOT EXISTS payment_events (
+                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                stripe_event_id     TEXT UNIQUE,
+                stripe_session_id   TEXT,
+                checkout_token      TEXT,
+                customer_email      TEXT DEFAULT '',
+                amount_cents        INTEGER DEFAULT 0,
+                currency            TEXT DEFAULT 'usd',
+                status              TEXT NOT NULL DEFAULT 'completed',
+                created_at          TEXT DEFAULT (datetime('now'))
+            );
+            CREATE INDEX IF NOT EXISTS idx_pe_checkout ON payment_events(checkout_token);
         """)
 
 
@@ -834,12 +897,30 @@ def _set_search_unlock_cookie(resp: Response, token: str) -> None:
 
 
 def _search_checkout_pending() -> bool:
+    # Check session first (original approach)
     raw = session.get(_SEARCH_CHECKOUT_PENDING_SESSION_KEY)
     try:
         started = float(raw)
     except (TypeError, ValueError):
-        return False
-    return (time.time() - started) <= _SEARCH_CHECKOUT_PENDING_WINDOW_SECONDS
+        started = None
+    if started and (time.time() - started) <= _SEARCH_CHECKOUT_PENDING_WINDOW_SECONDS:
+        return True
+    # Fallback: check signed cookie (survives SECRET_KEY rotation / redeploys)
+    cookie_val = request.cookies.get(_SEARCH_CHECKOUT_PENDING_COOKIE, "")
+    if cookie_val:
+        parts = cookie_val.split(".", 1)
+        if len(parts) == 2:
+            ts_str, sig = parts
+            try:
+                ts = float(ts_str)
+            except (TypeError, ValueError):
+                return False
+            expected = hmac.new(
+                b"abbiey-checkout-pending", ts_str.encode(), hashlib.sha256
+            ).hexdigest()[:16]
+            if hmac.compare_digest(sig, expected) and (time.time() - ts) <= _SEARCH_CHECKOUT_PENDING_WINDOW_SECONDS:
+                return True
+    return False
 
 
 def _search_access_token_for_user(uid: int | None) -> str | None:
@@ -866,6 +947,20 @@ def _search_access_granted(uid: int | None = None, token: str | None = None) -> 
         if rows:
             return True
     return False
+
+
+def _server_search_limit_reached(client_ip: str) -> bool:
+    """Check if a free-tier IP has exceeded the daily server-side search limit."""
+    if not client_ip or _SERVER_FREE_SEARCH_LIMIT <= 0:
+        return False
+    today = time.strftime("%Y-%m-%d")
+    with _search_counter_lock:
+        entry = _search_counters.get(client_ip)
+        if not entry or entry["date"] != today:
+            _search_counters[client_ip] = {"count": 1, "date": today}
+            return False
+        entry["count"] += 1
+        return entry["count"] > _SERVER_FREE_SEARCH_LIMIT
 
 
 def _upsert_search_unlock(uid: int | None, token: str, source: str = "payment_return") -> str:
@@ -2205,6 +2300,7 @@ _TEMPLATE_DEFAULTS = dict(
     show_ai_summary_block=False,
     search_notice=None,
     current_user_has_paid_access=False,
+    stripe_search_checkout_url=STRIPE_SEARCH_CHECKOUT_URL,
 )
 
 
@@ -2287,26 +2383,140 @@ def api_search_access():
 @app.route("/api/search-access/prepare-checkout", methods=["POST"])
 @limiter.limit("30/minute")
 def api_search_access_prepare_checkout():
-    session[_SEARCH_CHECKOUT_PENDING_SESSION_KEY] = str(time.time())
-    return jsonify({"ok": True})
+    ts_str = str(time.time())
+    session[_SEARCH_CHECKOUT_PENDING_SESSION_KEY] = ts_str
+    sig = hmac.new(
+        b"abbiey-checkout-pending", ts_str.encode(), hashlib.sha256
+    ).hexdigest()[:16]
+    # Generate a checkout reference token so Stripe webhook can link payment to user
+    checkout_token = secrets.token_urlsafe(24)
+    uid = _session_user_id_int(session.get("user_id"))
+    client_ip = request.remote_addr or ""
+    try:
+        _users_execute(
+            "INSERT INTO pending_checkouts (checkout_token, user_id, client_ip) VALUES (?,?,?)",
+            [checkout_token, uid, client_ip],
+        )
+    except Exception:
+        logger.exception("pending_checkout_insert_failed")
+    resp = jsonify({"ok": True, "checkout_token": checkout_token, "checkout_url": STRIPE_SEARCH_CHECKOUT_URL})
+    resp.set_cookie(
+        _SEARCH_CHECKOUT_PENDING_COOKIE,
+        f"{ts_str}.{sig}",
+        max_age=_SEARCH_CHECKOUT_PENDING_COOKIE_MAX_AGE,
+        httponly=True,
+        samesite="Lax",
+        secure=app.config.get("SESSION_COOKIE_SECURE", False),
+    )
+    return resp
 
 
 @app.route("/api/search-access/claim", methods=["POST"])
 @limiter.limit("30/minute")
 def api_search_access_claim():
-    if not _search_checkout_pending():
+    checkout_token = (request.json or {}).get("checkout_token", "") if request.is_json else ""
+    # Check if this payment was already verified by Stripe webhook
+    webhook_verified = False
+    if checkout_token:
+        try:
+            rows = _users_execute(
+                "SELECT 1 AS ok FROM payment_events WHERE checkout_token=? LIMIT 1",
+                [checkout_token],
+            )
+            webhook_verified = bool(rows)
+        except Exception:
+            pass
+    if not webhook_verified and not _search_checkout_pending():
         return jsonify({"error": "checkout_not_pending", "message": "Checkout could not be verified."}), 409
     uid = _session_user_id_int(session.get("user_id"))
     token = _search_unlock_cookie_token() or secrets.token_urlsafe(32)
     try:
-        token = _upsert_search_unlock(uid, token, source="payment_return")
+        token = _upsert_search_unlock(uid, token, source="webhook_verified" if webhook_verified else "payment_return")
     except Exception:
         logger.exception("search_access_claim_failed")
         return jsonify({"error": "unavailable", "message": "Unlimited access could not be restored right now."}), 503
+    # Mark the pending checkout as claimed
+    if checkout_token:
+        try:
+            _users_execute(
+                "UPDATE pending_checkouts SET status='claimed' WHERE checkout_token=?",
+                [checkout_token],
+            )
+        except Exception:
+            pass
     session.pop(_SEARCH_CHECKOUT_PENDING_SESSION_KEY, None)
     resp = jsonify({"ok": True, "unlocked": True, "source": "account" if uid else "browser"})
     _set_search_unlock_cookie(resp, token)
+    resp.delete_cookie(_SEARCH_CHECKOUT_PENDING_COOKIE)
     return resp
+
+
+# ---------------------------------------------------------------------------
+# Stripe Webhook — server-side payment verification
+# ---------------------------------------------------------------------------
+@app.route("/webhooks/stripe", methods=["POST"])
+@limiter.exempt
+def stripe_webhook():
+    """Verify Stripe webhook signature and auto-grant access on successful payment."""
+    payload = request.get_data(as_text=True)
+    sig_header = request.headers.get("Stripe-Signature", "")
+
+    if not STRIPE_WEBHOOK_SECRET:
+        logger.warning("stripe_webhook: STRIPE_WEBHOOK_SECRET not set — ignoring webhook")
+        return jsonify({"received": True}), 200
+
+    if not _stripe_mod:
+        logger.error("stripe_webhook: stripe package not installed")
+        return jsonify({"error": "stripe not available"}), 500
+
+    try:
+        event = _stripe_mod.Webhook.construct_event(payload, sig_header, STRIPE_WEBHOOK_SECRET)
+    except ValueError:
+        logger.warning("stripe_webhook: invalid payload")
+        return jsonify({"error": "invalid payload"}), 400
+    except _stripe_mod.error.SignatureVerificationError:
+        logger.warning("stripe_webhook: invalid signature")
+        return jsonify({"error": "invalid signature"}), 400
+
+    if event["type"] == "checkout.session.completed":
+        sess = event["data"]["object"]
+        checkout_token = sess.get("client_reference_id", "")
+        customer_email = sess.get("customer_details", {}).get("email", "") or sess.get("customer_email", "")
+        amount = sess.get("amount_total", 0)
+        currency = sess.get("currency", "usd")
+        stripe_session_id = sess.get("id", "")
+        stripe_event_id = event.get("id", "")
+
+        # Record the payment event (idempotent via UNIQUE stripe_event_id)
+        try:
+            _users_execute(
+                "INSERT INTO payment_events (stripe_event_id, stripe_session_id, checkout_token, customer_email, amount_cents, currency) "
+                "VALUES (?,?,?,?,?,?)",
+                [stripe_event_id, stripe_session_id, checkout_token, customer_email, amount, currency],
+            )
+        except Exception:
+            logger.info("stripe_webhook: payment_event already recorded (event_id=%s)", stripe_event_id)
+
+        # Auto-grant search unlock if checkout_token links to a pending checkout
+        if checkout_token:
+            try:
+                rows = _users_execute(
+                    "SELECT user_id FROM pending_checkouts WHERE checkout_token=? AND status='pending' LIMIT 1",
+                    [checkout_token],
+                )
+                if rows:
+                    uid = _session_user_id_int(rows[0].get("user_id"))
+                    token = secrets.token_urlsafe(32)
+                    _upsert_search_unlock(uid, token, source="stripe_webhook")
+                    _users_execute(
+                        "UPDATE pending_checkouts SET status='webhook_verified' WHERE checkout_token=?",
+                        [checkout_token],
+                    )
+                    logger.info("stripe_webhook: auto-granted access for checkout_token=%s", checkout_token[:8])
+            except Exception:
+                logger.exception("stripe_webhook: auto-grant failed for checkout_token=%s", checkout_token[:8] if checkout_token else "?")
+
+    return jsonify({"received": True}), 200
 
 
 ACCESS_RESOURCES_JSON = {
@@ -2439,6 +2649,16 @@ def search():
             "index.html",
             **{**_TEMPLATE_DEFAULTS, "current_user_has_paid_access": current_user_has_paid_access},
         )
+
+    # Server-side search limit for free-tier users
+    if query and not current_user_has_paid_access:
+        client_ip = request.remote_addr or ""
+        if _server_search_limit_reached(client_ip):
+            return render_template(
+                "index.html",
+                **{**_TEMPLATE_DEFAULTS, "current_user_has_paid_access": False,
+                   "search_notice": "You\u2019ve reached your daily free search limit. Unlock unlimited searches or wait 24 hours."},
+            ), 429
 
     if search_type == "saved":
         return render_template(

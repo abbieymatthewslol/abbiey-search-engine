@@ -178,9 +178,17 @@ document.addEventListener("DOMContentLoaded", () => {
       return false;
     }
     async function claimReturnedUnlock() {
+      // Retrieve the checkout token stored before redirect to Stripe
+      var checkoutToken = "";
+      try { checkoutToken = localStorage.getItem("abbiey_checkout_token") || ""; } catch (_) {}
       try {
-        const result = await fetchJson(ACCESS_URLS.claim, { method: "POST" });
+        const result = await fetchJson(ACCESS_URLS.claim, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ checkout_token: checkoutToken }),
+        });
         if (result.ok && result.data && result.data.unlocked) {
+          try { localStorage.removeItem("abbiey_checkout_token"); } catch (_) {}
           applyLocalUnlock();
           return true;
         }
@@ -193,15 +201,18 @@ document.addEventListener("DOMContentLoaded", () => {
       }
       return false;
     }
-    function markCheckoutPending() {
+    async function markCheckoutPending() {
+      // Use fetch (not sendBeacon) so the response cookie gets stored
       try {
-        if (navigator.sendBeacon && navigator.sendBeacon(ACCESS_URLS.prepare)) {
-          return;
+        const result = await fetchJson(ACCESS_URLS.prepare, { method: "POST" });
+        if (result.ok && result.data) {
+          return {
+            checkoutToken: result.data.checkout_token || "",
+            checkoutUrl: result.data.checkout_url || "",
+          };
         }
       } catch (_) {}
-      try {
-        fetch(ACCESS_URLS.prepare, { method: "POST", credentials: "same-origin", keepalive: true }).catch(() => {});
-      } catch (_) {}
+      return null;
     }
 
     function unlocked() {
@@ -234,7 +245,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const params = new URLSearchParams(window.location.search);
     if (params.get("unlocked") === "1" || params.get("paid") === "1") {
-      const restored = await claimReturnedUnlock();
+      let restored = await claimReturnedUnlock();
+      if (!restored) {
+        restored = await refreshServerUnlock(true);
+      }
       if (!restored) {
         applyLocalUnlock();
       }
@@ -378,14 +392,26 @@ document.addEventListener("DOMContentLoaded", () => {
     if (payStripe) {
       payStripe.addEventListener(
         "click",
-        () => {
-          markCheckoutPending();
+        async (e) => {
+          e.preventDefault();
+          // Prepare checkout and get a reference token
+          const pending = await markCheckoutPending();
+          const baseUrl = (pending && pending.checkoutUrl) || payStripe.href;
+          let stripeUrl = baseUrl;
+          if (pending && pending.checkoutToken) {
+            try {
+              localStorage.setItem("abbiey_checkout_token", pending.checkoutToken);
+              const su = new URL(baseUrl);
+              su.searchParams.set("client_reference_id", pending.checkoutToken);
+              stripeUrl = su.toString();
+            } catch (_) {}
+          }
           try {
             const u = new URL(window.location.href);
             const input = document.getElementById("search-input");
-            const pending = input && input.value.trim() ? input.value.trim() : "";
-            if (pending && !u.searchParams.get("q")) {
-              u.searchParams.set("q", pending);
+            const val = input && input.value.trim() ? input.value.trim() : "";
+            if (val && !u.searchParams.get("q")) {
+              u.searchParams.set("q", val);
             }
             u.searchParams.delete("page");
             const p = u.searchParams;
@@ -397,6 +423,7 @@ document.addEventListener("DOMContentLoaded", () => {
               JSON.stringify({ kind: "search", path })
             );
           } catch (_) {}
+          window.open(stripeUrl, "_blank", "noopener,noreferrer");
         },
         true
       );
