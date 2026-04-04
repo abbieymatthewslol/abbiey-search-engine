@@ -2110,7 +2110,7 @@ document.addEventListener("DOMContentLoaded", () => {
         .then(data => {
           removeMessage(typingId);
           if (data.error) appendMessage("assistant", userFacingChatError(data.error));
-          else { appendMessage("assistant", data.response); chatHistory.push({ role: "user", content: msg }); chatHistory.push({ role: "assistant", content: data.response }); }
+          else { streamMessage("assistant", data.response); chatHistory.push({ role: "user", content: msg }); chatHistory.push({ role: "assistant", content: data.response }); }
         })
         .catch(() => { removeMessage(typingId); appendMessage("assistant", "Connection error. Please try again."); })
         .finally(() => { chatInput.disabled = false; chatSend.disabled = false; chatInput.focus(); });
@@ -2120,33 +2120,93 @@ document.addEventListener("DOMContentLoaded", () => {
     if (chatInput) chatInput.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } });
 
     let msgCounter = 0;
+
+    // Formats raw markdown-lite content to safe HTML
+    function formatChatContent(raw) {
+      return esc(raw)
+        .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+        .replace(/\[(.*?)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
+        .replace(/(?<!="|">)(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>')
+        .replace(/\n/g, "<br>");
+    }
+
     function appendTyping() {
       const id = `msg-${msgCounter++}`;
       const div = document.createElement("div");
-      div.className = "chat-msg chat-msg-assistant typing";
+      div.className = "chat-message assistant typing";
       div.id = id;
       div.innerHTML = `<div class="chat-msg-content">Researching <span class="typing-dots"><span></span><span></span><span></span></span></div>`;
       chatMessages.appendChild(div);
       chatBody.scrollTop = chatBody.scrollHeight;
       return id;
     }
+
     function appendMessage(role, content) {
       const id = `msg-${msgCounter++}`;
       const div = document.createElement("div");
-      div.className = `chat-msg chat-msg-${role}`;
+      div.className = `chat-message ${role}`;
       div.id = id;
-      let formatted = esc(content)
-        .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
-        .replace(/\[(.*?)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
-        .replace(/(?<!="|">)(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>')
-        .replace(/\n/g, "<br>");
-      div.innerHTML = `<div class="chat-msg-content">${formatted}</div>`;
+      div.innerHTML = `<div class="chat-msg-content">${formatChatContent(content)}</div>`;
       chatMessages.appendChild(div);
       chatBody.scrollTop = chatBody.scrollHeight;
       return id;
     }
+
+    // Word-by-word streaming reveal with speed ramp
+    function streamMessage(role, rawContent) {
+      if (!rawContent || rawContent.length < 30) { appendMessage(role, rawContent); return; }
+      const id = `msg-${msgCounter++}`;
+      const div = document.createElement("div");
+      div.className = `chat-message ${role}`;
+      div.id = id;
+      const inner = document.createElement("div");
+      inner.className = "chat-msg-content";
+      div.appendChild(inner);
+      chatMessages.appendChild(div);
+
+      const tokens = rawContent.split(/(\s+)/);
+      let buf = "";
+      let idx = 0;
+
+      function tick() {
+        if (idx >= tokens.length) {
+          inner.innerHTML = formatChatContent(buf);
+          chatBody.scrollTop = chatBody.scrollHeight;
+          return;
+        }
+        buf += tokens[idx++];
+        inner.innerHTML = formatChatContent(buf) + '<span class="chat-cursor"></span>';
+        chatBody.scrollTop = chatBody.scrollHeight;
+        const delay = idx <= 4 ? 68 : idx <= 12 ? 42 : 22;
+        setTimeout(tick, delay);
+      }
+      tick();
+      return id;
+    }
+
     function removeMessage(id) { const el = document.getElementById(id); if (el) el.remove(); }
-  }
+
+    // Auto-collapse to visible strip on results pages so the assistant is discoverable
+    if (searchQuery) {
+      chatOpen = true;
+      chatPanel.classList.add("open", "collapsed");
+      chatFab.classList.add("hidden");
+      // Pulse FAB once when panel collapses back (so user knows it's there)
+    }
+
+    // Header click expands from collapsed state
+    const chatHeader = chatPanel.querySelector(".chat-header");
+    if (chatHeader) {
+      chatHeader.addEventListener("click", (e) => {
+        if (e.target.closest("button")) return;
+        if (chatPanel.classList.contains("collapsed")) {
+          chatPanel.classList.remove("collapsed");
+          if (chatInput) chatInput.focus();
+        }
+      });
+    }
+
+  }  // end if (chatPanel && chatFab)
 
   // ===== Onion Link Verification =====
   if (window.__searchType === "onion") {
