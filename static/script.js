@@ -413,7 +413,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const u = new URL(window.location.href);
             const input = document.getElementById("search-input");
             const val = input && input.value.trim() ? input.value.trim() : "";
-            if (val && !u.searchParams.get("q")) {
+            if (val) {
               u.searchParams.set("q", val);
             }
             u.searchParams.delete("page");
