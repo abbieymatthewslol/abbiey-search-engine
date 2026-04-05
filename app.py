@@ -1579,6 +1579,7 @@ def _security_headers(response):
         csp = (
             "default-src 'self'; "
             "script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com "
+            "https://cdn.jsdelivr.net "
             "https://www.googletagmanager.com https://www.google-analytics.com; "
             "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; "
             "img-src 'self' data: https: blob:; "
