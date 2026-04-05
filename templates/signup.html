@@ -112,7 +112,7 @@
 
 {% block extra_scripts %}
 {% if supabase_auth %}
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="{{ url_for('static', filename='vendor/supabase.min.js') }}"></script>
 <script>
 (function () {
     var sb = window.supabase.createClient({{ supabase_url | tojson }}, {{ supabase_anon_key | tojson }}, {

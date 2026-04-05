@@ -52,8 +52,37 @@ try:
 except ImportError:
     pass
 
+
+def _resolve_flask_secret_key() -> str:
+    """Secret for signing Flask sessions.
+
+    On serverless, a fresh random key per cold start makes cookies from ``POST /auth/callback``
+    unreadable on the next request (OAuth appears to fail after redirect). Prefer ``SECRET_KEY``
+    in env; otherwise derive a stable key from the Postgres URL when running on a serverless host.
+    """
+    sk = (os.environ.get("SECRET_KEY") or "").strip()
+    if sk:
+        return sk
+    serverless = bool(
+        os.environ.get("VERCEL")
+        or os.environ.get("RENDER")
+        or os.environ.get("AWS_LAMBDA_FUNCTION_NAME")
+        or os.environ.get("K_SERVICE")
+    )
+    if serverless:
+        for env_name in ("SUPABASE_DB_URL", "DATABASE_URL"):
+            raw = (os.environ.get(env_name) or "").strip()
+            if len(raw) >= 24:
+                return hashlib.sha256(b"v1|flask-session|" + raw.encode("utf-8", errors="replace")).hexdigest()
+        logging.getLogger(__name__).error(
+            "Serverless without SECRET_KEY and without SUPABASE_DB_URL/DATABASE_URL: "
+            "Flask sessions will not survive across instances. Set SECRET_KEY in environment."
+        )
+    return secrets.token_hex(24)
+
+
 app = Flask(__name__)
-app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", os.urandom(24).hex())
+app.config["SECRET_KEY"] = _resolve_flask_secret_key()
 app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 31536000  # 1-year cache for static files
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
