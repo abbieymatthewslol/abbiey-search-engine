@@ -117,6 +117,7 @@
 (function () {
     var sb = window.supabase.createClient({{ supabase_url | tojson }}, {{ supabase_anon_key | tojson }}, {
         auth: {
+            flowType: 'pkce',
             detectSessionInUrl: true,
             persistSession: true,
             autoRefreshToken: true
@@ -135,6 +136,11 @@
             errEl.style.display = 'none';
             googleBtn.disabled = true;
             googleBtn.innerHTML = 'Redirecting to Google\u2026';
+            try {
+                if (new URLSearchParams(window.location.search).get('abbiey_trace') === '1') {
+                    sessionStorage.setItem('abbiey_auth_trace', '1');
+                }
+            } catch (e) {}
             try {
                 var res = await sb.auth.signInWithOAuth({
                     provider: 'google',

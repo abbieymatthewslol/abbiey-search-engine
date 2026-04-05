@@ -13,20 +13,105 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script>
 (function () {
+    var _traceEl = null;
+    try {
+        if (sessionStorage.getItem('abbiey_auth_trace') === '1') {
+            _traceEl = document.createElement('pre');
+            _traceEl.setAttribute('aria-label', 'Auth debug trace');
+            _traceEl.style.cssText = 'position:fixed;bottom:0;left:0;right:0;max-height:35vh;overflow:auto;background:#111;color:#ddd;font-size:11px;z-index:99999;padding:8px;margin:0;font-family:ui-monospace,monospace;white-space:pre-wrap;word-break:break-all;';
+            (document.body || document.documentElement).appendChild(_traceEl);
+        }
+    } catch (e) {}
+
+    // #region agent log
+    function _dbg(loc, msg, data, hid) {
+        var payload = {
+            sessionId: '055712',
+            location: loc,
+            message: msg,
+            timestamp: Date.now(),
+            hypothesisId: hid,
+            runId: 'post-fix'
+        };
+        var d = data || {};
+        for (var k in d) {
+            if (Object.prototype.hasOwnProperty.call(d, k)) payload[k] = d[k];
+        }
+        if (_traceEl) {
+            try {
+                _traceEl.textContent += JSON.stringify(payload).slice(0, 800) + '\n';
+            } catch (e) {}
+        }
+        fetch('/auth/debug-client-log', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+            credentials: 'same-origin'
+        }).catch(function () {});
+        fetch('http://127.0.0.1:7645/ingest/9575c4e9-0570-4ed2-b46c-4af40155e52f', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '055712' },
+            body: JSON.stringify(payload)
+        }).catch(function () {});
+    }
+    // #endregion
+
     var SB_URL = {{ supabase_url | tojson }};
     var SB_KEY = {{ supabase_anon_key | tojson }};
+    // #region agent log
+    _dbg('auth_confirm.html:boot', 'before createClient', {
+        hasUrl: !!(SB_URL && String(SB_URL).length),
+        hasKey: !!(SB_KEY && String(SB_KEY).length),
+        hasLib: typeof window.supabase !== 'undefined'
+    }, 'B');
+    // #endregion
 
-    var sb = window.supabase.createClient(SB_URL, SB_KEY, {
-        auth: {
-            detectSessionInUrl: true,
-            persistSession: true,
-            autoRefreshToken: true
+    var sb;
+    try {
+        sb = window.supabase.createClient(SB_URL, SB_KEY, {
+            auth: {
+                flowType: 'pkce',
+                detectSessionInUrl: true,
+                persistSession: true,
+                autoRefreshToken: true
+            }
+        });
+        // #region agent log
+        _dbg('auth_confirm.html:createClient', 'ok', {}, 'B');
+        // #endregion
+    } catch (e) {
+        // #region agent log
+        _dbg('auth_confirm.html:createClient', 'throw', {
+            name: e && e.name,
+            msg: (e && e.message) ? String(e.message).slice(0, 160) : ''
+        }, 'B');
+        // #endregion
+        var _er = document.getElementById('sb-error');
+        if (_er) {
+            _er.style.display = 'block';
+            _er.innerHTML = '<p>Auth init failed. <a href="/login">Try again</a>.</p>';
         }
-    });
+        return;
+    }
 
     var errEl = document.getElementById('sb-error');
     var statusEl = document.getElementById('status-msg');
     var done = false;
+
+    function emailFromUser(u) {
+        if (!u) return '';
+        if (u.email) return String(u.email).trim();
+        var meta = u.user_metadata || {};
+        if (meta.email) return String(meta.email).trim();
+        var ids = u.identities || [];
+        for (var i = 0; i < ids.length; i++) {
+            var id = ids[i];
+            if (id && id.identity_data && id.identity_data.email) {
+                return String(id.identity_data.email).trim();
+            }
+        }
+        return '';
+    }
 
     function showErr(msg) {
         errEl.style.display = 'block';
@@ -45,20 +130,40 @@
         statusEl.textContent = 'Almost there…';
 
         try {
-            await sb.auth.refreshSession();
-
-            var user = session.user;
+            var gs = await sb.auth.getSession();
+            var effSession = (gs.data && gs.data.session) || session;
+            var user = effSession && effSession.user;
+            if (!user) {
+                showErr('Invalid session. <a href="/login">Try again</a>.');
+                return;
+            }
+            var emailAddr = emailFromUser(user);
+            // #region agent log
+            _dbg('auth_confirm.html:syncAndRedirect', 'before callback', {
+                hasUser: !!user,
+                hasEmail: !!emailAddr,
+                usedRefreshedSession: effSession !== session
+            }, 'B');
+            // #endregion
+            if (!emailAddr || emailAddr.indexOf('@') < 0) {
+                showErr('No email on this account. <a href="/login">Try again</a> with a provider that shares email.');
+                return;
+            }
 
             var cb = await fetch('/auth/callback', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
                 body: JSON.stringify({
-                    email: user.email,
+                    email: emailAddr,
                     display_name: (user.user_metadata || {}).full_name || ''
                 })
             });
 
             var data = await cb.json().catch(() => null);
+            // #region agent log
+            _dbg('auth_confirm.html:callback_response', 'POST /auth/callback', { status: cb.status, ok: !!(data && data.ok), err: data && data.error }, 'A,C');
+            // #endregion
 
             if (cb.ok && data && data.ok) {
                 window.location.href = '/search';
@@ -67,26 +172,40 @@
             }
 
         } catch (e) {
+            // #region agent log
+            _dbg('auth_confirm.html:sync_err', 'syncAndRedirect catch', { name: e && e.name, msg: (e && e.message) ? String(e.message).slice(0, 120) : '' }, 'E');
+            // #endregion
             showErr('Something went wrong. <a href="/login">Try again</a>.');
         }
     }
 
     (async function () {
         try {
-            var { data } = await sb.auth.getSession();
-
-            if (data && data.session) {
-                await syncAndRedirect(data.session);
-                return;
-            }
-
             sb.auth.onAuthStateChange(async function (event, session) {
+                var ev = String(event);
+                // #region agent log
+                if (ev === 'INITIAL_SESSION' || ev === 'SIGNED_IN') {
+                    _dbg('auth_confirm.html:onAuthStateChange', 'event', { event: ev, hasSession: !!session }, 'B');
+                }
+                // #endregion
                 if (session && !done) {
                     await syncAndRedirect(session);
                 }
             });
 
+            var { data } = await sb.auth.getSession();
+            // #region agent log
+            _dbg('auth_confirm.html:getSession', 'after subscribe', { hasSession: !!(data && data.session) }, 'B');
+            // #endregion
+
+            if (data && data.session && !done) {
+                await syncAndRedirect(data.session);
+            }
+
         } catch (e) {
+            // #region agent log
+            _dbg('auth_confirm.html:init_err', 'auth init catch', { name: e && e.name }, 'E');
+            // #endregion
             showErr('Auth init failed. <a href="/login">Try again</a>.');
         }
     })();
