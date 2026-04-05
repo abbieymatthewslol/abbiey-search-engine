@@ -124,11 +124,6 @@
             googleBtn.disabled = true;
             googleBtn.innerHTML = 'Redirecting to Google\u2026';
             try {
-                if (new URLSearchParams(window.location.search).get('abbiey_trace') === '1') {
-                    sessionStorage.setItem('abbiey_auth_trace', '1');
-                }
-            } catch (e) {}
-            try {
                 var res = await sb.auth.signInWithOAuth({
                     provider: 'google',
                     options: {
@@ -169,9 +164,11 @@
             var cb = await fetch('/auth/callback', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
                 body: JSON.stringify({ email: res.data.user.email, display_name: (res.data.user.user_metadata || {}).full_name || '' })
             });
-            if (cb.ok) { window.location.href = nextUrl || '/search'; return; }
+            var cdata = await cb.json().catch(function () { return null; });
+            if (cb.ok && cdata && cdata.ok) { window.location.href = nextUrl || '/search'; return; }
             showErr('Signed in but could not sync session. Please try again.');
         } catch (err) { showErr('Something went wrong. Please try again.'); }
         submitBtn.disabled = false;
