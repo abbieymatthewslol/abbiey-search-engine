@@ -52,8 +52,37 @@ try:
 except ImportError:
     pass
 
+
+def _resolve_flask_secret_key() -> str:
+    """Secret for signing Flask sessions.
+
+    On serverless, a fresh random key per cold start makes cookies from ``POST /auth/callback``
+    unreadable on the next request (OAuth appears to fail after redirect). Prefer ``SECRET_KEY``
+    in env; otherwise derive a stable key from the Postgres URL when running on a serverless host.
+    """
+    sk = (os.environ.get("SECRET_KEY") or "").strip()
+    if sk:
+        return sk
+    serverless = bool(
+        os.environ.get("VERCEL")
+        or os.environ.get("RENDER")
+        or os.environ.get("AWS_LAMBDA_FUNCTION_NAME")
+        or os.environ.get("K_SERVICE")
+    )
+    if serverless:
+        for env_name in ("SUPABASE_DB_URL", "DATABASE_URL"):
+            raw = (os.environ.get(env_name) or "").strip()
+            if len(raw) >= 24:
+                return hashlib.sha256(b"v1|flask-session|" + raw.encode("utf-8", errors="replace")).hexdigest()
+        logging.getLogger(__name__).error(
+            "Serverless without SECRET_KEY and without SUPABASE_DB_URL/DATABASE_URL: "
+            "Flask sessions will not survive across instances. Set SECRET_KEY in environment."
+        )
+    return secrets.token_hex(24)
+
+
 app = Flask(__name__)
-app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", os.urandom(24).hex())
+app.config["SECRET_KEY"] = _resolve_flask_secret_key()
 app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 31536000  # 1-year cache for static files
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
@@ -1579,6 +1608,7 @@ def _security_headers(response):
         csp = (
             "default-src 'self'; "
             "script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com "
+            "https://cdn.jsdelivr.net "
             "https://www.googletagmanager.com https://www.google-analytics.com; "
             "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; "
             "img-src 'self' data: https: blob:; "
@@ -6560,33 +6590,130 @@ def logout():
     return redirect(url_for("index"))
 
 
+def _agent_debug_ndjson(location: str, message: str, data: dict, hypothesis_id: str, run_id: str = "post-fix") -> None:
+    # region agent log
+    import tempfile
+
+    payload = {
+        "sessionId": "055712",
+        "timestamp": int(time.time() * 1000),
+        "location": location,
+        "message": message,
+        "data": data,
+        "hypothesisId": hypothesis_id,
+        "runId": run_id,
+    }
+    line = json.dumps(payload, default=str) + "\n"
+    for log_path in (
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "debug-055712.log"),
+        os.path.join(tempfile.gettempdir(), "debug-055712.log"),
+    ):
+        try:
+            with open(log_path, "a", encoding="utf-8") as f:
+                f.write(line)
+        except Exception:
+            pass
+    try:
+        logger.warning("DEBUG055712 %s", line.strip())
+    except Exception:
+        pass
+    # endregion
+
+
 @app.route("/auth/callback", methods=["POST"])
 @limiter.limit("60/minute")
 def auth_callback():
     """Client-side Supabase Auth sends us the session after sign-in/sign-up.
     We sync the user into our DB and set a Flask session."""
+    # region agent log
+    _agent_debug_ndjson(
+        "app.py:auth_callback:entry",
+        "auth_callback entered",
+        {"sb_auth_enabled": _SUPABASE_AUTH_ENABLED, "content_type": (request.content_type or "")[:64]},
+        "D",
+    )
+    # endregion
     if not _SUPABASE_AUTH_ENABLED:
         return jsonify({"error": "Supabase Auth not configured"}), 400
     data = request.get_json(silent=True) or {}
     email = (data.get("email") or "").strip().lower()
     display_name = (data.get("display_name") or "").strip()
+    # region agent log
+    _agent_debug_ndjson(
+        "app.py:auth_callback:parsed",
+        "parsed body",
+        {
+            "email_ok": bool(email and "@" in email),
+            "display_len": len(display_name),
+            "json_keys": sorted(data.keys()) if isinstance(data, dict) else [],
+        },
+        "A",
+    )
+    # endregion
     if not email or "@" not in email:
         return jsonify({"error": "Invalid email"}), 400
     try:
         uid = _sync_supabase_auth_user(email, display_name)
     except Exception:
         logger.exception("auth_callback_sync_failed")
+        # region agent log
+        _agent_debug_ndjson("app.py:auth_callback:sync_exc", "sync raised", {}, "A")
+        # endregion
         return jsonify({"error": "Could not sync account"}), 500
+    # region agent log
+    _agent_debug_ndjson(
+        "app.py:auth_callback:after_sync",
+        "sync result",
+        {"uid_present": uid is not None, "uid_type": type(uid).__name__ if uid is not None else None},
+        "A",
+    )
+    # endregion
     if not uid:
         return jsonify({"error": "Could not create account"}), 500
     session.permanent = True
     session["user_id"] = uid
+    # region agent log
+    _agent_debug_ndjson("app.py:auth_callback:success", "returning ok", {"status": 200}, "A")
+    # endregion
     return jsonify({"ok": True, "user_id": uid})
+
+
+@app.route("/auth/debug-client-log", methods=["POST"])
+@limiter.exempt
+def auth_debug_client_log():
+    """Append browser debug NDJSON (session 055712). Same-origin POST; payload capped."""
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "bad json"}), 400
+    loc = str(data.get("location") or "client")[:220]
+    msg = str(data.get("message") or "")[:220]
+    hid = str(data.get("hypothesisId") or "JS")[:12]
+    run_id = str(data.get("runId") or "post-fix")[:40]
+    extra = {
+        k: v
+        for k, v in data.items()
+        if k not in ("location", "message", "hypothesisId", "runId", "sessionId", "timestamp")
+    }
+    try:
+        if len(json.dumps(extra, default=str)) > 4000:
+            extra = {"truncated": True}
+    except Exception:
+        extra = {"truncated": True}
+    _agent_debug_ndjson(loc, msg, extra, hid, run_id)
+    return jsonify({"ok": True})
 
 
 @app.route("/auth/confirm")
 def auth_confirm():
     """Landing page after Supabase OAuth redirect (e.g. Google). JS picks up the session."""
+    # region agent log
+    _agent_debug_ndjson(
+        "app.py:auth_confirm",
+        "auth_confirm page",
+        {"sb_auth_enabled": _SUPABASE_AUTH_ENABLED},
+        "D",
+    )
+    # endregion
     if not _SUPABASE_AUTH_ENABLED:
         return redirect(url_for("login"))
     return render_template("auth_confirm.html")

@@ -337,6 +337,18 @@ class TestSecurityHeaders:
         assert resp.headers.get("X-Content-Type-Options") == "nosniff"
         assert "strict-origin-when-cross-origin" in (resp.headers.get("Referrer-Policy") or "")
 
+    def test_supabase_umd_vendor_served_for_auth_pages(self, client):
+        resp = client.get("/static/vendor/supabase.min.js")
+        assert resp.status_code == 200
+        assert len(resp.data) > 50_000
+        assert b"createClient" in resp.data
+
+    def test_flask_secret_key_is_configured(self, client):
+        from app import app
+
+        sk = app.config.get("SECRET_KEY")
+        assert sk and len(str(sk)) >= 16
+
 
 class TestApiPreview:
     """Page preview proxy."""
