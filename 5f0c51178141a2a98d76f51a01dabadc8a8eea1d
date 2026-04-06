@@ -1,0 +1,29 @@
+templates/login.html
+  cbed5d3405f02634 130
+templates/signup.html
+  cbed5d3405f02634 143
+templates/payment_return.html
+  cbed5d3405f02634 32
+.env.example
+  cbed5d3405f02634 17-20
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "5f0c51178141a2a98d76f51a01dabadc8a8eea1d",
+  "prompts": {
+    "cbed5d3405f02634": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "055712f8-6562-4380-8d31-6f1689e56eb7",
+        "model": "default"
+      },
+      "human_author": "Abbiey",
+      "messages": [],
+      "total_additions": 82,
+      "total_deletions": 81,
+      "accepted_lines": 57,
+      "overriden_lines": 16
+    }
+  }
+}
