@@ -1329,7 +1329,7 @@ class TestPreviewSsrfRedirect:
                 query_string={"url": "https://evil.example.com/redirect"},
             )
         assert resp.status_code == 400
-        assert "private" in resp.get_json().get("error", "").lower()
+        assert "cannot be previewed" in resp.get_json().get("error", "").lower()
 
     def test_preview_blocks_redirect_to_onion(self, client):
         import httpx

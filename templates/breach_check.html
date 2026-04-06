@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block title %}Breach Check — abbiey.search{% endblock %}
+{% block meta_description %}Check if your email has been exposed in a data breach. Private, no logs.{% endblock %}
+{% block og_title %}Breach Check — abbiey.search{% endblock %}
+{% block og_description %}Check if your email has been exposed in a data breach. Private, no logs.{% endblock %}
+
+{% block content %}
+<div class="breach-check-page" style="max-width:640px;margin:60px auto;padding:0 20px;">
+  <h1 style="font-size:1.6rem;margin-bottom:.4em;">Breach Check</h1>
+  <p style="color:var(--text-secondary,#aaa);margin-bottom:1.4em;">
+    Check if your email address has appeared in known data breaches.
+    We do not store or log your email.
+  </p>
+
+  <form id="breach-form" style="display:flex;gap:8px;margin-bottom:1.5em;">
+    <input id="breach-email" type="email" placeholder="you@example.com" required
+           style="flex:1;padding:10px 14px;border-radius:8px;border:1px solid var(--border,#333);
+                  background:var(--bg-secondary,#1a1a1a);color:var(--text-primary,#fff);font-size:.95rem;">
+    <button type="submit"
+            style="padding:10px 20px;border-radius:8px;border:none;background:var(--accent,#646cff);
+                   color:#fff;font-weight:600;cursor:pointer;font-size:.95rem;">Check</button>
+  </form>
+
+  <div id="breach-result"></div>
+</div>
+
+<script>
+(function(){
+  var form = document.getElementById('breach-form');
+  var input = document.getElementById('breach-email');
+  var result = document.getElementById('breach-result');
+
+  form.addEventListener('submit', function(e){
+    e.preventDefault();
+    var email = input.value.trim();
+    if (!email) return;
+    result.innerHTML = '<p style="color:var(--text-secondary,#aaa)">Checking…</p>';
+    fetch('/api/breach-check', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({email: email})
+    })
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      if (data.error) {
+        result.innerHTML = '<p style="color:#ff6b6b">'+data.error+'</p>';
+        return;
+      }
+      if (!data.breaches || data.breaches.length === 0) {
+        result.innerHTML = '<p style="color:#4ade80">No known breaches found for <strong>'+
+          (data.email||'this address')+'</strong>.</p>';
+        return;
+      }
+      var html = '<p style="color:#ff6b6b;font-weight:600">Found in '+data.total+
+        ' breach'+(data.total!==1?'es':'')+':</p><ul style="list-style:disc;padding-left:1.2em;">';
+      data.breaches.forEach(function(b){
+        html += '<li style="margin-bottom:.5em"><strong>'+(b.name||b)+'</strong>';
+        if (b.date) html += ' <span style="color:var(--text-secondary,#aaa)">('+b.date+')</span>';
+        html += '</li>';
+      });
+      html += '</ul>';
+      result.innerHTML = html;
+    })
+    .catch(function(){
+      result.innerHTML = '<p style="color:#ff6b6b">Something went wrong. Please try again.</p>';
+    });
+  });
+})();
+</script>
+{% endblock %}
