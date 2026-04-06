@@ -203,7 +203,8 @@ OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 
 
 def _site_base_url() -> str:
-    """Canonical origin for OG tags, Twitter cards, and JSON-LD (no trailing slash).
+    """Canonical origin for OG tags, Twitter cards, JSON-LD, Stripe return URLs, and Supabase
+    OAuth/password-reset redirectTo in templates (no trailing slash).
     Prefer SITE_URL or CANONICAL_URL in production so shares match your domain.
     Otherwise uses the current request origin (set SITE_URL if behind a proxy without X-Forwarded-*).
     """
@@ -1608,7 +1609,6 @@ def _security_headers(response):
         csp = (
             "default-src 'self'; "
             "script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com "
-            "https://cdn.jsdelivr.net "
             "https://www.googletagmanager.com https://www.google-analytics.com; "
             "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; "
             "img-src 'self' data: https: blob:; "

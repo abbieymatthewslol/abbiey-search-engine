@@ -127,7 +127,7 @@
                 var res = await sb.auth.signInWithOAuth({
                     provider: 'google',
                     options: {
-                        redirectTo: window.location.origin + '/auth/confirm',
+                        redirectTo: {{ (site_base_url + '/auth/confirm')|tojson }},
                         skipBrowserRedirect: true
                     }
                 });
