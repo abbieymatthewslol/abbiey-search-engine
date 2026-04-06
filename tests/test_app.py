@@ -372,6 +372,7 @@ class TestApiPreview:
         mock_resp = MagicMock()
         mock_resp.text = "<html><head><title>Ex</title></head><body>hi</body></html>"
         mock_resp.raise_for_status = MagicMock()
+        mock_resp.url = httpx.URL("https://example.com/page")
         with patch.object(httpx, "get", return_value=mock_resp) as get_mock:
             resp = client.get("/api/preview", query_string={"url": "//example.com/page"})
         assert resp.status_code == 200
