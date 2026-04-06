@@ -9,6 +9,7 @@
         "includeFiles": [
           "templates/**",
           "static/**",
+          "retrieval/**",
           "entity_parser.py",
           "query_understanding.py",
           "app.py"

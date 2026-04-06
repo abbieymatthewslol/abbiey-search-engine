@@ -372,6 +372,7 @@ class TestApiPreview:
         mock_resp = MagicMock()
         mock_resp.text = "<html><head><title>Ex</title></head><body>hi</body></html>"
         mock_resp.raise_for_status = MagicMock()
+        mock_resp.url = httpx.URL("https://example.com/page")
         with patch.object(httpx, "get", return_value=mock_resp) as get_mock:
             resp = client.get("/api/preview", query_string={"url": "//example.com/page"})
         assert resp.status_code == 200
@@ -1236,3 +1237,132 @@ class TestOnionFallbackNotice:
         r = client.post("/developer/api-keys/999/revoke", follow_redirects=False)
         assert r.status_code == 302
         assert "/login" in r.headers.get("Location", "")
+
+
+# ---------------------------------------------------------------------------
+# Regression tests for security fixes (2026-04-07)
+# ---------------------------------------------------------------------------
+
+
+class TestAdaptSqlPgOrdering:
+    """INSERT OR IGNORE + RETURNING id must produce valid Postgres SQL."""
+
+    def test_on_conflict_before_returning(self):
+        from app import _adapt_sql_pg
+
+        sql = (
+            "INSERT OR IGNORE INTO user_bookmarks (user_id, url, title, snippet)"
+            " VALUES (?,?,?,?) RETURNING id"
+        )
+        result = _adapt_sql_pg(sql)
+        # ON CONFLICT DO NOTHING must come before RETURNING
+        oc_pos = result.upper().index("ON CONFLICT DO NOTHING")
+        ret_pos = result.upper().index("RETURNING")
+        assert oc_pos < ret_pos, f"ON CONFLICT must precede RETURNING: {result}"
+
+    def test_on_conflict_without_returning(self):
+        from app import _adapt_sql_pg
+
+        sql = (
+            "INSERT OR IGNORE INTO user_bookmarks (user_id, url, title, snippet)"
+            " VALUES (?,?,?,?)"
+        )
+        result = _adapt_sql_pg(sql)
+        assert "ON CONFLICT DO NOTHING" in result.upper()
+        assert "RETURNING" not in result.upper()
+
+
+class TestAdminFailClosed:
+    """Admin endpoints must reject all requests when ADMIN_TOKEN is unset."""
+
+    def test_admin_dashboard_403_when_token_unset(self, client):
+        with patch("app._ADMIN_TOKEN", None):
+            r = client.get("/admin")
+            assert r.status_code == 403
+
+    def test_admin_analytics_403_when_token_unset(self, client):
+        with patch("app._ADMIN_TOKEN", None):
+            r = client.get("/admin/analytics")
+            assert r.status_code == 403
+
+    def test_admin_api_stats_403_when_token_unset(self, client):
+        with patch("app._ADMIN_TOKEN", None):
+            r = client.get("/admin/api/stats")
+            assert r.status_code == 403
+
+    def test_admin_api_health_403_when_token_unset(self, client):
+        with patch("app._ADMIN_TOKEN", None):
+            r = client.get("/admin/api/health")
+            assert r.status_code == 403
+
+    def test_admin_api_query_log_403_when_token_unset(self, client):
+        with patch("app._ADMIN_TOKEN", None):
+            r = client.get("/admin/api/query-log")
+            assert r.status_code == 403
+
+    def test_admin_api_account_history_403_when_token_unset(self, client):
+        with patch("app._ADMIN_TOKEN", None):
+            r = client.get("/admin/api/account-history")
+            assert r.status_code == 403
+
+    def test_admin_dashboard_403_when_token_empty_string(self, client):
+        with patch("app._ADMIN_TOKEN", ""):
+            r = client.get("/admin")
+            assert r.status_code == 403
+
+
+class TestPreviewSsrfRedirect:
+    """Preview endpoint must validate the final URL after redirects."""
+
+    def test_preview_blocks_redirect_to_private_ip(self, client):
+        import httpx
+
+        mock_resp = MagicMock()
+        mock_resp.text = "<html><title>Internal</title></html>"
+        mock_resp.raise_for_status = MagicMock()
+        mock_resp.url = httpx.URL("http://169.254.169.254/latest/meta-data/")
+        mock_resp.headers = {"content-type": "text/html"}
+
+        with patch.object(httpx, "get", return_value=mock_resp):
+            resp = client.get(
+                "/api/preview",
+                query_string={"url": "https://evil.example.com/redirect"},
+            )
+        assert resp.status_code == 400
+        assert "cannot be previewed" in resp.get_json().get("error", "").lower()
+
+    def test_preview_blocks_redirect_to_onion(self, client):
+        import httpx
+
+        mock_resp = MagicMock()
+        mock_resp.text = "<html><title>Onion</title></html>"
+        mock_resp.raise_for_status = MagicMock()
+        mock_resp.url = httpx.URL("http://abcdefghijklmnop.onion/")
+        mock_resp.headers = {"content-type": "text/html"}
+
+        with patch.object(httpx, "get", return_value=mock_resp):
+            resp = client.get(
+                "/api/preview",
+                query_string={"url": "https://evil.example.com/onion-redirect"},
+            )
+        assert resp.status_code == 400
+
+
+class TestCheckoutCookieNotForgeable:
+    """Checkout pending cookie requires SECRET_KEY to forge."""
+
+    def test_claim_rejects_forged_cookie(self, client):
+        import hashlib
+        import hmac
+        import time
+
+        ts = str(time.time())
+        # Forge with the old hardcoded key
+        forged_sig = hmac.new(
+            b"abbiey-checkout-pending", ts.encode(), hashlib.sha256
+        ).hexdigest()[:16]
+        client.set_cookie("abbiey_search_checkout_pending", f"{ts}.{forged_sig}")
+        resp = client.post("/api/search-access/claim")
+        assert resp.status_code == 409
+        data = resp.get_json()
+        assert data.get("error") == "checkout_not_pending"
