@@ -151,7 +151,7 @@ _DB_DIR       = "/tmp" if os.environ.get("VERCEL") else os.path.dirname(__file__
 _WAITLIST_DB  = os.path.join(_DB_DIR, "waitlist.db")
 _ANALYTICS_DB = os.path.join(_DB_DIR, "analytics.db")
 _USERS_DB     = os.path.join(_DB_DIR, "users.db")
-_ADMIN_TOKEN  = os.environ.get("ADMIN_TOKEN", "")
+_ADMIN_TOKEN  = os.environ.get("ADMIN_TOKEN", "") or None  # None when unset → admin routes reject all requests
 
 # Developer / API keys — Stripe Payment Link for purchasing access (override in env).
 STRIPE_API_KEYS_CHECKOUT_URL = os.environ.get(
@@ -378,8 +378,15 @@ def _adapt_sql_pg(sql: str) -> str:
     # COLLATE NOCASE → PostgreSQL doesn't use this; strip it
     sql = _re.sub(r'\bCOLLATE\s+NOCASE\b', '', sql, flags=_re.IGNORECASE)
     # Append ON CONFLICT DO NOTHING for converted INSERT OR IGNORE
+    # Must go *after* RETURNING clause if present
     if _was_or_ignore and 'ON CONFLICT' not in sql.upper():
-        sql = sql.rstrip().rstrip(';') + ' ON CONFLICT DO NOTHING'
+        returning_match = _re.search(r'\bRETURNING\b.*', sql, _re.IGNORECASE)
+        if returning_match:
+            # Insert ON CONFLICT DO NOTHING before RETURNING
+            pos = returning_match.start()
+            sql = sql[:pos].rstrip() + ' ON CONFLICT DO NOTHING ' + sql[pos:]
+        else:
+            sql = sql.rstrip().rstrip(';') + ' ON CONFLICT DO NOTHING'
     return sql
 
 
@@ -928,6 +935,12 @@ def _set_search_unlock_cookie(resp: Response, token: str) -> None:
     )
 
 
+def _checkout_hmac_key() -> bytes:
+    """Derive HMAC key for checkout-pending cookies from Flask SECRET_KEY."""
+    sk = (app.config.get("SECRET_KEY") or app.secret_key or "").strip()
+    return hmac.new(sk.encode("utf-8", errors="replace"), b"abbiey-checkout-pending", hashlib.sha256).digest()
+
+
 def _search_checkout_pending() -> bool:
     # Check session first (original approach)
     raw = session.get(_SEARCH_CHECKOUT_PENDING_SESSION_KEY)
@@ -937,7 +950,7 @@ def _search_checkout_pending() -> bool:
         started = None
     if started and (time.time() - started) <= _SEARCH_CHECKOUT_PENDING_WINDOW_SECONDS:
         return True
-    # Fallback: check signed cookie (survives SECRET_KEY rotation / redeploys)
+    # Fallback: check signed cookie (survives session loss across redeploys)
     cookie_val = request.cookies.get(_SEARCH_CHECKOUT_PENDING_COOKIE, "")
     if cookie_val:
         parts = cookie_val.split(".", 1)
@@ -948,7 +961,7 @@ def _search_checkout_pending() -> bool:
             except (TypeError, ValueError):
                 return False
             expected = hmac.new(
-                b"abbiey-checkout-pending", ts_str.encode(), hashlib.sha256
+                _checkout_hmac_key(), ts_str.encode(), hashlib.sha256
             ).hexdigest()[:16]
             if hmac.compare_digest(sig, expected) and (time.time() - ts) <= _SEARCH_CHECKOUT_PENDING_WINDOW_SECONDS:
                 return True
@@ -2418,7 +2431,7 @@ def api_search_access_prepare_checkout():
     ts_str = str(time.time())
     session[_SEARCH_CHECKOUT_PENDING_SESSION_KEY] = ts_str
     sig = hmac.new(
-        b"abbiey-checkout-pending", ts_str.encode(), hashlib.sha256
+        _checkout_hmac_key(), ts_str.encode(), hashlib.sha256
     ).hexdigest()[:16]
     # Generate a checkout reference token so Stripe webhook can link payment to user
     checkout_token = secrets.token_urlsafe(24)
@@ -3234,6 +3247,14 @@ def api_preview():
             follow_redirects=True,
             headers={"User-Agent": "Mozilla/5.0 (compatible; abbiey.search/1.0)"},
         )
+        # Guard against redirect-based SSRF: validate final URL after redirects
+        final_url = str(resp.url)
+        final_parsed = urlparse(final_url)
+        final_host = final_parsed.hostname or ""
+        if not final_host or _is_private_ip(final_host):
+            return jsonify({"error": _PREVIEW_MSG_PRIVATE}), 400
+        if ".onion" in (final_parsed.netloc or ""):
+            return jsonify({"error": _PREVIEW_MSG_ONION}), 400
         resp.raise_for_status()
         html = resp.text[:100000]  # Cap at 100KB
 
@@ -3616,7 +3637,7 @@ def api_trends():
 def admin_analytics():
     """Admin analytics dashboard — protected by ADMIN_TOKEN query param."""
     token = request.args.get("token", "")
-    if _ADMIN_TOKEN and token != _ADMIN_TOKEN:
+    if not _ADMIN_TOKEN or token != _ADMIN_TOKEN:
         return render_template("error.html", code=403, title="Forbidden",
                                message="Invalid or missing admin token."), 403
 
@@ -3700,8 +3721,10 @@ def admin_analytics():
 
 def _admin_check():
     """Return None if authorised, else an error Response."""
+    if not _ADMIN_TOKEN:
+        return jsonify({"error": "Forbidden — ADMIN_TOKEN not configured"}), 403
     token = request.args.get("token", "") or request.headers.get("X-Admin-Token", "")
-    if _ADMIN_TOKEN and token != _ADMIN_TOKEN:
+    if not token or token != _ADMIN_TOKEN:
         return jsonify({"error": "Forbidden"}), 403
     return None
 
@@ -3710,7 +3733,7 @@ def _admin_check():
 def admin_dashboard():
     """Main admin dashboard — protected by ADMIN_TOKEN."""
     token = request.args.get("token", "")
-    if _ADMIN_TOKEN and token != _ADMIN_TOKEN:
+    if not _ADMIN_TOKEN or token != _ADMIN_TOKEN:
         return render_template("error.html", code=403, title="Forbidden",
                                message="Admin access only."), 403
     return render_template("admin.html", token=token)
