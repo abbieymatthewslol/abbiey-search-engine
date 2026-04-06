@@ -137,15 +137,10 @@
             googleBtn.disabled = true;
             googleBtn.innerHTML = 'Redirecting to Google\u2026';
             try {
-                if (new URLSearchParams(window.location.search).get('abbiey_trace') === '1') {
-                    sessionStorage.setItem('abbiey_auth_trace', '1');
-                }
-            } catch (e) {}
-            try {
                 var res = await sb.auth.signInWithOAuth({
                     provider: 'google',
                     options: {
-                        redirectTo: window.location.origin + '/auth/confirm',
+                        redirectTo: {{ (site_base_url + '/auth/confirm')|tojson }},
                         skipBrowserRedirect: true
                     }
                 });
@@ -189,9 +184,11 @@
                 var cb = await fetch('/auth/callback', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
+                    credentials: 'same-origin',
                     body: JSON.stringify({ email: res.data.user.email, display_name: (res.data.user.user_metadata || {}).full_name || '' })
                 });
-                if (cb.ok) { window.location.href = '/search'; return; }
+                var cdata = await cb.json().catch(function () { return null; });
+                if (cb.ok && cdata && cdata.ok) { window.location.href = '/search'; return; }
             }
             showErr('Account created. Please check your email to confirm, then sign in.');
         } catch (err) { showErr('Something went wrong. Please try again.'); }

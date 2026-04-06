@@ -8,6 +8,7 @@
     <script>
     (function () {
         var LS_KEY = "abbiey_checkout_return";
+        var SITE_BASE = {{ site_base_url | tojson }};
         var SEARCH_FALLBACK = {{ (url_for("search") + "?paid=1") | tojson }};
         var DEV_FALLBACK = {{ (url_for("developer") + "?billing=success#dev-api-keys") | tojson }};
 
@@ -28,7 +29,7 @@
                 var sp = safePath(data.path);
                 if (sp) {
                     try {
-                        var u = new URL(sp, window.location.origin);
+                        var u = new URL(sp, SITE_BASE);
                         u.searchParams.set("paid", "1");
                         go(u.pathname + u.search + u.hash);
                         return;
