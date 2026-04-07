@@ -27,7 +27,7 @@ Last updated: 2026-04-04
 ## 🟢 Low Priority (nice to have)
 
 - [x] **Export bookmarks** — Download JSON from Settings → Privacy panel
-- [ ] **Search history management** — UI to view and clear autocomplete history (privacy feature)
+- [x] **Search history management** — `DELETE /api/user/history` and `DELETE /api/user/history/<id>` endpoints; profile page shows delete buttons per-item and a "Clear all" button; settings "Clear search history" also syncs to server for logged-in users
 - [x] **Rate limit feedback** — toast notification shown when server returns 429
 - [x] **Dockerfile hardening** — base image pinned; health check endpoint active
 - [x] **Favicon + PWA manifest** — manifest.json served, icons linked, app installable as PWA

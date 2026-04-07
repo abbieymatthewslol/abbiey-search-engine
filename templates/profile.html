@@ -98,15 +98,21 @@
                 <span class="badge-count">{{ history|length }}</span>
             </h2>
             {% if history %}
-            <ul class="history-list">
+            <ul class="history-list" id="history-list">
                 {% for h in history %}
-                <li class="history-item">
+                <li class="history-item" data-id="{{ h.id }}">
                     <a href="/search?q={{ h.query|urlencode }}&type={{ h.search_type }}" class="history-query">{{ h.query }}</a>
                     <span class="history-type">{{ h.search_type }}</span>
                     <span class="history-time">{{ h.searched_at[:16].replace('T', ' ') }}</span>
+                    <button class="history-delete-btn" data-id="{{ h.id }}" title="Remove entry" aria-label="Remove entry">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
                 </li>
                 {% endfor %}
             </ul>
+            <div style="margin-top:0.75rem">
+                <button type="button" class="settings-danger-btn" id="clear-all-history-btn">Clear all history</button>
+            </div>
             {% else %}
             <p class="profile-empty">Your search history will appear here after you search while logged in.</p>
             {% endif %}
@@ -155,7 +161,47 @@
         });
     });
 
-    // Sync localStorage bookmarks on page load
+    // Search history delete (individual)
+    document.querySelectorAll('.history-delete-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const id  = btn.dataset.id;
+            const res = await fetch(`/api/user/history/${id}`, { method: 'DELETE' });
+            if (res.ok) {
+                const li = btn.closest('.history-item');
+                li.style.transition = 'opacity .2s, transform .2s';
+                li.style.opacity = '0';
+                li.style.transform = 'translateX(12px)';
+                setTimeout(() => li.remove(), 200);
+                const badge = document.querySelector('#history-section .badge-count');
+                if (badge) badge.textContent = Math.max(0, parseInt(badge.textContent) - 1);
+            }
+        });
+    });
+
+    // Search history clear all
+    const clearAllHistBtn = document.getElementById('clear-all-history-btn');
+    if (clearAllHistBtn) {
+        clearAllHistBtn.addEventListener('click', async () => {
+            if (!confirm('Clear all search history? This cannot be undone.')) return;
+            const res = await fetch('/api/user/history', { method: 'DELETE' });
+            if (res.ok) {
+                const list = document.getElementById('history-list');
+                if (list) list.remove();
+                clearAllHistBtn.remove();
+                const section = document.getElementById('history-section');
+                if (section) {
+                    const p = document.createElement('p');
+                    p.className = 'profile-empty';
+                    p.textContent = 'Your search history will appear here after you search while logged in.';
+                    section.appendChild(p);
+                }
+                const badge = document.querySelector('#history-section .badge-count');
+                if (badge) badge.textContent = '0';
+            }
+        });
+    }
+
+
     (async () => {
         try {
             const raw = localStorage.getItem('bookmarks');

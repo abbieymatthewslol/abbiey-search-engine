@@ -6865,7 +6865,7 @@ def profile():
             [uid],
         )
         history = _users_execute(
-            "SELECT query, search_type, searched_at FROM user_search_history"
+            "SELECT id, query, search_type, searched_at FROM user_search_history"
             " WHERE user_id=? ORDER BY searched_at DESC LIMIT 50",
             [uid],
         )
@@ -7149,6 +7149,44 @@ def api_user_history_add():
         )
     except Exception:
         pass
+    return jsonify({"ok": True})
+
+
+@app.route("/api/user/history", methods=["DELETE"])
+def api_user_history_clear():
+    """Delete all search history for the logged-in user."""
+    uid, bearer_err = _api_auth_user()
+    if bearer_err:
+        return bearer_err
+    if not uid:
+        return jsonify({"error": "Not authenticated"}), 401
+    try:
+        _users_execute(
+            "DELETE FROM user_search_history WHERE user_id=?",
+            [uid],
+        )
+    except Exception:
+        logger.exception("api_user_history_clear_failed")
+        return jsonify({"error": "Could not clear history."}), 503
+    return jsonify({"ok": True})
+
+
+@app.route("/api/user/history/<int:hid>", methods=["DELETE"])
+def api_user_history_delete(hid):
+    """Delete a single history entry by id for the logged-in user."""
+    uid, bearer_err = _api_auth_user()
+    if bearer_err:
+        return bearer_err
+    if not uid:
+        return jsonify({"error": "Not authenticated"}), 401
+    try:
+        _users_execute(
+            "DELETE FROM user_search_history WHERE id=? AND user_id=?",
+            [hid, uid],
+        )
+    except Exception:
+        logger.exception("api_user_history_delete_failed hid=%s", hid)
+        return jsonify({"error": "Could not delete history entry."}), 503
     return jsonify({"ok": True})
 
 

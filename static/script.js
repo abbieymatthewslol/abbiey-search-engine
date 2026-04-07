@@ -929,6 +929,10 @@ document.addEventListener("DOMContentLoaded", () => {
   if (clearHistBtn) {
     clearHistBtn.addEventListener("click", () => {
       localStorage.removeItem("abbiey_search_history");
+      // Also clear server-side history for logged-in users
+      if (document.querySelector(".user-avatar-chip")) {
+        fetch("/api/user/history", { method: "DELETE", credentials: "same-origin" }).catch(() => {});
+      }
       clearHistBtn.textContent = "Cleared!";
       setTimeout(() => { clearHistBtn.textContent = "Clear"; }, 1500);
     });

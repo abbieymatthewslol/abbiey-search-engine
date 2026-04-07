@@ -1387,3 +1387,112 @@ class TestCheckoutCookieNotForgeable:
         assert resp.status_code == 409
         data = resp.get_json()
         assert data.get("error") == "checkout_not_pending"
+
+
+class TestSearchHistoryManagement:
+    """Server-side search history clear and delete endpoints."""
+
+    def test_history_clear_requires_auth(self, client):
+        resp = client.delete("/api/user/history")
+        assert resp.status_code == 401
+
+    def test_history_delete_item_requires_auth(self, client):
+        resp = client.delete("/api/user/history/1")
+        assert resp.status_code == 401
+
+    def test_history_clear_all(self, client):
+        uid = _login_test_user(client, "hclr")
+        from app import _users_execute
+
+        _users_execute(
+            "INSERT INTO user_search_history (user_id, query, search_type) VALUES (?,?,?)",
+            [uid, "first query", "text"],
+        )
+        _users_execute(
+            "INSERT INTO user_search_history (user_id, query, search_type) VALUES (?,?,?)",
+            [uid, "second query", "text"],
+        )
+
+        rows = _users_execute(
+            "SELECT id FROM user_search_history WHERE user_id=?", [uid]
+        )
+        assert len(rows) == 2
+
+        resp = client.delete("/api/user/history")
+        assert resp.status_code == 200
+        assert resp.get_json()["ok"] is True
+
+        rows_after = _users_execute(
+            "SELECT id FROM user_search_history WHERE user_id=?", [uid]
+        )
+        assert len(rows_after) == 0
+
+    def test_history_delete_single_item(self, client):
+        uid = _login_test_user(client, "hdel")
+        from app import _users_execute
+
+        _users_execute(
+            "INSERT INTO user_search_history (user_id, query, search_type) VALUES (?,?,?)",
+            [uid, "keep me", "text"],
+        )
+        rows = _users_execute(
+            "INSERT INTO user_search_history (user_id, query, search_type) VALUES (?,?,?)",
+            [uid, "delete me", "text"],
+            return_id=True,
+        )
+        hid = rows[0]["id"]
+
+        resp = client.delete(f"/api/user/history/{hid}")
+        assert resp.status_code == 200
+        assert resp.get_json()["ok"] is True
+
+        remaining = _users_execute(
+            "SELECT query FROM user_search_history WHERE user_id=?", [uid]
+        )
+        assert len(remaining) == 1
+        assert remaining[0]["query"] == "keep me"
+
+    def test_history_delete_other_users_item_is_noop(self, client):
+        """Deleting another user's history item by ID is silently ignored."""
+        uid_a = _login_test_user(client, "hdela")
+        from app import _users_execute
+        from werkzeug.security import generate_password_hash
+        import uuid
+
+        suffix = uuid.uuid4().hex[:8]
+        rows_b = _users_execute(
+            "INSERT INTO users (username, email, password_hash) VALUES (?,?,?)",
+            [f"hdelb_{suffix}", f"hdelb_{suffix}@ex.com", generate_password_hash("x")],
+            return_id=True,
+        )
+        uid_b = rows_b[0]["id"]
+        hist = _users_execute(
+            "INSERT INTO user_search_history (user_id, query, search_type) VALUES (?,?,?)",
+            [uid_b, "other user query", "text"],
+            return_id=True,
+        )
+        hid_b = hist[0]["id"]
+
+        # Logged in as uid_a, try to delete uid_b's item
+        resp = client.delete(f"/api/user/history/{hid_b}")
+        assert resp.status_code == 200  # succeeds silently (DELETE WHERE id=? AND user_id=?)
+
+        # uid_b's item should still exist
+        check = _users_execute(
+            "SELECT id FROM user_search_history WHERE id=? AND user_id=?", [hid_b, uid_b]
+        )
+        assert len(check) == 1
+
+    def test_history_add_then_clear_via_api(self, client):
+        _login_test_user(client, "hadd")
+
+        add_resp = client.post(
+            "/api/user/history",
+            json={"query": "test query", "search_type": "text"},
+        )
+        assert add_resp.status_code == 200
+        assert add_resp.get_json()["ok"] is True
+
+        clear_resp = client.delete("/api/user/history")
+        assert clear_resp.status_code == 200
+        assert clear_resp.get_json()["ok"] is True
