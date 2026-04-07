@@ -1,0 +1,23 @@
+.github/workflows/deploy.yml
+  a1c874d0fd04c06b 47-48
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "ba1f7cd79dadff730955b5793ed2542b81301abe",
+  "prompts": {
+    "a1c874d0fd04c06b": {
+      "agent_id": {
+        "tool": "github-copilot",
+        "id": "43346e35-2716-4d87-981d-9ef650a065e8",
+        "model": "copilot/claude-opus-4.6"
+      },
+      "human_author": "Abbiey",
+      "messages": [],
+      "total_additions": 57,
+      "total_deletions": 54,
+      "accepted_lines": 3,
+      "overriden_lines": 0
+    }
+  }
+}
