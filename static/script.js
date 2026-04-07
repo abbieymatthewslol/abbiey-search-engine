@@ -1438,7 +1438,10 @@ document.addEventListener("DOMContentLoaded", () => {
     fetch(scrollUrl, {
       headers: { "X-Requested-With": "XMLHttpRequest" },
     })
-      .then(r => r.json())
+      .then(r => {
+        if (!r.ok) return r.json().catch(() => ({ error: "unknown", status: r.status })).then(err => Promise.reject(err));
+        return r.json();
+      })
       .then(data => {
         removeSkeletons();
         const frag = document.createDocumentFragment();
@@ -1482,7 +1485,22 @@ document.addEventListener("DOMContentLoaded", () => {
         const loadMoreBtnDone = document.querySelector(".load-more-btn");
         if (loadMoreBtnDone) loadMoreBtnDone.classList.remove("loading");
       })
-      .catch(() => { removeSkeletons(); sentinel.querySelector(".scroll-loader").classList.add("hidden"); loading = false; const loadMoreBtnErr = document.querySelector(".load-more-btn"); if (loadMoreBtnErr) loadMoreBtnErr.classList.remove("loading"); });
+      .catch(err => {
+        removeSkeletons();
+        sentinel.querySelector(".scroll-loader").classList.add("hidden");
+        loading = false;
+        if (err && err.error === "search_limit") {
+          hasMore = false;
+          sentinel.remove();
+          observer.disconnect();
+          const notice = document.createElement("p");
+          notice.className = "search-limit-notice";
+          notice.textContent = err.message || "You\u2019ve reached your daily free search limit.";
+          container.appendChild(notice);
+        }
+        const loadMoreBtnErr = document.querySelector(".load-more-btn");
+        if (loadMoreBtnErr) loadMoreBtnErr.classList.remove("loading");
+      });
   }
 
   const observer = new IntersectionObserver((entries) => {

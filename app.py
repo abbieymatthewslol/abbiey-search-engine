@@ -2743,11 +2743,20 @@ def search():
             **{**_TEMPLATE_DEFAULTS, "current_user_has_paid_access": current_user_has_paid_access},
         )
 
-    # Server-side search limit for free-tier users
-    if query and not current_user_has_paid_access:
+    is_xhr = request.headers.get("X-Requested-With") == "XMLHttpRequest"
+
+    # Server-side search limit for free-tier users.
+    # Pagination requests (XHR with page > 1) are not new searches — skip the counter
+    # so scrolling through results does not deplete the daily free quota.
+    if query and not current_user_has_paid_access and not (is_xhr and page > 1):
         client_ip = request.remote_addr or ""
         ua = request.headers.get("User-Agent") or ""
         if not _is_oauth_verification_crawler_ua(ua) and _server_search_limit_reached(client_ip):
+            if is_xhr:
+                return jsonify({
+                    "error": "search_limit",
+                    "message": "You\u2019ve reached your daily free search limit. Unlock unlimited searches or wait 24 hours.",
+                }), 429
             return render_template(
                 "index.html",
                 **{**_TEMPLATE_DEFAULTS, "current_user_has_paid_access": False,
@@ -2850,7 +2859,7 @@ def search():
         except Exception:
             logger.warning("Nominatim geocoding failed for address=%s", primary.normalized)
 
-    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+    if is_xhr:
         _t_ajax = time.perf_counter()
         results = _fetch_results(
             backend_query,

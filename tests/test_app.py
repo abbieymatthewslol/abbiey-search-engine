@@ -157,6 +157,59 @@ class TestQueryLimits:
         assert resp.status_code == 400
 
 
+class TestSearchLimitPagination:
+    """Pagination requests must not count against the free-tier search limit."""
+
+    def test_xhr_page1_increments_limit(self, client, mock_ddg):
+        """XHR requests for page 1 (new searches) count toward the limit."""
+        with patch("app._server_search_limit_reached", return_value=False) as mock_limit:
+            client.get(
+                "/search?q=python&page=1",
+                headers={"X-Requested-With": "XMLHttpRequest"},
+            )
+            mock_limit.assert_called_once()
+
+    def test_xhr_page2_skips_limit_check(self, client, mock_ddg):
+        """XHR pagination requests (page > 1) must not call the search limit counter."""
+        with patch("app._server_search_limit_reached") as mock_limit:
+            resp = client.get(
+                "/search?q=python&page=2",
+                headers={"X-Requested-With": "XMLHttpRequest"},
+            )
+            assert resp.status_code == 200
+            mock_limit.assert_not_called()
+
+    def test_xhr_page3_skips_limit_check(self, client, mock_ddg):
+        """Same as page 2 but for a deeper page."""
+        with patch("app._server_search_limit_reached") as mock_limit:
+            resp = client.get(
+                "/search?q=python&page=3",
+                headers={"X-Requested-With": "XMLHttpRequest"},
+            )
+            assert resp.status_code == 200
+            mock_limit.assert_not_called()
+
+    def test_xhr_limit_hit_returns_json_429(self, client, mock_ddg):
+        """When the search limit is reached on a XHR page-1 request, the response is JSON (not HTML)."""
+        with patch("app._server_search_limit_reached", return_value=True):
+            resp = client.get(
+                "/search?q=python&page=1",
+                headers={"X-Requested-With": "XMLHttpRequest"},
+            )
+            assert resp.status_code == 429
+            data = resp.get_json()
+            assert data is not None
+            assert data.get("error") == "search_limit"
+            assert "message" in data
+
+    def test_non_xhr_limit_hit_returns_html_429(self, client, mock_ddg):
+        """When the search limit is reached on a normal page load, the response is HTML."""
+        with patch("app._server_search_limit_reached", return_value=True):
+            resp = client.get("/search?q=python")
+            assert resp.status_code == 429
+            assert b"search limit" in resp.data.lower()
+
+
 class TestSuggestionsAPI:
     """Test the suggestions/autocomplete endpoint."""
 
