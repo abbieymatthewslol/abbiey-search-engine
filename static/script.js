@@ -932,10 +932,34 @@ document.addEventListener("DOMContentLoaded", () => {
     function panelGetHistory() {
       try { return JSON.parse(localStorage.getItem(HISTORY_KEY_PANEL)) || []; } catch { return []; }
     }
+    function isLoggedInUi() {
+      return !!document.querySelector(".user-avatar-chip");
+    }
+    /** Server-first order, then local-only queries (logged-in); else localStorage only. */
+    async function panelHistoryQueries() {
+      const local = panelGetHistory();
+      if (!isLoggedInUi()) return local;
+      try {
+        const result = await fetchJson("/api/user/history");
+        if (!result.ok || !result.data || !Array.isArray(result.data.history)) return local;
+        const fromServer = result.data.history.map(h => (h && h.query ? String(h.query).trim() : "")).filter(Boolean);
+        const seen = new Set(fromServer);
+        const merged = [...fromServer];
+        for (const q of local) {
+          if (q && !seen.has(q)) {
+            seen.add(q);
+            merged.push(q);
+          }
+        }
+        return merged.slice(0, 50);
+      } catch {
+        return local;
+      }
+    }
     function panelRemove(term) {
       const items = panelGetHistory().filter(i => i !== term);
       try { localStorage.setItem(HISTORY_KEY_PANEL, JSON.stringify(items)); } catch {}
-      if (document.querySelector(".user-avatar-chip")) {
+      if (isLoggedInUi()) {
         fetch("/api/user/history", {
           method: "DELETE", headers: { "Content-Type": "application/json" },
           credentials: "same-origin", body: JSON.stringify({ query: term }),
@@ -944,7 +968,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     function panelClearAll() {
       try { localStorage.removeItem(HISTORY_KEY_PANEL); } catch {}
-      if (document.querySelector(".user-avatar-chip")) {
+      if (isLoggedInUi()) {
         fetch("/api/user/history", {
           method: "DELETE", headers: { "Content-Type": "application/json" },
           credentials: "same-origin", body: JSON.stringify({ clear_all: true }),
@@ -952,10 +976,11 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
 
-    function renderPanel() {
+    async function renderPanel() {
       const list = document.getElementById("history-panel-list");
       if (!list) return;
-      const items = panelGetHistory();
+      list.innerHTML = `<div class="history-panel-empty">Loading…</div>`;
+      const items = await panelHistoryQueries();
       if (!items.length) {
         list.innerHTML = `<div class="history-panel-empty">No recent searches</div>`;
         return;
@@ -982,7 +1007,7 @@ document.addEventListener("DOMContentLoaded", () => {
         btn.addEventListener("click", (e) => {
           e.stopPropagation();
           panelRemove(btn.getAttribute("data-del"));
-          renderPanel();
+          void renderPanel();
         });
       });
     }
@@ -997,7 +1022,7 @@ document.addEventListener("DOMContentLoaded", () => {
         histPanel.hidden = !isHidden;
         if (!isHidden) { viewHistBtn.textContent = "View"; return; }
         viewHistBtn.textContent = "Hide";
-        renderPanel();
+        void renderPanel();
       });
     }
     if (histPanelClose && histPanel) {
@@ -1035,6 +1060,33 @@ document.addEventListener("DOMContentLoaded", () => {
       a.click();
       setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
       showToast(`Exported ${items.length} bookmark${items.length !== 1 ? "s" : ""}.`);
+    });
+  }
+
+  const importBookmarksInput = document.getElementById("import-bookmarks-input");
+  if (importBookmarksInput) {
+    importBookmarksInput.addEventListener("change", (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        try {
+          const parsed = JSON.parse(ev.target.result);
+          if (!Array.isArray(parsed)) { showToast("Invalid bookmark file.", "error"); return; }
+          const valid = parsed.filter(b => b && typeof b.url === "string" && b.url.startsWith("http"));
+          if (!valid.length) { showToast("No valid bookmarks found in file.", "error"); return; }
+          const current = getBookmarks();
+          const merged = mergeBookmarks(current, valid);
+          saveBookmarks(merged);
+          updateBookmarkBadge();
+          const added = merged.length - current.length;
+          showToast(added > 0 ? `Imported ${added} bookmark${added !== 1 ? "s" : ""}.` : "All bookmarks already saved.");
+        } catch {
+          showToast("Could not parse bookmark file.", "error");
+        }
+        importBookmarksInput.value = "";
+      };
+      reader.readAsText(file);
     });
   }
   const clearAllBtn = document.getElementById("clear-all-btn");

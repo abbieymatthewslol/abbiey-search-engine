@@ -11,10 +11,20 @@
 
 {% block extra_scripts %}
 <script src="{{ url_for('static', filename='vendor/supabase.min.js') }}"></script>
+<script type="application/json" id="auth-supabase-config">{{ {'url': supabase_url, 'anon_key': supabase_anon_key} | tojson }}</script>
 <script nonce="{{ csp_nonce }}">
 (function () {
-    var SB_URL = {{ supabase_url | tojson }};
-    var SB_KEY = {{ supabase_anon_key | tojson }};
+    var _cfgEl = document.getElementById('auth-supabase-config');
+    var _cfg = {};
+    if (_cfgEl && _cfgEl.textContent) {
+        try {
+            _cfg = JSON.parse(_cfgEl.textContent.trim()) || {};
+        } catch (_e) {
+            _cfg = {};
+        }
+    }
+    var SB_URL = _cfg.url || '';
+    var SB_KEY = _cfg.anon_key || '';
 
     var sb;
     try {

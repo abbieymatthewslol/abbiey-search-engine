@@ -261,14 +261,14 @@
                 <section class="settings-section">
                     <h3 class="settings-section-title">Privacy</h3>
                     <div class="settings-row">
-                        <span class="settings-row-label">Search history</span>
+                        <span class="settings-row-label">Save search history</span>
                         <label class="settings-toggle">
                             <input type="checkbox" id="history-toggle" checked>
                             <span class="settings-toggle-track"></span>
                         </label>
                     </div>
                     <div class="settings-row">
-                        <span class="settings-row-label">Search history</span>
+                        <span class="settings-row-label">Recent searches</span>
                         <div style="display:flex;gap:.375rem;align-items:center;">
                             <button type="button" class="settings-secondary-btn" id="view-history-btn">View</button>
                             <button type="button" class="settings-danger-btn" id="clear-history-btn">Clear all</button>
@@ -280,6 +280,16 @@
                             <button type="button" class="history-panel-close" id="history-panel-close">&times;</button>
                         </div>
                         <div id="history-panel-list" class="history-panel-list"></div>
+                    </div>
+                    <div class="settings-row">
+                        <span class="settings-row-label">Bookmarks</span>
+                        <div style="display:flex;gap:.375rem;align-items:center;">
+                            <label class="settings-secondary-btn" id="import-bookmarks-label" style="cursor:pointer;" title="Import bookmarks from JSON">
+                                Import
+                                <input type="file" id="import-bookmarks-input" accept=".json,application/json" style="display:none;">
+                            </label>
+                            <button type="button" class="settings-secondary-btn" id="export-bookmarks-btn">Export</button>
+                        </div>
                     </div>
                     <div class="settings-row">
                         <span class="settings-row-label">Reset all settings &amp; data</span>
@@ -298,15 +308,15 @@
         <div class="privacy-stats" id="privacy-stats">
             <div class="privacy-stat">
                 <span class="privacy-stat-number" id="pstat-trackers">0</span>
-                <span class="privacy-stat-label">searches logged</span>
+                <span class="privacy-stat-label">third-party trackers</span>
             </div>
             <div class="privacy-stat">
                 <span class="privacy-stat-number" id="pstat-personal">0</span>
-                <span class="privacy-stat-label">cookies set</span>
+                <span class="privacy-stat-label">personal data stored</span>
             </div>
             <div class="privacy-stat">
                 <span class="privacy-stat-number" id="pstat-shared">0</span>
-                <span class="privacy-stat-label">data shared</span>
+                <span class="privacy-stat-label">data sold or shared</span>
             </div>
         </div>
         <div class="privacy-comparison">
