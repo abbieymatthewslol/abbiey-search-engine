@@ -61,7 +61,7 @@
 {% endblock %}
 
 {% block extra_scripts %}
-<script>
+<script nonce="{{ csp_nonce }}">
 (function () {
     var rf = document.getElementById("verify-resend-form");
     var em = document.getElementById("email");

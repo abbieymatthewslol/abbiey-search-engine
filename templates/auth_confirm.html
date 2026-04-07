@@ -11,7 +11,7 @@
 
 {% block extra_scripts %}
 <script src="{{ url_for('static', filename='vendor/supabase.min.js') }}"></script>
-<script>
+<script nonce="{{ csp_nonce }}">
 (function () {
     var SB_URL = {{ supabase_url | tojson }};
     var SB_KEY = {{ supabase_anon_key | tojson }};

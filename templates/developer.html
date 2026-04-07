@@ -103,7 +103,7 @@
 
 {% block extra_scripts %}
 {% if reveal_key %}
-<script>
+<script nonce="{{ csp_nonce }}">
 (function() {
   var btn = document.getElementById("dev-copy-new-key");
   var el = document.getElementById("dev-new-key-value");

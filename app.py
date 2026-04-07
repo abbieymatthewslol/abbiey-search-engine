@@ -25,7 +25,7 @@ import feedparser
 import httpx
 from cachetools import TTLCache
 from ddgs import DDGS
-from flask import Flask, render_template, request, jsonify, redirect, session, url_for, flash, Response, has_request_context
+from flask import Flask, render_template, request, jsonify, redirect, session, url_for, flash, Response, has_request_context, g
 from werkzeug.exceptions import HTTPException
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_limiter import Limiter
@@ -1191,6 +1191,7 @@ def _inject_current_user():
         "supabase_auth": _SUPABASE_AUTH_ENABLED,
         "supabase_url": _SUPABASE_URL if _SUPABASE_AUTH_ENABLED else "",
         "supabase_anon_key": _SUPABASE_ANON_KEY if _SUPABASE_AUTH_ENABLED else "",
+        "csp_nonce": getattr(g, "csp_nonce", ""),
     }
     try:
         uid = _session_user_id_int(session.get("user_id"))
@@ -1619,6 +1620,11 @@ def _log_event(event: str, **fields: object) -> None:
     logger.info(" | ".join(parts))
 
 
+@app.before_request
+def _generate_csp_nonce():
+    g.csp_nonce = secrets.token_urlsafe(16)
+
+
 @app.after_request
 def _security_headers(response):
     try:
@@ -1628,9 +1634,10 @@ def _security_headers(response):
             "Permissions-Policy",
             "camera=(), microphone=(), geolocation=(), payment=()",
         )
+        nonce = getattr(g, "csp_nonce", "")
         csp = (
             "default-src 'self'; "
-            "script-src 'self' https://cdnjs.cloudflare.com "
+            f"script-src 'self' 'nonce-{nonce}' https://cdnjs.cloudflare.com "
             "https://www.googletagmanager.com https://www.google-analytics.com; "
             "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; "
             "img-src 'self' data: https: blob:; "

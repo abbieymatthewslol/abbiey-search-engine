@@ -6,12 +6,12 @@
     <meta name="deploy-hash" content="{{ deploy_hash }}">
     {% include 'includes/google_analytics.html' %}
     <!-- Vercel Speed Insights -->
-    <script>
+    <script nonce="{{ csp_nonce }}">
         window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
     </script>
     <script defer src="/_vercel/speed-insights/script.js"></script>
     <title>{{ code }} - abbiey.search</title>
-    <script>
+    <script nonce="{{ csp_nonce }}">
         (function() {
             var t = localStorage.getItem('theme') || 'dark';
             var a = localStorage.getItem('accent-color') || localStorage.getItem('accentColor');
@@ -58,7 +58,7 @@
         <p>abbiey.search &mdash; No tracking. No profiling. No judgment.</p>
     </footer>
 
-    <script>
+    <script nonce="{{ csp_nonce }}">
         const toggle = document.getElementById("theme-toggle");
         const html = document.documentElement;
         const saved = localStorage.getItem("theme");

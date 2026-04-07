@@ -143,7 +143,7 @@ button{background:none;border:none;cursor:pointer;font:inherit;color:inherit}
 @keyframes shimmer{to{background-position:-200% 0}}
 </style>
     <!-- Vercel Speed Insights -->
-    <script>
+    <script nonce="{{ csp_nonce }}">
         window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
     </script>
     <script defer src="/_vercel/speed-insights/script.js"></script>
@@ -395,7 +395,7 @@ button{background:none;border:none;cursor:pointer;font:inherit;color:inherit}
   </div>
 </div>
 
-<script>
+<script nonce="{{ csp_nonce }}">
 const TOKEN = {{ token|tojson }};
 const BASE  = TOKEN ? `?token=${TOKEN}` : '';
 let _data   = null;

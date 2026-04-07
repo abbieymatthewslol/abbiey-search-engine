@@ -14,7 +14,7 @@
     <link rel="canonical" href="{{ site_base_url }}{{ request.path }}">
     {% endblock %}
     <!-- Vercel Speed Insights -->
-    <script>
+    <script nonce="{{ csp_nonce }}">
         window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
     </script>
     <script defer src="/_vercel/speed-insights/script.js"></script>
@@ -37,7 +37,7 @@
     <link rel="apple-touch-icon" href="/static/icon-192.png">
     <link rel="search" type="application/opensearchdescription+xml" title="abbiey.search" href="/opensearch.xml">
     {# Apply saved theme + accent immediately to avoid flash #}
-    <script>
+    <script nonce="{{ csp_nonce }}">
         (function() {
             var t = localStorage.getItem('theme') || 'dark';
             var d = localStorage.getItem('density') || 'default';

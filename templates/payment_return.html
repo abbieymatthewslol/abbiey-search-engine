@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Returning… · abbiey.search</title>
     <meta name="robots" content="noindex,nofollow">
-    <script>
+    <script nonce="{{ csp_nonce }}">
     (function () {
         var LS_KEY = "abbiey_checkout_return";
         var SITE_BASE = {{ site_base_url | tojson }};
@@ -47,7 +47,7 @@
     })();
     </script>
     <!-- Vercel Speed Insights -->
-    <script>
+    <script nonce="{{ csp_nonce }}">
         window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
     </script>
     <script defer src="/_vercel/speed-insights/script.js"></script>

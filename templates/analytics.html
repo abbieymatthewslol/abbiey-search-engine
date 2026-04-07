@@ -6,12 +6,12 @@
     <meta name="deploy-hash" content="{{ deploy_hash }}">
     {% include 'includes/google_analytics.html' %}
     <!-- Vercel Speed Insights -->
-    <script>
+    <script nonce="{{ csp_nonce }}">
         window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
     </script>
     <script defer src="/_vercel/speed-insights/script.js"></script>
     <title>Analytics — abbiey.search</title>
-    <script>
+    <script nonce="{{ csp_nonce }}">
         (function() {
             var t = localStorage.getItem('theme') || 'dark';
             var d = localStorage.getItem('density') || 'default';

@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>{% if query %}{{ query }} - abbiey.search{% else %}abbiey.search{% endif %}</title>
-    <script>
+    <script nonce="{{ csp_nonce }}">
         (function() {
             var t = localStorage.getItem('theme') || 'dark';
             var d = localStorage.getItem('density') || 'default';
@@ -23,7 +23,7 @@
     {% include 'includes/google_site_verification.html' %}
     {% include 'includes/google_analytics.html' %}
     <!-- Vercel Speed Insights -->
-    <script>
+    <script nonce="{{ csp_nonce }}">
         window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
     </script>
     <script defer src="/_vercel/speed-insights/script.js"></script>
@@ -1194,7 +1194,7 @@
         <p>abbiey.search &mdash; Search with clarity.</p>
     </footer>
 
-    <script>
+    <script nonce="{{ csp_nonce }}">
         window.__currentUser = {{ (({"id": current_user.id, "username": current_user.username} if current_user else none)) | tojson }};
         window.__currentUserHasPaidAccess = {{ current_user_has_paid_access|tojson }};
         window.__searchQuery = {{ query|tojson }};
@@ -1205,7 +1205,7 @@
     {% if query and search_type == 'code' %}
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-    <script>
+    <script nonce="{{ csp_nonce }}">
         document.addEventListener("DOMContentLoaded", () => {
             document.querySelectorAll(".code-result .result-snippet").forEach(el => {
                 hljs.highlightElement(el);
@@ -1216,7 +1216,7 @@
     {# ===== WELCOME TOAST (after signup) ===== #}
     {% with messages = get_flashed_messages(category_filter=["welcome"]) %}
     {% if messages %}
-    <script>
+    <script nonce="{{ csp_nonce }}">
         document.addEventListener("DOMContentLoaded", () => {
             const toast = document.createElement("div");
             toast.style.cssText = "position:fixed;top:1.5rem;left:50%;transform:translateX(-50%);background:var(--bg-elevated);color:var(--text);border:1px solid var(--border);padding:.75rem 1.5rem;border-radius:8px;font-weight:600;z-index:10000;box-shadow:var(--shadow-lg)";
@@ -1250,7 +1250,7 @@
             </div>
         </div>
     </div>
-    <script>
+    <script nonce="{{ csp_nonce }}">
         (function() {
             var overlay = document.getElementById("welcome-overlay");
             var closeBtn = document.getElementById("welcome-close");
@@ -1278,7 +1278,7 @@
     {% if query and search_type == 'onion' %}
     <script src="{{ url_for('static', filename='onion-rewriter.js', v=deploy_hash) }}"></script>
     {% endif %}
-    <script>
+    <script nonce="{{ csp_nonce }}">
     // Share button
     const shareBtn = document.getElementById('share-search-btn');
     if (shareBtn) {

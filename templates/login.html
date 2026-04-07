@@ -99,7 +99,7 @@
 {% block extra_scripts %}
 {% if supabase_auth %}
 <script src="{{ url_for('static', filename='vendor/supabase.min.js') }}"></script>
-<script>
+<script nonce="{{ csp_nonce }}">
 (function () {
     var sb = window.supabase.createClient({{ supabase_url | tojson }}, {{ supabase_anon_key | tojson }}, {
         auth: {
@@ -176,7 +176,7 @@
 })();
 </script>
 {% else %}
-<script>
+<script nonce="{{ csp_nonce }}">
     (function () {
         var form = document.getElementById("login-form");
         var submit = document.getElementById("login-submit");
@@ -190,7 +190,7 @@
     })();
 </script>
 {% endif %}
-<script>
+<script nonce="{{ csp_nonce }}">
     document.querySelectorAll('.pw-toggle').forEach(btn => {
         btn.addEventListener('click', () => {
             const inp = btn.previousElementSibling;
