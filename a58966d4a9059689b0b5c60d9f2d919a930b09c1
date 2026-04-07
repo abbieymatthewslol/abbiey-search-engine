@@ -1,0 +1,34 @@
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "a58966d4a9059689b0b5c60d9f2d919a930b09c1",
+  "prompts": {
+    "69dfd1b05c161cbe": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "13072a71-ac39-4a6d-bdda-0259636dd1e8",
+        "model": "default"
+      },
+      "human_author": "Abbiey",
+      "messages": [],
+      "total_additions": 15,
+      "total_deletions": 14,
+      "accepted_lines": 15,
+      "overriden_lines": 0
+    },
+    "a1c874d0fd04c06b": {
+      "agent_id": {
+        "tool": "github-copilot",
+        "id": "43346e35-2716-4d87-981d-9ef650a065e8",
+        "model": "copilot/claude-opus-4.6"
+      },
+      "human_author": "Abbiey",
+      "messages": [],
+      "total_additions": 30,
+      "total_deletions": 7,
+      "accepted_lines": 30,
+      "overriden_lines": 0
+    }
+  }
+}
