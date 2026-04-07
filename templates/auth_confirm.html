@@ -37,7 +37,9 @@
 
     var errEl = document.getElementById('sb-error');
     var statusEl = document.getElementById('status-msg');
-    var done = false;
+    /** True after redirect started, unrecoverable error shown, or success. */
+    var finished = false;
+    var syncInFlight = false;
 
     function emailFromUser(u) {
         if (!u) return '';
@@ -54,26 +56,30 @@
         return '';
     }
 
+    function escapeHtml(s) {
+        return String(s || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/"/g, '&quot;');
+    }
+
     function showErr(msg) {
+        finished = true;
         errEl.style.display = 'block';
         errEl.innerHTML = '<p>' + msg + '</p>';
     }
 
+    /**
+     * Sync Supabase user into Flask session. Avoid nested sb.auth.getSession() here — it can
+     * deadlock with GoTrue navigator locks while the PKCE code exchange is still settling.
+     */
     async function syncAndRedirect(session) {
-        if (done) return;
-        done = true;
-
-        if (!session) {
-            showErr('Invalid session. <a href="/login">Try again</a>.');
-            return;
-        }
-
+        if (!session || syncInFlight || finished) return;
+        syncInFlight = true;
         statusEl.textContent = 'Almost there…';
 
         try {
-            var gs = await sb.auth.getSession();
-            var effSession = (gs.data && gs.data.session) || session;
-            var user = effSession && effSession.user;
+            var user = session.user;
             if (!user) {
                 var gu = await sb.auth.getUser();
                 user = gu && gu.data && gu.data.user;
@@ -88,6 +94,8 @@
                 return;
             }
 
+            var ctrl = new AbortController();
+            var abortTimer = setTimeout(function () { ctrl.abort(); }, 20000);
             var cb = await fetch('/auth/callback', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -95,43 +103,86 @@
                 body: JSON.stringify({
                     email: emailAddr,
                     display_name: (user.user_metadata || {}).full_name || ''
-                })
+                }),
+                signal: ctrl.signal
             });
+            clearTimeout(abortTimer);
 
-            var data = await cb.json().catch(() => null);
+            var data = await cb.json().catch(function () { return null; });
 
             if (cb.ok && data && data.ok) {
-                window.location.href = '/search';
-            } else {
-                showErr('Session sync failed. <a href="/login">Try again</a>.');
+                finished = true;
+                window.location.replace('/search');
+                return;
             }
-
+            showErr('Session sync failed. <a href="/login">Try again</a>.');
         } catch (e) {
-            showErr('Something went wrong. <a href="/login">Try again</a>.');
+            if (e && e.name === 'AbortError') {
+                showErr('Server took too long to respond. <a href="/login">Try again</a>.');
+            } else {
+                showErr('Something went wrong. <a href="/login">Try again</a>.');
+            }
+        } finally {
+            syncInFlight = false;
         }
     }
 
     (async function () {
         try {
-            sb.auth.onAuthStateChange(async function (event, session) {
-                if (session && !done) {
-                    await syncAndRedirect(session);
+            var params = new URLSearchParams(window.location.search);
+            var oauthErr = params.get('error');
+            if (oauthErr) {
+                var oauthDesc = (params.get('error_description') || oauthErr).replace(/\+/g, ' ');
+                try {
+                    oauthDesc = decodeURIComponent(oauthDesc);
+                } catch (e3) { /* keep raw */ }
+                showErr('Sign-in did not finish. ' + escapeHtml(oauthDesc) + ' <a href="/login">Try again</a>.');
+                return;
+            }
+
+            var code = params.get('code');
+            if (code) {
+                statusEl.textContent = 'Confirming with provider…';
+                var ex = await sb.auth.exchangeCodeForSession(window.location.href);
+                if (ex.error) {
+                    showErr(escapeHtml(ex.error.message || 'Could not complete sign-in') + ' <a href="/login">Try again</a>.');
+                    return;
+                }
+                if (ex.data && ex.data.session) {
+                    try {
+                        window.history.replaceState(null, '', window.location.pathname);
+                    } catch (e2) { /* ignore */ }
+                    await syncAndRedirect(ex.data.session);
+                    return;
+                }
+                showErr('No session after sign-in. <a href="/login">Try again</a>.');
+                return;
+            }
+
+            sb.auth.onAuthStateChange(function (_event, session) {
+                if (session && !finished) {
+                    void syncAndRedirect(session);
                 }
             });
 
-            var { data } = await sb.auth.getSession();
-
-            if (data && data.session && !done) {
-                await syncAndRedirect(data.session);
+            var gs = await sb.auth.getSession();
+            if (gs.error) {
+                showErr(escapeHtml(gs.error.message || 'Auth error') + ' <a href="/login">Try again</a>.');
+                return;
             }
-
+            if (gs.data && gs.data.session && !finished) {
+                await syncAndRedirect(gs.data.session);
+            }
+            if (!finished && (!gs.data || !gs.data.session)) {
+                showErr('This sign-in link is invalid or expired. <a href="/login">Try again</a>.');
+            }
         } catch (e) {
             showErr('Auth init failed. <a href="/login">Try again</a>.');
         }
     })();
 
     setTimeout(function () {
-        if (!done) {
+        if (!finished) {
             showErr('Could not complete sign-in. <a href="/login">Try again</a>.');
         }
     }, 25000);
