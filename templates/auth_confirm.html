@@ -30,7 +30,7 @@
     try {
         sb = window.supabase.createClient(SB_URL, SB_KEY, {
             auth: {
-                flowType: 'pkce',
+                flowType: 'implicit',
                 detectSessionInUrl: true,
                 persistSession: true,
                 autoRefreshToken: true
@@ -152,21 +152,7 @@
 
             var code = params.get('code');
             if (code) {
-                statusEl.textContent = 'Confirming with provider…';
-                var ex = await sb.auth.exchangeCodeForSession(window.location.href);
-                if (ex.error) {
-                    showErr(escapeHtml(ex.error.message || 'Could not complete sign-in') + ' <a href="/login">Try again</a>.');
-                    return;
-                }
-                if (ex.data && ex.data.session) {
-                    try {
-                        window.history.replaceState(null, '', window.location.pathname);
-                    } catch (e2) { /* ignore */ }
-                    await syncAndRedirect(ex.data.session);
-                    return;
-                }
-                showErr('No session after sign-in. <a href="/login">Try again</a>.');
-                return;
+                /* Implicit flow doesn't use a code param — if we somehow got one, fall through */
             }
 
             sb.auth.onAuthStateChange(function (_event, session) {
@@ -175,6 +161,9 @@
                 }
             });
 
+            /* With implicit flow the session arrives via onAuthStateChange (hash processing).
+               getSession() may return null here before the hash is consumed — that is normal.
+               Only surface a hard error if getSession() itself returns an error. */
             var gs = await sb.auth.getSession();
             if (gs.error) {
                 showErr(escapeHtml(gs.error.message || 'Auth error') + ' <a href="/login">Try again</a>.');
@@ -183,9 +172,8 @@
             if (gs.data && gs.data.session && !finished) {
                 await syncAndRedirect(gs.data.session);
             }
-            if (!finished && (!gs.data || !gs.data.session)) {
-                showErr('This sign-in link is invalid or expired. <a href="/login">Try again</a>.');
-            }
+            /* If no session yet, onAuthStateChange will fire once the hash is processed.
+               The 25-second timeout below handles the genuine timeout/failure case. */
         } catch (e) {
             showErr('Auth init failed. <a href="/login">Try again</a>.');
         }

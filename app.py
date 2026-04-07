@@ -653,8 +653,6 @@ def _init_waitlist_db():
             "CREATE TABLE IF NOT EXISTS waitlist "
             "(id INTEGER PRIMARY KEY, email TEXT UNIQUE NOT NULL, created_at TEXT DEFAULT (datetime('now')))"
         )
-
-
 _init_waitlist_db()
 
 
@@ -1636,7 +1634,6 @@ PRICE_RE = re.compile(
     r'|[\d,]+(?:\.\d{1,2})?\s*(?:USD|GBP|EUR|AUD|CAD)\b',
     re.IGNORECASE,
 )
-
 RETAILER_DOMAINS = {
     "amazon.com": "Amazon", "amazon.co.uk": "Amazon", "amazon.com.au": "Amazon",
     "amazon.ca": "Amazon", "amazon.de": "Amazon",
@@ -1724,7 +1721,6 @@ if ABBIEY_OPEN_ACCESS:
     logging.getLogger(__name__).warning(
         "ABBIEY_OPEN_ACCESS is on: rate limiting disabled (intended for trusted self-hosts only)."
     )
-
 # ---------------------------------------------------------------------------
 # TTL cache for search results — fixes pagination instability
 # ---------------------------------------------------------------------------
@@ -1818,11 +1814,11 @@ def _safe_error_response(
         )
         ttl = str(title).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
         html = (
-            f"<!DOCTYPE html><html lang=\"en\"><meta charset=\"utf-8\"><title>{ttl}</title>"
-            f"<body style=\"margin:2rem;font-family:system-ui;background:#0a0a0a;color:#eee\">"
+            f'<!DOCTYPE html><html lang="en"><meta charset="utf-8"><title>{ttl}</title>'
+            f'<body style="margin:2rem;font-family:system-ui;background:#0a0a0a;color:#eee">'
             f"<h1>{ttl}</h1><p>{msg}</p>"
-            f"<p><a href=\"/search\" style=\"color:#93c5fd\">Back to search</a></p>"
-            f"<p><a href=\"/api/access-resources\" style=\"color:#93c5fd\">Access resources (JSON)</a></p>"
+            f'<p><a href="/search" style="color:#93c5fd">Back to search</a></p>'
+            f'<p><a href="/api/access-resources" style="color:#93c5fd">Access resources (JSON)</a></p>'
             f"</body></html>"
         )
         return Response(html, status=code, mimetype="text/html; charset=utf-8")
@@ -1847,8 +1843,6 @@ def error_404(e):
         message="That path is not on this server. You can still search or use the access resources below.",
         extra_help=True,
     )
-
-
 @app.errorhandler(429)
 def error_429(e):
     if _wants_json_error_response():
@@ -1878,8 +1872,6 @@ def error_429(e):
         ),
         extra_help=True,
     )
-
-
 @app.errorhandler(500)
 def error_500(e):
     return _safe_error_response(
@@ -1888,8 +1880,6 @@ def error_500(e):
         message="Something failed on our side. Please retry; if it persists, use the open-web resources below.",
         extra_help=True,
     )
-
-
 @app.errorhandler(Exception)
 def error_unhandled_exception(exc):
     """Catch any unhandled error: log it, return HTML or JSON — never propagate to WSGI crash."""
@@ -1901,12 +1891,10 @@ def error_unhandled_exception(exc):
         title="Server Error",
         message="Something failed on our side. Please retry; if it persists, use the open-web resources below.",
         extra_help=True,
-    )
-
-
 # ---------------------------------------------------------------------------
 # Search operator parsing
 # ---------------------------------------------------------------------------
+    )
 def _parse_operators(query):
     """Parse search operators from query.
     Returns (clean_query, operators_dict).
@@ -1943,13 +1931,10 @@ _DEFINE_RE = re.compile(
     r"|^(.+?)\s+(?:definition|meaning)$",
     re.IGNORECASE,
 )
-
 _QR_RE = re.compile(
     r"^(?:qr\s+code\s+for\s+|generate\s+qr\s+(?:code\s+)?(?:for\s+)?|qr\s+)(.+)$",
     re.IGNORECASE,
 )
-
-
 def _try_qr(query):
     """Detect QR code generation queries. Returns {data, image_url} or None."""
     m = _QR_RE.match(query.strip())
@@ -2168,7 +2153,6 @@ _UNIT_RE = re.compile(
     r"^([\d.]+)\s*°?\s*([a-zA-Z\s°]+?)\s+(?:in|to)\s+°?\s*([a-zA-Z\s°]+?)$",
     re.I,
 )
-
 _UNIT_TABLE = {
     # Distance
     ("mi", "km"): lambda v: v * 1.60934, ("km", "mi"): lambda v: v / 1.60934,
@@ -2329,8 +2313,8 @@ def _try_weather(location):
             "https://geocoding-api.open-meteo.com/v1/search",
             params={"name": location, "count": 1, "language": "en"},
             timeout=3.0,
-        )
         geo_data = geo.json().get("results")
+        )
         if not geo_data:
             return None
         place = geo_data[0]
@@ -2419,8 +2403,6 @@ _TEMPLATE_DEFAULTS = dict(
     current_user_has_paid_access=False,
     stripe_search_checkout_url=STRIPE_SEARCH_CHECKOUT_URL,
 )
-
-
 def should_show_ai_summary(query: str, intent: str) -> bool:
     """Gate AI summary card + /api/ai-summary: block obvious local/transactional queries."""
     q = (query or "").lower()
@@ -2551,8 +2533,8 @@ def api_search_access_claim():
             rows = _users_execute(
                 "SELECT 1 AS ok FROM payment_events WHERE checkout_token=? LIMIT 1",
                 [checkout_token],
-            )
             webhook_verified = bool(rows)
+            )
         except Exception:
             pass
     if not webhook_verified and not _search_checkout_pending():
@@ -2584,8 +2566,6 @@ _RESTORE_BY_EMAIL_PUBLIC_MESSAGE = (
     "If this email is associated with a purchase, unlimited search is enabled in this browser. "
     "Otherwise, nothing has changed — you can keep using the site as usual."
 )
-
-
 def _email_acceptable_for_restore(raw: str) -> bool:
     s = (raw or "").strip()
     if len(s) < 3 or len(s) > 254 or s.count("@") != 1:
@@ -2809,8 +2789,6 @@ _LOCAL_MAPS_HOST_RE = re.compile(
     r"foursquare\.|yellowpages|bing\.com/maps|mapquest\.|here\.com)",
     re.I,
 )
-
-
 def _local_probe_score(result, loc_ctx):
     """Proxy score when true distance per snippet is unavailable (DDG has no lat/lon per hit)."""
     url = (result.get("url") or "").lower()
@@ -2858,7 +2836,6 @@ def search():
     current_user_has_paid_access = _search_access_granted(
         uid=current_uid, token=_search_unlock_cookie_token()
     )
-
     if search_type not in ALLOWED_TYPES:
         search_type = "text"
 
@@ -2883,9 +2860,8 @@ def search():
         return render_template(
             "index.html",
             **{**_TEMPLATE_DEFAULTS, "current_user_has_paid_access": current_user_has_paid_access},
-        )
-
     # Server-side search limit for free-tier users
+        )
     if query and not current_user_has_paid_access:
         client_ip = request.remote_addr or ""
         ua = request.headers.get("User-Agent") or ""
@@ -2934,7 +2910,6 @@ def search():
             search_notice=None,
             current_user_has_paid_access=current_user_has_paid_access,
         )
-
     if len(query) > MAX_QUERY_LENGTH:
         return render_template(
             "error.html", code=400, title="Query Too Long",
@@ -3145,8 +3120,6 @@ def search():
         search_notice=results.get("notice"),
         current_user_has_paid_access=current_user_has_paid_access,
     )
-
-
 @app.route("/api/suggestions")
 @limiter.limit("200/minute")
 def api_suggestions():
@@ -3159,8 +3132,8 @@ def api_suggestions():
             "https://duckduckgo.com/ac/",
             params={"q": query, "type": "list"},
             timeout=2.0,
-        )
         data = resp.json()
+        )
         if isinstance(data, list) and len(data) > 1 and isinstance(data[1], list):
             return jsonify(data[1][:8])
         if isinstance(data, list) and data and isinstance(data[0], dict):
@@ -3219,8 +3192,8 @@ def api_related():
             "https://duckduckgo.com/ac/",
             params={"q": query, "type": "list"},
             timeout=2.0,
-        )
         data = resp.json()
+        )
         if isinstance(data, list) and len(data) > 1 and isinstance(data[1], list):
             for s in data[1]:
                 if s.lower() != query.lower():
@@ -3250,8 +3223,8 @@ def api_related():
                         "https://duckduckgo.com/ac/",
                         params={"q": word, "type": "list"},
                         timeout=1.5,
-                    )
                     d2 = resp2.json()
+                    )
                     if isinstance(d2, list) and len(d2) > 1 and isinstance(d2[1], list):
                         for s in d2[1][:3]:
                             if s.lower() != query.lower() and s.lower() != word.lower():
@@ -3289,7 +3262,6 @@ def api_onion_proxy():
                 url,
                 headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; rv:128.0) Gecko/20100101 Firefox/128.0"},
             )
-
         from flask import Response
         # Pass through content, rewriting internal .onion links to also go through proxy
         content = resp.text
@@ -3349,8 +3321,8 @@ def _check_single_onion(url):
             resp = client.head(
                 url,
                 headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; rv:128.0) Gecko/20100101 Firefox/128.0"},
-            )
         status = "live" if resp.status_code < 400 else "down"
+            )
     except Exception:
         # Tor not running or site unreachable — can't distinguish, report unknown
         status = "unknown"
@@ -3437,8 +3409,8 @@ def api_preview():
             timeout=4.0,
             follow_redirects=True,
             headers={"User-Agent": "Mozilla/5.0 (compatible; abbiey.search/1.0)"},
-        )
         # Guard against redirect-based SSRF: validate final URL after redirects
+        )
         final_url = str(resp.url)
         final_parsed = urlparse(final_url)
         final_host = final_parsed.hostname or ""
@@ -3626,7 +3598,6 @@ def api_chat():
 
     # Fetch search results for context
     context_results = _fetch_results(query, 1, "text")
-
     # Build context from top results
     context_lines = [f"Search results for '{query}':\n"]
     for i, r in enumerate(context_results["results"][:5], 1):
@@ -3642,7 +3613,6 @@ def api_chat():
         "Quote relevant passages and cite sources by number.\n\n"
         + context
     )
-
     # Build messages list for the AI chat API
     messages = [{"role": "system", "content": system_context}]
     messages.append({"role": "assistant", "content": f"I've studied the search results about '{query}'. What would you like to know?"})
@@ -3672,7 +3642,6 @@ def api_chat():
             extra = _fetch_results(f"{query} {message}", 1, "text")
             all_results.extend(extra["results"])
             all_results = _deduplicate(all_results)
-
         response = _extractive_research(message, all_results)
         return jsonify({"response": response})
     except Exception:
@@ -3731,7 +3700,6 @@ def api_ai_summary():
         f"Based on these search results, summarize the answer to '{query}' in 2-3 sentences. "
         f"Cite sources as [1], [2] etc. Be concise and factual.\n\n{context}"
     )
-
     try:
         summary_messages = [
             {
@@ -4140,8 +4108,6 @@ def admin_api_stream():
             "Connection": "keep-alive",
         },
     )
-
-
 def _build_health_payload(include_sensitive: bool = False) -> dict:
     """Build health payload for public and admin probes."""
     import datetime as _dt
@@ -4360,7 +4326,6 @@ def _abbiey_bot_fallback(msg: str, ctx: str = "") -> str:
             "Your Vercel token is stored securely — retrieve it from https://vercel.com/account/tokens. "
             "Takes ~60-90s. The old deploy hook on Vercel's dashboard does NOT work — always use the CLI."
         )
-
     if any(w in m for w in ["slow", "latency", "performance", "fast", "speed"]):
         return (
             "**Performance levers:**\n"
@@ -4370,7 +4335,6 @@ def _abbiey_bot_fallback(msg: str, ctx: str = "") -> str:
             "- Add Upstash Redis as persistent cache layer (free tier available)\n"
             "- Enable Vercel Edge Functions for static responses"
         )
-
     if any(w in m for w in ["user", "signup", "register", "account"]):
         return (
             "**User system:**\n"
@@ -4380,7 +4344,6 @@ def _abbiey_bot_fallback(msg: str, ctx: str = "") -> str:
             "- Sessions expire when Vercel instance restarts (stateless). Consider adding a persistent session store.\n"
             "- ⚠️ SQLite in /tmp is ephemeral on Vercel — users are lost on cold starts. Migrate to Supabase or PlanetScale for production."
         )
-
     if any(w in m for w in ["error", "bug", "broken", "fix", "issue"]):
         return (
             "**Known fixed issues:**\n"
@@ -4393,7 +4356,6 @@ def _abbiey_bot_fallback(msg: str, ctx: str = "") -> str:
             "- Rate limiter uses in-memory storage (resets on cold start)\n"
             "- No error alerting (Sentry not yet integrated)"
         )
-
     if any(w in m for w in ["grow", "traffic", "seo", "users", "marketing", "promote"]):
         return (
             "**Growth actions (prioritised):**\n"
@@ -4406,7 +4368,6 @@ def _abbiey_bot_fallback(msg: str, ctx: str = "") -> str:
             "7. Reddit posts in r/privacy, r/degoogle, r/selfhosted\n"
             "8. Add to alternativeto.net as DuckDuckGo/Google alternative"
         )
-
     if any(w in m for w in ["search", "ddg", "duckduckgo", "result"]):
         return (
             "**Search architecture:**\n"
@@ -4418,7 +4379,6 @@ def _abbiey_bot_fallback(msg: str, ctx: str = "") -> str:
             "- Cache: TTLCache 1000 entries, 300s TTL\n"
             "- Search operators: site:, filetype:, before:, after:, etc."
         )
-
     if any(w in m for w in ["database", "sqlite", "db", "storage", "data"]):
         return (
             "**Data storage:**\n"
@@ -4427,7 +4387,6 @@ def _abbiey_bot_fallback(msg: str, ctx: str = "") -> str:
             "⚠️ All SQLite files live in `/tmp` on Vercel — **ephemeral, wiped on cold start**.\n"
             "For production persistence, migrate to: Turso (SQLite-compatible), Supabase (PostgreSQL), or PlanetScale."
         )
-
     if any(w in m for w in ["feature", "next", "todo", "build", "add", "improve"]):
         return (
             "**High-impact features to build next:**\n"
@@ -4441,9 +4400,8 @@ def _abbiey_bot_fallback(msg: str, ctx: str = "") -> str:
             "8. **PDF/document search** — specialized tab\n"
             "9. **Answer engine mode** — AI-summarised answers at top\n"
             "10. **Sentry error tracking** — get alerts on production errors"
-        )
-
     # Generic helpful response
+        )
     return (
         f"I'm the abbiey assistant — I know how abbiey.search is built and run. Ask me about:\n"
         "- **Deploy** — how to push changes live\n"
@@ -4454,14 +4412,12 @@ def _abbiey_bot_fallback(msg: str, ctx: str = "") -> str:
         "- **Errors** — known bugs, fixes, monitoring\n"
         "- **Features** — what to build next\n\n"
         "For full AI responses, set `OLLAMA_BASE_URL` (local Ollama) or `OPENAI_API_KEY` in Vercel environment variables."
-    )
-
-
 # ---------------------------------------------------------------------------
 # Fallback infrastructure — every query MUST return results
 # ---------------------------------------------------------------------------
 
 # ---- Layer 1: DDG multi-backend ----
+    )
 
 def _try_ddg(query, max_results, search_type, region=None, time_filter=None, safesearch="off"):
     """Primary: ddgs library with all backends enabled."""
@@ -5801,7 +5757,6 @@ def _try_prices(query, max_results=40):
 
     seen_urls: set = set()
     results = []
-
     with ThreadPoolExecutor(max_workers=len(site_queries)) as pool:
         futs = [pool.submit(_try_ddg, q, 10, "text") for q in site_queries]
         for fut in as_completed(futs, timeout=10):
@@ -5829,8 +5784,8 @@ def _try_prices(query, max_results=40):
     with_price = sorted(
         [r for r in results if r.get("price_val") is not None],
         key=lambda x: x["price_val"],
-    )
     without_price = [r for r in results if r.get("price_val") is None]
+    )
     return (with_price + without_price)[:max_results]
 
 
@@ -6134,7 +6089,6 @@ def _fetch_results(
     # Build effective query with operators
     effective_query = _build_engine_query(query, operators) if operators else query
     max_results = CACHE_FETCH_SIZE
-
     # Onion / Deep Web — dedicated path, skip normal engines
     results = []
     if search_type == "onion":
@@ -6338,27 +6292,21 @@ def _fetch_results(
     if not results and search_type == "text":
         logger.info("DDG empty, trying Marginalia")
         results = _try_marginalia(query)
-
     if not results and search_type == "text":
         logger.info("Marginalia empty, trying Wikipedia")
         results = _try_wikipedia(query, lang)
-
     if not results and search_type == "text":
         logger.info("Wikipedia empty, trying Wiby.me")
         results = _try_wiby(query)
-
     if not results and search_type == "text":
         logger.info("Wiby empty, trying Mojeek")
         results = _try_mojeek(query)
-
     if not results and search_type == "text":
         logger.info("All engines empty, trying DDG instant answers")
         results = _try_ddg_instant(query)
-
     results = _deduplicate(results)
     if search_type == "text" and local_rank_context and local_rank_context.get("has_local_intent"):
         results = _rank_local_search_results(results, local_rank_context)
-
     # Store in cache and always release the in-flight lock so waiters are never stranded
     try:
         with _cache_lock:
@@ -6571,7 +6519,6 @@ def _signup_process_post():
             username=username_raw,
             email=email,
         )
-
     try:
         otp, vtok = _set_verification_challenge(int(uid))
     except Exception:
@@ -6582,7 +6529,6 @@ def _signup_process_post():
             username=username_raw,
             email=email,
         )
-
     sent = _send_signup_verification_email(email, display_name, otp, vtok)
     vq = {"email": email, "new": "1"}
     if not sent:
@@ -6619,8 +6565,6 @@ def signup():
             email=(request.form.get("email") or "").strip().lower(),
             **sb_ctx,
         )
-
-
 @app.route("/verify-email", methods=["GET", "POST"])
 @limiter.limit("120/hour")
 def verify_email():
@@ -6631,8 +6575,8 @@ def verify_email():
             return render_template(
                 "verify_email.html",
                 errors=["That link is invalid or has already been used."],
-            )
         u = rows[0]
+            )
         if _user_is_email_verified(u):
             return render_template(
                 "verify_email.html",
@@ -6672,8 +6616,8 @@ def verify_email():
                 "verify_email.html",
                 errors=["No account found for that email. Check the address or sign up again."],
                 email=email_in,
-            )
         u = rows[0]
+            )
         if _user_is_email_verified(u):
             return render_template(
                 "verify_email.html",
@@ -6712,8 +6656,6 @@ def verify_email():
         resent=(request.args.get("resent") == "1"),
         email_failed=(request.args.get("email_failed") == "1"),
     )
-
-
 @app.route("/verify-email/resend", methods=["POST"])
 @limiter.limit("8/hour")
 def verify_email_resend():
@@ -6723,8 +6665,8 @@ def verify_email_resend():
             "verify_email.html",
             errors=["Enter your email address."],
             email=email_in,
-        )
     rows = _users_execute("SELECT * FROM users WHERE LOWER(email)=LOWER(?) LIMIT 1", [email_in])
+        )
     if not rows or _user_is_email_verified(rows[0]):
         return redirect(url_for("verify_email", email=email_in, resent="1"))
     u = rows[0]
@@ -6779,7 +6721,6 @@ def login():
             next=next_url,
             **sb_ctx,
         )
-
     if not user or not check_password_hash(user["password_hash"], password):
         return render_template(
             "login.html",
@@ -6788,7 +6729,6 @@ def login():
             next=next_url,
             **sb_ctx,
         )
-
     if not _user_is_email_verified(user):
         return render_template(
             "login.html",
@@ -6801,7 +6741,6 @@ def login():
             verify_email_hint=True,
             **sb_ctx,
         )
-
     session.permanent = True
     try:
         session["user_id"] = int(user["id"])
@@ -6907,8 +6846,6 @@ def _list_api_keys_for_user(uid: int) -> list:
         "WHERE user_id=? AND revoked_at IS NULL ORDER BY created_at DESC",
         [uid],
     )
-
-
 def _count_active_api_keys(uid: int) -> int:
     rows = _users_execute(
         "SELECT COUNT(*) AS n FROM api_keys WHERE user_id=? AND revoked_at IS NULL",
@@ -6940,8 +6877,6 @@ def developer():
         billing_success=billing_success,
         stripe_api_checkout_url=STRIPE_API_KEYS_CHECKOUT_URL,
     )
-
-
 @app.route("/developer/api-keys/create", methods=["POST"])
 @limiter.limit("30/hour")
 def developer_api_key_create():
@@ -7029,7 +6964,6 @@ def profile():
             ),
             503,
         )
-
     return render_template("profile.html", user=user, bookmarks=bookmarks, history=history)
 
 
@@ -7060,7 +6994,6 @@ def profile_update():
             ),
             503,
         )
-
     return redirect(url_for("profile"))
 
 
@@ -7214,7 +7147,6 @@ def api_user_bookmarks_delete_by_url():
             [url, uid],
         )
     except Exception:
-        logger.exception("api_user_bookmarks_delete_by_url_failed")
         return jsonify({"error": "Could not remove bookmark."}), 503
     return jsonify({"ok": True})
 
@@ -7365,6 +7297,9 @@ def api_user_history_delete():
         logger.exception("api_user_history_delete_failed")
         return jsonify({"ok": False}), 503
     return jsonify({"ok": True})
+
+
+@app.route("/opensearch.xml")
 def opensearch():
     xml = '''<?xml version="1.0" encoding="UTF-8"?>
 <OpenSearchDescription xmlns="http://a9.com/-/spec/opensearch/1.1/">
