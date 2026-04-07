@@ -3669,8 +3669,10 @@ def api_image_metadata():
     """HEAD the requested image URL and return Content-Type / Content-Length.
 
     SSRF-safe: blocks private/loopback IPs and non-http(s) schemes.
+    Resolves hostnames to IPs to prevent DNS-rebinding attacks.
     """
     import ipaddress as _ipaddress
+    import socket as _socket
     url = request.args.get("url", "").strip()
     if not url:
         return jsonify({"error": "url required"}), 400
@@ -3683,12 +3685,19 @@ def api_image_metadata():
             return jsonify({"error": "invalid url"}), 400
         if host in ("localhost",) or host.endswith(".local") or host.endswith(".internal"):
             return jsonify({"error": "blocked"}), 400
+        # Resolve hostname to IPs and reject any private/loopback address
         try:
-            addr = _ipaddress.ip_address(host)
-            if addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved:
-                return jsonify({"error": "blocked"}), 400
-        except ValueError:
-            pass  # hostname (not raw IP) — allowed
+            resolved = _socket.getaddrinfo(host, None)
+            for _, _, _, _, sockaddr in resolved:
+                raw_ip = sockaddr[0]
+                try:
+                    addr = _ipaddress.ip_address(raw_ip)
+                    if addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved:
+                        return jsonify({"error": "blocked"}), 400
+                except ValueError:
+                    return jsonify({"error": "blocked"}), 400
+        except _socket.gaierror:
+            return jsonify({"error": "unresolvable host"}), 400
     except Exception:
         return jsonify({"error": "invalid url"}), 400
     try:
@@ -4881,7 +4890,7 @@ def _try_wikimedia_commons(query):
                 "gsrlimit": "20",
                 "gsrnamespace": "6",
                 "prop": "imageinfo",
-                "iiprop": "url|extmetadata|dimensions|mime|user",
+                "iiprop": "url|extmetadata|dimensions|mime|user",  # url=file URL, extmetadata=dates, dimensions=w×h, mime=format, user=uploader
                 "iiurlwidth": "300",
                 "format": "json",
             },

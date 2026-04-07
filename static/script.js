@@ -1602,7 +1602,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 lightboxFormatRow.hidden = false;
               }
             })
-            .catch(() => {});
+            .catch(err => { console.warn("Image metadata fetch failed:", err); });
         }
       }
 
