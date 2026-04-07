@@ -1279,13 +1279,14 @@ document.addEventListener("DOMContentLoaded", () => {
   const rotatingInput = document.querySelector("[data-placeholder-rotate]");
   if (rotatingInput && !rotatingInput.value) {
     const placeholders = [
-      "Search anything…",
-      "Try a name, email, or username…",
-      "Search a domain or IP address…",
-      "Ask anything — weather, math, conversions…",
-      "Search phone numbers, crypto addresses…",
-      "Find people, places, or things…",
-      "Try a hashtag or social handle…",
+      "Try: weather Tokyo",
+      "Try: site:reddit.com best VPN",
+      "Try: @username or email@domain.com",
+      "Try: sqrt(144) or 2^10",
+      "Try: 100 fahrenheit to celsius",
+      "Try: what is my IP",
+      "Try: a name, email, or phone number…",
+      "Try: a domain, IP, or crypto address…",
     ];
     let phIdx = 0;
     function rotatePlaceholder() {

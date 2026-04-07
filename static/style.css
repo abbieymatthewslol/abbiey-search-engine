@@ -4102,6 +4102,37 @@ footer {
 .landing-cta {
   text-decoration: none;
 }
+.landing-try-label {
+  font-size: .85rem;
+  color: var(--text-dim);
+  margin: 0 0 .5rem;
+  font-weight: 500;
+  letter-spacing: .02em;
+}
+.landing-examples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem;
+  margin: 0 0 1.75rem;
+}
+.landing-example-chip {
+  display: inline-block;
+  padding: .35rem .75rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-raised, var(--bg-alt));
+  color: var(--text-muted);
+  font-size: .85rem;
+  text-decoration: none;
+  transition: background .15s, color .15s, border-color .15s;
+  white-space: nowrap;
+}
+.landing-example-chip:hover {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+  text-decoration: none;
+}
 
 /* ===== LEGAL PAGES (privacy, terms) ===== */
 .footer-links {

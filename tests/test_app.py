@@ -35,7 +35,8 @@ class TestRoutes:
     def test_landing_path_renders_marketing(self, client):
         resp = client.get("/landing")
         assert resp.status_code == 200
-        assert b"Your searches stay yours." in resp.data
+        assert b"privacy-first search engine" in resp.data
+        assert b"landing-example-chip" in resp.data
 
     def test_google_site_verification_meta_when_configured(self, client):
         import app as app_module
