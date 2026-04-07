@@ -7,7 +7,7 @@
             <h1 class="auth-title">Check your email</h1>
             <p class="auth-subtitle">
                 {% if email_failed %}
-                <strong>Email delivery failed</strong> (missing API key, provider error, or network). Your account is still pending — use <strong>Send new code</strong> after fixing configuration, or check server logs if you self-host.
+                <strong>Email delivery failed</strong> (missing API key, provider error, or network issue). Your account is still pending — use <strong>Send new code</strong> after fixing configuration, or check server logs if you self-host.
                 {% elif from_signup %}
                 We sent a <strong>6-digit code</strong> and a <strong>verification link</strong> to your inbox.
                 {% elif resent %}
