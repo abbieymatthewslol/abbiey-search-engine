@@ -1421,17 +1421,18 @@ article.result.code-result { font-size: .9rem; }
 .home-logo span {
   color: var(--text);
 }
-.home-intro {
-  max-width: 38rem;
-  margin: 0.85rem auto 0;
-  padding: 0 1rem;
-  font-size: clamp(0.8125rem, 1.5vw + 0.65rem, 0.9375rem);
-  line-height: 1.55;
-  color: var(--text-dim);
-  text-align: center;
+/* Full “what is this app” copy lives in the footer on the empty home state (policy / SEO), not under the logo */
+.home-about-blurb {
+  max-width: 34rem;
+  margin: 0.75rem auto 0;
+  padding: 0 1.25rem;
+  font-size: 0.6875rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+  opacity: 0.72;
 }
-.home-intro strong {
-  color: var(--text);
+.home-about-blurb strong {
+  color: var(--text-muted);
   font-weight: 600;
 }
 .privacy-popover-policy {

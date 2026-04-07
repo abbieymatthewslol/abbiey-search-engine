@@ -387,12 +387,6 @@
             {# ===== HOME: title above search; supporting copy below bar ===== #}
             <div class="home-hero">
                 <h1 class="home-logo">abbiey<span>search</span></h1>
-                <p class="home-intro">
-                    <strong>abbieysearch</strong> is a privacy-first web search engine: we help you find information on the web
-                    without selling your searches or building a marketing profile. The search box below works immediately
-                    &mdash; <strong>no account or sign-in is required</strong>. Creating an account is optional if you want
-                    bookmarks, synced history, or developer tools.
-                </p>
             </div>
             {% endif %}
 
@@ -1212,6 +1206,13 @@
             &nbsp;&middot;&nbsp;
             <a href="/landing">About</a>
         </p>
+        {% if not query %}
+        <p class="home-about-blurb" id="what-is-abbieysearch">
+            <strong>abbieysearch</strong> is a privacy-first web search engine: we help you find information on the web
+            without selling your searches or building a marketing profile. Searching here works immediately
+            &mdash; <strong>no account or sign-in is required</strong>. An account is optional for bookmarks, synced history, or developer tools.
+        </p>
+        {% endif %}
     </footer>
 
     <script nonce="{{ csp_nonce }}">
