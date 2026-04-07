@@ -3969,3 +3969,105 @@ footer {
 .landing-cta {
   text-decoration: none;
 }
+
+/* ===== LEGAL PAGES (privacy, terms) ===== */
+.footer-links {
+  font-size: .75rem;
+  margin-top: .25rem;
+  opacity: .7;
+}
+.footer-links a {
+  color: var(--text-muted);
+  text-decoration: none;
+}
+.footer-links a:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.legal-page {
+  min-height: 80vh;
+  padding: 2rem 1rem 4rem;
+}
+.legal-container {
+  max-width: 760px;
+  margin: 0 auto;
+}
+.legal-container h1 {
+  font-size: 2rem;
+  font-weight: 700;
+  margin-bottom: .25rem;
+}
+.legal-meta {
+  font-size: .85rem;
+  color: var(--text-muted);
+  margin-bottom: 2rem;
+}
+.legal-container h2 {
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin-top: 2rem;
+  margin-bottom: .5rem;
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: .25rem;
+}
+.legal-container h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-top: 1.25rem;
+  margin-bottom: .4rem;
+}
+.legal-container p, .legal-container li {
+  font-size: .9375rem;
+  line-height: 1.75;
+  color: var(--text-dim);
+}
+.legal-container ul {
+  padding-left: 1.5rem;
+  margin: .5rem 0 1rem;
+}
+.legal-container li {
+  margin-bottom: .3rem;
+}
+.legal-container a {
+  color: var(--accent);
+  text-decoration: none;
+}
+.legal-container a:hover {
+  text-decoration: underline;
+}
+.legal-container code {
+  background: var(--bg-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  padding: .1em .4em;
+  font-size: .85em;
+}
+.legal-container hr {
+  border: none;
+  border-top: 1px solid var(--border-subtle);
+  margin: 2rem 0;
+}
+.legal-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+  font-size: .875rem;
+}
+.legal-table th,
+.legal-table td {
+  text-align: left;
+  padding: .6rem .75rem;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-dim);
+}
+.legal-table th {
+  background: var(--bg-raised);
+  font-weight: 600;
+  color: var(--text);
+}
+.legal-footer-note {
+  font-size: .85rem;
+  color: var(--text-muted);
+  font-style: italic;
+}

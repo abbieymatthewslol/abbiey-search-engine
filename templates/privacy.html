@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}Privacy Policy — abbiey.search{% endblock %}
+{% block meta_description %}abbiey.search Privacy Policy — how we handle your data, what we collect, and what we never do.{% endblock %}
+
+{% block content %}
+<div class="legal-page">
+    <div class="legal-container">
+
+        <h1>Privacy Policy</h1>
+        <p class="legal-meta">Last updated: <time datetime="2025-05-01">1 May 2025</time> &nbsp;·&nbsp; Effective immediately</p>
+
+        <p>abbiey.search is a privacy-first search engine. This policy explains what data we collect, why, and how. We keep it short because we genuinely collect very little.</p>
+
+        <hr>
+
+        <h2>1. Who We Are</h2>
+        <p>abbiey.search is operated by Abbiey Matthews (<strong>abbiey.search</strong>, "we", "our"). You can reach us at <a href="mailto:privacy@abbieysearch.com">privacy@abbieysearch.com</a>.</p>
+
+        <h2>2. What We Do Not Do</h2>
+        <ul>
+            <li>We <strong>do not log your search queries</strong> server-side.</li>
+            <li>We do not build a profile of your interests, searches, or behaviour.</li>
+            <li>We do not sell, rent, or share your personal data with advertisers.</li>
+            <li>We do not use third-party advertising networks.</li>
+            <li>We do not set persistent third-party tracking cookies.</li>
+        </ul>
+
+        <h2>3. Data We Collect</h2>
+
+        <h3>3.1 Account Data (optional)</h3>
+        <p>If you create an account you provide us:</p>
+        <ul>
+            <li><strong>Email address</strong> — used for account recovery and optional email verification only.</li>
+            <li><strong>Display name</strong> — used to personalise your dashboard.</li>
+            <li><strong>Password hash</strong> — stored securely via Supabase Auth (bcrypt). We never store or see your plaintext password.</li>
+        </ul>
+        <p>You can sign up with Google OAuth instead of email/password. In that case we receive your Google email and name only; no other Google data is accessed.</p>
+
+        <h3>3.2 Usage Data</h3>
+        <p>Registered users may optionally store bookmarks and search history in their account. This data is yours and visible only to you. You can delete it at any time from your profile page.</p>
+
+        <h3>3.3 Technical / Server Logs</h3>
+        <p>Our hosting provider (Vercel) automatically records standard web server logs (IP address, HTTP method, URL path, response code, timestamp) for up to 30 days for security and abuse prevention. We do not analyse these logs for marketing purposes. Search query text is <strong>not</strong> present in these logs.</p>
+
+        <h3>3.4 Cookies</h3>
+        <p>We set the minimum cookies required to operate the service:</p>
+        <ul>
+            <li><code>session</code> — a signed, server-side session cookie that keeps you logged in. HttpOnly, Secure, SameSite=Lax. Expires when your browser session ends (or 7 days if you tick "remember me").</li>
+            <li><code>search_unlock</code> — remembers whether you have unlocked unlimited search on this device. No personal data inside.</li>
+        </ul>
+        <p>We do not set advertising or analytics cookies. Google Analytics is configured in "Basic" mode and only fires if you have not opted out via browser settings or an ad blocker.</p>
+
+        <h2>4. How We Use Your Data</h2>
+        <table class="legal-table">
+            <thead><tr><th>Data</th><th>Why</th><th>Legal basis</th></tr></thead>
+            <tbody>
+                <tr><td>Email address</td><td>Account recovery, transactional emails</td><td>Contract / legitimate interest</td></tr>
+                <tr><td>Bookmarks &amp; history</td><td>Providing your personalised dashboard</td><td>Contract (account features)</td></tr>
+                <tr><td>Server logs</td><td>Security, abuse prevention, uptime monitoring</td><td>Legitimate interest</td></tr>
+                <tr><td>Payment info</td><td>Processed entirely by Stripe — we receive only a confirmation token, never card details</td><td>Contract</td></tr>
+            </tbody>
+        </table>
+
+        <h2>5. Third-Party Services</h2>
+        <p>We use the following sub-processors. Each has its own privacy policy.</p>
+        <ul>
+            <li><strong>Supabase</strong> (supabase.com) — database and authentication. Data hosted in Singapore (ap-southeast-1). <a href="https://supabase.com/privacy" target="_blank" rel="noopener">Supabase Privacy Policy</a></li>
+            <li><strong>Vercel</strong> (vercel.com) — web hosting and edge delivery. <a href="https://vercel.com/legal/privacy-policy" target="_blank" rel="noopener">Vercel Privacy Policy</a></li>
+            <li><strong>Stripe</strong> (stripe.com) — payment processing. <a href="https://stripe.com/privacy" target="_blank" rel="noopener">Stripe Privacy Policy</a></li>
+            <li><strong>Google Analytics</strong> (google.com/analytics) — aggregate, anonymised usage statistics. IP anonymisation enabled. <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google Privacy Policy</a></li>
+            <li><strong>DuckDuckGo</strong> (duckduckgo.com) — search results are proxied through our servers. Your IP is not sent to DuckDuckGo.</li>
+        </ul>
+
+        <h2>6. Data Retention</h2>
+        <ul>
+            <li>Account data: retained until you delete your account.</li>
+            <li>Bookmarks and history: deleted immediately when you remove them, or when you delete your account.</li>
+            <li>Server logs: 30 days, then automatically purged by Vercel.</li>
+        </ul>
+        <p>To delete your account and all associated data, go to <strong>Profile → Delete Account</strong> or email <a href="mailto:privacy@abbieysearch.com">privacy@abbieysearch.com</a>.</p>
+
+        <h2>7. Your Rights</h2>
+        <p>Depending on where you live, you may have the right to:</p>
+        <ul>
+            <li>Access the personal data we hold about you.</li>
+            <li>Correct inaccurate data.</li>
+            <li>Request deletion of your data ("right to be forgotten").</li>
+            <li>Withdraw consent at any time (where processing is based on consent).</li>
+            <li>Lodge a complaint with your local data protection authority.</li>
+        </ul>
+        <p>Email <a href="mailto:privacy@abbieysearch.com">privacy@abbieysearch.com</a> to exercise any of these rights. We respond within 30 days.</p>
+
+        <h2>8. Children</h2>
+        <p>abbiey.search is not directed at children under 13. We do not knowingly collect data from children. If you believe a child has created an account, contact us and we will delete it promptly.</p>
+
+        <h2>9. Security</h2>
+        <p>All data is transmitted over HTTPS (TLS 1.2+). Passwords are hashed with bcrypt. Database access requires authenticated, encrypted connections. We apply Content Security Policy, HSTS, and other hardening headers.</p>
+
+        <h2>10. Changes to This Policy</h2>
+        <p>We may update this policy. Material changes will be notified via the email address on your account. The "Last updated" date at the top will always reflect the current version.</p>
+
+        <h2>11. Contact</h2>
+        <p><a href="mailto:privacy@abbieysearch.com">privacy@abbieysearch.com</a></p>
+
+        <hr>
+        <p class="legal-footer-note">abbiey.search is committed to your privacy. We search the web so you don't have to be tracked doing it.</p>
+
+    </div>
+</div>
+{% endblock %}
