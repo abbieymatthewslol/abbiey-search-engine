@@ -103,7 +103,7 @@
 (function () {
     var sb = window.supabase.createClient({{ supabase_url | tojson }}, {{ supabase_anon_key | tojson }}, {
         auth: {
-            flowType: 'implicit',
+            flowType: 'pkce',
             detectSessionInUrl: true,
             persistSession: true,
             autoRefreshToken: true
@@ -127,6 +127,7 @@
                 var res = await sb.auth.signInWithOAuth({
                     provider: 'google',
                     options: {
+                        skipBrowserRedirect: true,
                         redirectTo: window.location.origin + '/auth/confirm'
                     }
                 });
@@ -134,8 +135,12 @@
                     showErr(res.error.message || 'Google sign-in failed.');
                     googleBtn.disabled = false;
                     googleBtn.innerHTML = googleBtnHtml;
+                } else if (res.data && res.data.url) {
+                    window.location.href = res.data.url;
                 } else {
-                    /* implicit flow: Supabase JS navigates automatically */
+                    showErr('Could not start Google sign-in.');
+                    googleBtn.disabled = false;
+                    googleBtn.innerHTML = googleBtnHtml;
                 }
             } catch (err) {
                 showErr('Something went wrong. Please try again.');

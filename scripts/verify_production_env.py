@@ -34,6 +34,19 @@ def _load_dotenv() -> None:
         pass
 
 
+_ABBIEY_CANONICAL_SUPABASE_URL = "https://xwxscvllmghyogddpmii.supabase.co"
+
+
+def _canonical_supabase_url_ok(var_name: str) -> bool:
+    raw = (os.environ.get(var_name) or "").strip()
+    if not raw:
+        return True
+    norm = raw.rstrip("/")
+    if "xwxcvllmghyogddpmii" in norm:
+        return False
+    return norm == _ABBIEY_CANONICAL_SUPABASE_URL
+
+
 def _sk_ok() -> bool:
     sk = (os.environ.get("SECRET_KEY") or "").strip()
     if not sk:
@@ -77,6 +90,19 @@ def main() -> int:
     db = _truthy(os.environ.get("SUPABASE_DB_URL") or os.environ.get("DATABASE_URL"))
     add("SUPABASE_DB_URL or DATABASE_URL", "database", db, "Pooler URI on Vercel (port 6543)")
 
+    add(
+        "SUPABASE_URL (canonical)",
+        "auth",
+        _canonical_supabase_url_ok("SUPABASE_URL"),
+        f"Must be {_ABBIEY_CANONICAL_SUPABASE_URL} when set (no typo xwxcvll…)",
+    )
+    add(
+        "NEXT_PUBLIC_SUPABASE_URL (canonical)",
+        "auth",
+        _canonical_supabase_url_ok("NEXT_PUBLIC_SUPABASE_URL"),
+        f"Empty or exactly {_ABBIEY_CANONICAL_SUPABASE_URL}",
+    )
+
     resend = _truthy(os.environ.get("RESEND_API_KEY"))
     add("RESEND_API_KEY", "email", resend, "Sends signup verification; omit only for dev")
     add("EMAIL_FROM", "email", _truthy(os.environ.get("EMAIL_FROM")), "Must match verified domain in Resend")
@@ -85,7 +111,10 @@ def main() -> int:
     add("SITE_URL or CANONICAL_URL", "urls", site, "Verification links and OG tags")
 
     core_ok = rows[0][2] and rows[1][2]
-    strict_fail = args.strict and not core_ok
+    supabase_urls_ok = _canonical_supabase_url_ok("SUPABASE_URL") and _canonical_supabase_url_ok(
+        "NEXT_PUBLIC_SUPABASE_URL"
+    )
+    strict_fail = args.strict and (not core_ok or not supabase_urls_ok)
 
     ping_ok: bool | None = None
     ping_detail = ""
@@ -163,7 +192,11 @@ def main() -> int:
             )
 
     if strict_fail:
-        print("Strict mode: fix core variables above (SECRET_KEY, ADMIN_TOKEN).", file=sys.stderr)
+        print(
+            "Strict mode: fix core variables (SECRET_KEY, ADMIN_TOKEN) and/or "
+            f"SUPABASE_URL / NEXT_PUBLIC_SUPABASE_URL (must be {_ABBIEY_CANONICAL_SUPABASE_URL}).",
+            file=sys.stderr,
+        )
         return 1
     if args.ping and ping_ok is False:
         return 1

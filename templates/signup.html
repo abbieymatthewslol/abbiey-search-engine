@@ -140,9 +140,8 @@
                 var res = await sb.auth.signInWithOAuth({
                     provider: 'google',
                     options: {
-                        /* PKCE verifier is per-origin localStorage; landing URL must match this tab */
-                        redirectTo: window.location.origin + '/auth/confirm',
-                        skipBrowserRedirect: true
+                        skipBrowserRedirect: true,
+                        redirectTo: window.location.origin + '/auth/confirm'
                     }
                 });
                 if (res.error) {

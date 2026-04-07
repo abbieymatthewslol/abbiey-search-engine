@@ -89,9 +89,35 @@ if os.environ.get("SITE_URL", "").startswith("https"):
     app.config["SESSION_COOKIE_SECURE"] = True
 
 # Supabase Auth (JS SDK handled client-side; server validates JWT)
-_SUPABASE_URL = (os.environ.get("SUPABASE_URL") or "").strip().rstrip("/")
+_ABBIEY_CANONICAL_SUPABASE_URL = "https://xwxscvllmghyogddpmii.supabase.co"
+_RAW_SUPABASE_URL = (os.environ.get("SUPABASE_URL") or "").strip()
+_SUPABASE_URL = _RAW_SUPABASE_URL.rstrip("/")
 _SUPABASE_ANON_KEY = (os.environ.get("SUPABASE_ANON_KEY") or "").strip()
 _SUPABASE_AUTH_ENABLED = bool(_SUPABASE_URL and _SUPABASE_ANON_KEY)
+_SUPABASE_URL_ENFORCE = os.environ.get("RUNNING_PYTEST") != "1"
+
+
+def _enforce_canonical_supabase_url(raw: str, normalized: str, label: str) -> None:
+    if not normalized:
+        return
+    if "xwxcvllmghyogddpmii" in normalized:
+        raise RuntimeError(
+            f"{label} must not contain typo host xwxcvllmghyogddpmii. "
+            f"Use exactly {_ABBIEY_CANONICAL_SUPABASE_URL!r}."
+        )
+    if normalized != _ABBIEY_CANONICAL_SUPABASE_URL:
+        raise RuntimeError(
+            f"{label} must match production Supabase project exactly: "
+            f"{_ABBIEY_CANONICAL_SUPABASE_URL!r} (no trailing slash). Got {raw!r}."
+        )
+
+
+if _SUPABASE_URL_ENFORCE:
+    _enforce_canonical_supabase_url(_RAW_SUPABASE_URL, _SUPABASE_URL, "SUPABASE_URL")
+    _np_raw = (os.environ.get("NEXT_PUBLIC_SUPABASE_URL") or "").strip()
+    _np = _np_raw.rstrip("/")
+    if _np:
+        _enforce_canonical_supabase_url(_np_raw, _np, "NEXT_PUBLIC_SUPABASE_URL")
 
 try:
     from flask_compress import Compress

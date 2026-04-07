@@ -1,5 +1,10 @@
 """Pytest fixtures for abbiey.search test suite."""
 
+import os
+
+# Strict SUPABASE_URL checks in app.py skip under pytest (dev .env may vary).
+os.environ["RUNNING_PYTEST"] = "1"
+
 import pytest
 from unittest.mock import patch, MagicMock
 
