@@ -228,6 +228,9 @@ if PAT:
             needed = [
                 "abbieysearch.com/auth/confirm",
                 "abbieysearch.com/auth/callback",
+                "www.abbieysearch.com/auth/confirm",
+                "www.abbieysearch.com/auth/callback",
+                "localhost:8000/auth/confirm",
             ]
             for url in needed:
                 if url in redirects:

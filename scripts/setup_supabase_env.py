@@ -15,6 +15,7 @@ from __future__ import annotations
 import getpass
 import os
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 from urllib.parse import quote
@@ -92,6 +93,22 @@ def main() -> int:
     print("  python scripts/verify_supabase_connection.py")
     print("  python app.py")
     print("\nDeploy: set the same SUPABASE_DB_URL in Render / Vercel / etc. (paste from .env).")
+
+    # Best-effort: sync Auth Site URL + redirect allow list (needs supabase login or SUPABASE_ACCESS_TOKEN)
+    try:
+        r = subprocess.run(
+            [sys.executable, str(root / "scripts" / "sync_supabase_auth_config.py")],
+            cwd=str(root),
+            capture_output=True,
+            text=True,
+            timeout=45,
+        )
+        if r.stdout.strip():
+            print(r.stdout.strip())
+        if r.returncode != 0 and r.stderr.strip():
+            print(r.stderr.strip())
+    except (OSError, subprocess.TimeoutExpired) as e:
+        print(f"(Auth URL sync skipped: {e})")
     return 0
 
 

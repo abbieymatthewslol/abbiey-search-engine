@@ -140,7 +140,8 @@
                 var res = await sb.auth.signInWithOAuth({
                     provider: 'google',
                     options: {
-                        redirectTo: {{ (site_base_url + '/auth/confirm')|tojson }},
+                        /* PKCE verifier is per-origin localStorage; landing URL must match this tab */
+                        redirectTo: window.location.origin + '/auth/confirm',
                         skipBrowserRedirect: true
                     }
                 });
@@ -173,7 +174,11 @@
         if (!email || !password) { showErr('Email and password are required.'); submitBtn.disabled = false; return; }
         if (password.length < 6) { showErr('Password must be at least 6 characters.'); submitBtn.disabled = false; return; }
         try {
-            var res = await sb.auth.signUp({ email: email, password: password });
+            var res = await sb.auth.signUp({
+                email: email,
+                password: password,
+                options: { emailRedirectTo: window.location.origin + '/auth/confirm' }
+            });
             if (res.error) { showErr(res.error.message); submitBtn.disabled = false; return; }
             if (res.data && res.data.user && !res.data.session) {
                 showErr('Check your email for a confirmation link, then come back and sign in.');

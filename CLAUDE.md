@@ -95,7 +95,9 @@ The app uses a **strict Content Security Policy** without `'unsafe-inline'` in `
 python scripts/health_check.py         # verify DB + Supabase Auth + live site + Vercel
 python scripts/restore_vercel_env.py   # dry-run: show what .env would push to Vercel
 python scripts/restore_vercel_env.py --apply  # actually push all env vars to Vercel
-python scripts/setup_supabase_env.py   # write .env from Supabase project details
+python scripts/setup_supabase_env.py   # write .env; also runs auth URL sync if PAT available
+python scripts/sync_supabase_auth_config.py   # push Site URL + redirect allow list to Supabase (needs supabase login or SUPABASE_ACCESS_TOKEN)
+python scripts/ensure_auth_integrations.py    # alias for sync_supabase_auth_config.py
 python scripts/verify_production_env.py       # pre-deploy env var check
 python scripts/verify_supabase_connection.py  # test DB connectivity
 ```

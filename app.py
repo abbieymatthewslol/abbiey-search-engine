@@ -195,6 +195,40 @@ def _max_query_length() -> int:
 OLLAMA_MODEL    = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 
+# ---------------------------------------------------------------------------
+# Feature gates — config-driven, no-redeploy toggles
+# ---------------------------------------------------------------------------
+# Each gate is read from an env var and controls who can access a feature:
+#   "all"  — available to every visitor (default for all gates)
+#   "paid" — available only to users with a paid/unlocked account
+#   "none" — disabled for everyone (kill-switch)
+_VALID_GATE_VALUES = frozenset(("all", "paid", "none"))
+
+_FEATURE_GATES: dict[str, str] = {
+    "deep_web":    os.environ.get("FEATURE_DEEP_WEB",    "all"),
+    "ai_summary":  os.environ.get("FEATURE_AI_SUMMARY",  "all"),
+    "ai_chat":     os.environ.get("FEATURE_AI_CHAT",     "all"),
+    "code_search": os.environ.get("FEATURE_CODE_SEARCH", "all"),
+    "voice_search":os.environ.get("FEATURE_VOICE_SEARCH","all"),
+}
+
+
+def _feature_allowed(name: str, unlocked: bool = False) -> bool:
+    """Return True if *name* is accessible given the current user's unlock status."""
+    val = _FEATURE_GATES.get(name, "all")
+    if val not in _VALID_GATE_VALUES:
+        val = "all"
+    if val == "all":
+        return True
+    if val == "paid":
+        return bool(unlocked)
+    return False  # "none" — disabled for everyone
+
+
+def _feature_gates_for_user(unlocked: bool) -> dict[str, bool]:
+    """Return a dict of feature → bool for injection into template context."""
+    return {name: _feature_allowed(name, unlocked) for name in _FEATURE_GATES}
+
 
 def _site_base_url() -> str:
     """Canonical origin for OG tags, Twitter cards, JSON-LD, Stripe return URLs, and Supabase
@@ -2384,6 +2418,7 @@ _TEMPLATE_DEFAULTS = dict(
     search_notice=None,
     current_user_has_paid_access=False,
     stripe_search_checkout_url=STRIPE_SEARCH_CHECKOUT_URL,
+    feature_gates=_feature_gates_for_user(False),
 )
 
 
@@ -2609,7 +2644,84 @@ def stripe_webhook():
             except Exception:
                 logger.exception("stripe_webhook: auto-grant failed for checkout_token=%s", checkout_token[:8] if checkout_token else "?")
 
+        # Auto-grant by email when there is no checkout_token (e.g. direct Payment Link clicks).
+        # We only do this when the checkout_token path did NOT already grant access, to avoid
+        # double-granting. The email must have a matching payment_events row (just recorded above).
+        if not checkout_token and customer_email:
+            try:
+                uid = None
+                user_rows = _users_execute(
+                    "SELECT id FROM users WHERE LOWER(email)=LOWER(?) LIMIT 1",
+                    [customer_email],
+                )
+                if user_rows:
+                    uid = _session_user_id_int(user_rows[0].get("id"))
+                token = secrets.token_urlsafe(32)
+                _upsert_search_unlock(uid, token, source="stripe_webhook_email")
+                logger.info(
+                    "stripe_webhook: email-based auto-grant for email=%s uid=%s",
+                    customer_email[:4] + "***",
+                    uid,
+                )
+            except Exception:
+                logger.exception("stripe_webhook: email-based auto-grant failed email=%s", customer_email[:4] + "***" if customer_email else "?")
+
     return jsonify({"received": True}), 200
+
+
+@app.route("/api/search-access/restore-by-email", methods=["POST"])
+@limiter.limit("5/minute;10/hour")
+def api_search_access_restore_by_email():
+    """Restore paid access for a user who has lost their unlock cookie.
+
+    Looks up the email in payment_events (written by the Stripe webhook) and, if a
+    verified payment is found, issues a new unlock token and sets the persistent cookie.
+
+    Rate-limited aggressively to prevent email enumeration.
+    """
+    if not request.is_json:
+        return jsonify({"error": "json_required"}), 400
+    email = ((request.json or {}).get("email") or "").strip().lower()
+    if not email or "@" not in email or len(email) > 254:
+        return jsonify({"error": "invalid_email"}), 400
+
+    try:
+        rows = _users_execute(
+            "SELECT 1 AS ok FROM payment_events WHERE LOWER(customer_email)=LOWER(?) LIMIT 1",
+            [email],
+        )
+    except Exception:
+        logger.exception("restore_by_email: db lookup failed")
+        return jsonify({"error": "unavailable"}), 503
+
+    if not rows:
+        # Return the same shape as success to avoid leaking whether an email paid or not
+        return jsonify({"ok": False, "message": "No verified payment found for this email. "
+                        "If you paid recently, please wait a few minutes and try again."}), 404
+
+    # Look up registered user account (best-effort; anon unlock works without one)
+    uid = None
+    try:
+        user_rows = _users_execute(
+            "SELECT id FROM users WHERE LOWER(email)=LOWER(?) LIMIT 1",
+            [email],
+        )
+        if user_rows:
+            uid = _session_user_id_int(user_rows[0].get("id"))
+    except Exception:
+        logger.warning("restore_by_email: user lookup failed for email", exc_info=True)
+
+    try:
+        token = secrets.token_urlsafe(32)
+        token = _upsert_search_unlock(uid, token, source="restore_by_email")
+    except Exception:
+        logger.exception("restore_by_email: _upsert_search_unlock failed")
+        return jsonify({"error": "unavailable"}), 503
+
+    resp = jsonify({"ok": True, "message": "Access restored. Your unlimited search is active."})
+    _set_search_unlock_cookie(resp, token)
+    logger.info("restore_by_email: access restored for email=%s uid=%s", email[:4] + "***", uid)
+    return resp
 
 
 ACCESS_RESOURCES_JSON = {
@@ -2731,16 +2843,36 @@ def search():
     current_user_has_paid_access = _search_access_granted(
         uid=current_uid, token=_search_unlock_cookie_token()
     )
+    user_feature_gates = _feature_gates_for_user(current_user_has_paid_access)
 
     if search_type not in ALLOWED_TYPES:
         search_type = "text"
+
+    # Feature-gate check: if the requested search type maps to a gated feature,
+    # redirect non-qualifying users to the paywall.
+    _type_to_gate = {"onion": "deep_web", "code": "code_search"}
+    _gate_name = _type_to_gate.get(search_type)
+    if _gate_name and not user_feature_gates.get(_gate_name, True):
+        if _FEATURE_GATES.get(_gate_name) == "none":
+            return render_template(
+                "error.html", code=404, title="Not Available",
+                message="This feature is not available.",
+            ), 404
+        return render_template(
+            "index.html",
+            **{**_TEMPLATE_DEFAULTS,
+               "current_user_has_paid_access": current_user_has_paid_access,
+               "feature_gates": user_feature_gates,
+               "search_notice": "This feature requires a paid plan. Unlock unlimited access to continue."},
+        ), 403
 
     image_opts = _parse_image_search_options() if search_type == "images" else None
 
     if not query:
         return render_template(
             "index.html",
-            **{**_TEMPLATE_DEFAULTS, "current_user_has_paid_access": current_user_has_paid_access},
+            **{**_TEMPLATE_DEFAULTS, "current_user_has_paid_access": current_user_has_paid_access,
+               "feature_gates": user_feature_gates},
         )
 
     # Server-side search limit for free-tier users
@@ -2751,6 +2883,7 @@ def search():
             return render_template(
                 "index.html",
                 **{**_TEMPLATE_DEFAULTS, "current_user_has_paid_access": False,
+                   "feature_gates": user_feature_gates,
                    "search_notice": "You\u2019ve reached your daily free search limit. Unlock unlimited searches or wait 24 hours."},
             ), 429
 
@@ -2791,6 +2924,7 @@ def search():
             show_ai_summary_block=False,
             search_notice=None,
             current_user_has_paid_access=current_user_has_paid_access,
+            feature_gates=user_feature_gates,
         )
 
     if len(query) > MAX_QUERY_LENGTH:
@@ -3002,6 +3136,7 @@ def search():
         show_ai_summary_block=show_ai_summary_block,
         search_notice=results.get("notice"),
         current_user_has_paid_access=current_user_has_paid_access,
+        feature_gates=user_feature_gates,
     )
 
 
@@ -5996,10 +6131,16 @@ def _fetch_results(
     # Onion / Deep Web — dedicated path, skip normal engines
     results = []
     if search_type == "onion":
-        results = _try_ahmia(effective_query)
+        try:
+            results = _try_ahmia(effective_query)
+        except Exception:
+            logger.warning("_try_ahmia raised unexpectedly; falling through to DDG fallback", exc_info=True)
         if not results:
             logger.info("Ahmia empty, trying DDG onion fallback")
-            results = _try_onion_ddg(effective_query)
+            try:
+                results = _try_onion_ddg(effective_query)
+            except Exception:
+                logger.warning("_try_onion_ddg raised unexpectedly", exc_info=True)
     elif search_type == "code":
         # Code — dedicated path: fetch GitHub, StackOverflow, GitLab, npm in parallel.
         # Never use generic DDG — it returns unrelated web pages styled in code font.
@@ -7149,6 +7290,73 @@ def api_user_history_add():
         )
     except Exception:
         pass
+    return jsonify({"ok": True})
+
+
+@app.route("/api/user/history", methods=["GET"])
+@limiter.limit("120/minute")
+def api_user_history_get():
+    """Return deduplicated search history for the logged-in user (up to 50)."""
+    uid, bearer_err = _api_auth_user()
+    if bearer_err:
+        return bearer_err
+    if not uid:
+        return jsonify({"history": []}), 401
+    try:
+        rows = _users_execute(
+            "SELECT query, search_type, searched_at FROM user_search_history"
+            " WHERE user_id=? ORDER BY searched_at DESC LIMIT 200",
+            [uid],
+        )
+    except Exception:
+        logger.exception("api_user_history_get_failed")
+        return jsonify({"history": []}), 503
+    seen: set = set()
+    unique = []
+    for r in rows:
+        if r["query"] not in seen:
+            seen.add(r["query"])
+            unique.append({
+                "query": r["query"],
+                "type": r["search_type"] or "text",
+                "at": r["searched_at"],
+            })
+        if len(unique) >= 50:
+            break
+    return jsonify({"history": unique})
+
+
+@app.route("/api/user/history", methods=["DELETE"])
+@limiter.limit("120/minute")
+def api_user_history_delete():
+    """Delete one query or clear all history for the logged-in user."""
+    uid, bearer_err = _api_auth_user()
+    if bearer_err:
+        return bearer_err
+    if not uid:
+        return jsonify({"ok": False}), 401
+    data = request.get_json(silent=True) or {}
+    if data.get("clear_all"):
+        try:
+            _users_execute(
+                "DELETE FROM user_search_history WHERE user_id=?",
+                [uid],
+            )
+        except Exception:
+            logger.exception("api_user_history_clear_failed")
+            return jsonify({"ok": False}), 503
+        return jsonify({"ok": True, "cleared": True})
+    q = (data.get("query") or "").strip()[:500]
+    if not q:
+        return jsonify({"ok": False, "error": "query required"}), 400
+    try:
+        _users_execute(
+            "DELETE FROM user_search_history WHERE user_id=? AND query=?",
+            [uid, q],
+        )
+    except Exception:
+        logger.exception("api_user_history_delete_failed")
+        return jsonify({"ok": False}), 503
     return jsonify({"ok": True})
 
 
