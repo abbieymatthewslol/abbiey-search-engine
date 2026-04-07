@@ -3663,6 +3663,48 @@ def api_privacy_stats():
     })
 
 
+@app.route("/api/image-metadata")
+@limiter.limit("30/minute")
+def api_image_metadata():
+    """HEAD the requested image URL and return Content-Type / Content-Length.
+
+    SSRF-safe: blocks private/loopback IPs and non-http(s) schemes.
+    """
+    import ipaddress as _ipaddress
+    url = request.args.get("url", "").strip()
+    if not url:
+        return jsonify({"error": "url required"}), 400
+    try:
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https"):
+            return jsonify({"error": "invalid scheme"}), 400
+        host = (parsed.hostname or "").lower()
+        if not host:
+            return jsonify({"error": "invalid url"}), 400
+        if host in ("localhost",) or host.endswith(".local") or host.endswith(".internal"):
+            return jsonify({"error": "blocked"}), 400
+        try:
+            addr = _ipaddress.ip_address(host)
+            if addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved:
+                return jsonify({"error": "blocked"}), 400
+        except ValueError:
+            pass  # hostname (not raw IP) — allowed
+    except Exception:
+        return jsonify({"error": "invalid url"}), 400
+    try:
+        resp = _get_http().head(url, timeout=8.0, follow_redirects=True)
+        ct = resp.headers.get("Content-Type", "")
+        cl = resp.headers.get("Content-Length")
+        fmt = ct.split(";")[0].strip()
+        fmt = fmt.replace("image/", "").upper() if fmt.startswith("image/") else ""
+        return jsonify({
+            "format": fmt,
+            "file_size_bytes": int(cl) if cl and cl.isdigit() else None,
+        })
+    except Exception:
+        return jsonify({"error": "fetch failed"}), 502
+
+
 # ---------------------------------------------------------------------------
 @app.route("/api/trends")
 @limiter.limit("120/minute")
@@ -4321,6 +4363,17 @@ def _abbiey_bot_fallback(msg: str, ctx: str = "") -> str:
 
 # ---- Layer 1: DDG multi-backend ----
 
+def _image_format_from_url(url: str) -> str:
+    """Derive image format string from URL file extension."""
+    if not url:
+        return ""
+    path = url.split("?")[0].lower()
+    for ext in (".jpg", ".jpeg", ".png", ".webp", ".gif", ".svg", ".bmp", ".tiff", ".avif"):
+        if path.endswith(ext):
+            return "jpg" if ext == ".jpeg" else ext.lstrip(".")
+    return ""
+
+
 def _try_ddg(query, max_results, search_type, region=None, time_filter=None, safesearch="off"):
     """Primary: ddgs library with all backends enabled."""
     ddg = DDGS()
@@ -4337,6 +4390,10 @@ def _try_ddg(query, max_results, search_type, region=None, time_filter=None, saf
                 "image": r.get("image", ""),
                 "thumbnail": r.get("thumbnail", ""),
                 "source": r.get("source", ""),
+                "width": r.get("width"),
+                "height": r.get("height"),
+                "image_format": _image_format_from_url(r.get("image", "")),
+                "date": r.get("date", ""),
             }
             for r in raw
         ]
@@ -4636,6 +4693,13 @@ def _try_openverse(query, max_results=20, filters=None):
                 "source": f"Openverse · {prov}" if prov else "Openverse",
                 "license": lic,
                 "attribution": (r.get("attribution") or "")[:280],
+                "width": r.get("width"),
+                "height": r.get("height"),
+                "creator": r.get("creator", ""),
+                "creator_url": r.get("creator_url", ""),
+                "tags": ", ".join(
+                    [t["name"] for t in r.get("tags", []) if isinstance(t, dict) and "name" in t][:5]
+                ),
             })
         if results:
             logger.info("Openverse: %d image results (filters=%s)", len(results), bool(filters))
@@ -4817,7 +4881,7 @@ def _try_wikimedia_commons(query):
                 "gsrlimit": "20",
                 "gsrnamespace": "6",
                 "prop": "imageinfo",
-                "iiprop": "url|extmetadata",
+                "iiprop": "url|extmetadata|dimensions|mime|user",
                 "iiurlwidth": "300",
                 "format": "json",
             },
@@ -4829,12 +4893,23 @@ def _try_wikimedia_commons(query):
             ii = page.get("imageinfo", [{}])[0]
             title = page.get("title", "").replace("File:", "")
             if ii.get("url"):
+                ext_meta = ii.get("extmetadata", {})
+                raw_date = (
+                    ext_meta.get("DateTimeOriginal", {}).get("value", "")
+                    or ext_meta.get("DateTime", {}).get("value", "")
+                )
+                mime = ii.get("mime", "")
                 results.append({
                     "title": title,
                     "url": ii.get("descriptionurl", ii.get("url", "")),
                     "image": ii.get("url", ""),
                     "thumbnail": ii.get("thumburl", ii.get("url", "")),
                     "source": "Wikimedia Commons",
+                    "width": ii.get("width"),
+                    "height": ii.get("height"),
+                    "image_format": mime.replace("image/", "") if mime.startswith("image/") else "",
+                    "date": raw_date[:10] if raw_date else "",
+                    "creator": ii.get("user", ""),
                 })
         if results:
             logger.info("Wikimedia Commons fallback: %d image results", len(results))
@@ -4853,7 +4928,7 @@ def _try_internet_archive_images(query, max_results=30):
                 "q": f"({query}) AND mediatype:image",
                 "output": "json",
                 "rows": min(max_results, 50),
-                "fl[]": ["identifier", "title", "description"],
+                "fl[]": ["identifier", "title", "description", "date", "year", "mediatype"],
                 "sort[]": "downloads desc",
             },
         )
@@ -4865,12 +4940,17 @@ def _try_internet_archive_images(query, max_results=30):
             title = doc.get("title", identifier)
             if isinstance(title, list):
                 title = title[0] if title else identifier
+            raw_date = doc.get("date") or doc.get("year") or ""
+            if isinstance(raw_date, list):
+                raw_date = raw_date[0] if raw_date else ""
             results.append({
                 "title": title,
                 "url": f"https://archive.org/details/{identifier}",
                 "image": f"https://archive.org/services/img/{identifier}",
                 "thumbnail": f"https://archive.org/services/img/{identifier}",
                 "source": "Internet Archive",
+                "date": str(raw_date)[:10] if raw_date else "",
+                "mediatype": str(doc.get("mediatype", "image")),
             })
         if results:
             logger.info("Internet Archive images: %d results", len(results))

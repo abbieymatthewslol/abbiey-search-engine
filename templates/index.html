@@ -598,6 +598,36 @@
                     </div>
                 </details>
             </section>
+            <div class="img-filter-toolbar" id="img-filter-toolbar" aria-label="Image quick filters">
+                <select class="img-filter-chip" id="ift-size" aria-label="Size filter" title="Size">
+                    <option value="">Any size</option>
+                    <option value="small">Small</option>
+                    <option value="medium">Medium</option>
+                    <option value="large">Large</option>
+                </select>
+                <select class="img-filter-chip" id="ift-aspect" aria-label="Aspect filter" title="Aspect">
+                    <option value="">Any aspect</option>
+                    <option value="square">Square</option>
+                    <option value="wide">Wide</option>
+                    <option value="tall">Tall</option>
+                </select>
+                <select class="img-filter-chip" id="ift-license" aria-label="License filter" title="License">
+                    <option value="">Any license</option>
+                    <option value="cc0">CC0</option>
+                    <option value="pdm">Public Domain</option>
+                    <option value="by">CC BY</option>
+                    <option value="by-sa">CC BY-SA</option>
+                    <option value="by-nc">CC BY-NC</option>
+                </select>
+                <select class="img-filter-chip" id="ift-ext" aria-label="Format filter" title="Format">
+                    <option value="">Any format</option>
+                    <option value="jpg">JPEG</option>
+                    <option value="png">PNG</option>
+                    <option value="gif">GIF</option>
+                    <option value="webp">WebP</option>
+                    <option value="svg">SVG</option>
+                </select>
+            </div>
             {% endif %}
 
             {% endif %}
@@ -979,7 +1009,7 @@
             {% elif results %}
                 {% for r in results %}
                     {% if search_type == 'images' %}
-                    <div class="image-card" data-full="{{ r.image or r.thumbnail }}" data-title="{{ r.title }}" data-source="{{ r.source or '' }}" data-url="{{ r.url }}" data-license="{{ r.license or '' }}">
+                    <div class="image-card" data-full="{{ r.image or r.thumbnail }}" data-title="{{ r.title }}" data-source="{{ r.source or '' }}" data-url="{{ r.url }}" data-license="{{ r.license or '' }}" data-width="{{ r.width or '' }}" data-height="{{ r.height or '' }}" data-format="{{ r.image_format or '' }}" data-attribution="{{ r.attribution or '' }}" data-creator="{{ r.creator or '' }}" data-creator-url="{{ r.creator_url or '' }}" data-tags="{{ r.tags or '' }}" data-date="{{ r.date or '' }}">
                         <img src="{{ r.thumbnail or r.image }}" alt="{{ r.title }}" loading="lazy">
                         <div class="image-card-info">
                             <span class="image-title">{{ r.title }}</span>
@@ -1177,7 +1207,42 @@
             <div class="lightbox-info">
                 <p class="lightbox-title" id="lightbox-title"></p>
                 <a class="lightbox-source" id="lightbox-source" href="" target="_blank" rel="noopener">View source</a>
-                <a class="lightbox-tools" id="lightbox-tools" href="#" target="_blank" rel="noopener noreferrer">Image tools (reverse search &amp; metadata)</a>
+                <div class="lightbox-meta" id="lightbox-meta">
+                    <div class="lightbox-meta-row" id="lightbox-dimensions-row">
+                        <span class="lightbox-meta-label">Dimensions</span>
+                        <span class="lightbox-meta-value" id="lightbox-dimensions"></span>
+                    </div>
+                    <div class="lightbox-meta-row" id="lightbox-format-row">
+                        <span class="lightbox-meta-label">Format</span>
+                        <span class="lightbox-meta-value" id="lightbox-format"></span>
+                    </div>
+                    <div class="lightbox-meta-row" id="lightbox-date-row">
+                        <span class="lightbox-meta-label">Date</span>
+                        <span class="lightbox-meta-value" id="lightbox-date"></span>
+                    </div>
+                    <div class="lightbox-meta-row" id="lightbox-creator-row">
+                        <span class="lightbox-meta-label">Creator</span>
+                        <a class="lightbox-meta-value" id="lightbox-creator" href="#" target="_blank" rel="noopener noreferrer"></a>
+                    </div>
+                    <div class="lightbox-meta-row" id="lightbox-attribution-row">
+                        <span class="lightbox-meta-label">Attribution</span>
+                        <span class="lightbox-meta-value" id="lightbox-attribution"></span>
+                    </div>
+                    <div class="lightbox-meta-row" id="lightbox-tags-row">
+                        <span class="lightbox-meta-label">Tags</span>
+                        <span class="lightbox-meta-value" id="lightbox-tags"></span>
+                    </div>
+                    <div class="lightbox-meta-row" id="lightbox-license-row">
+                        <span class="lightbox-meta-label">License</span>
+                        <span class="lightbox-meta-value" id="lightbox-license-badge"></span>
+                    </div>
+                </div>
+                <div class="lightbox-reverse-search" id="lightbox-reverse-search">
+                    <span class="lightbox-reverse-label">Reverse search:</span>
+                    <a class="lightbox-reverse-btn" id="lightbox-lens" href="#" target="_blank" rel="noopener noreferrer">Google Lens</a>
+                    <a class="lightbox-reverse-btn" id="lightbox-bing-visual" href="#" target="_blank" rel="noopener noreferrer">Bing Visual</a>
+                    <a class="lightbox-reverse-btn" id="lightbox-tineye" href="#" target="_blank" rel="noopener noreferrer">TinEye</a>
+                </div>
             </div>
         </div>
     </div>

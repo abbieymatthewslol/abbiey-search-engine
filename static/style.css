@@ -1140,6 +1140,35 @@ article.result.code-result { font-size: .9rem; }
 }
 .image-overlay { display: none; }
 
+/* Image quick-filter toolbar */
+.img-filter-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .375rem;
+  margin-top: .5rem;
+  width: 100%;
+  max-width: 720px;
+}
+.img-filter-chip {
+  appearance: none;
+  -webkit-appearance: none;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 2rem;
+  color: var(--text-dim);
+  font-size: .78rem;
+  padding: .25rem .75rem .25rem .65rem;
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23888'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right .5rem center;
+  padding-right: 1.4rem;
+}
+.img-filter-chip:hover { border-color: var(--accent); color: var(--text); }
+.img-filter-chip:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.img-filter-chip option { background: var(--bg-surface); color: var(--text); }
+
 /* Advanced image search (Openverse + Commons + Archive) */
 .img-adv-section {
   margin-top: 1rem;
@@ -2802,15 +2831,90 @@ article.result.code-result { font-size: .9rem; }
 .lightbox-info { text-align: center; }
 .lightbox-title, .lightbox-caption { font-size: .875rem; color: rgba(255,255,255,.7); margin-bottom: .25rem; }
 .lightbox-source { font-size: .8125rem; color: var(--accent); display: inline-block; margin-right: .75rem; }
-.lightbox-tools {
-  display: block;
-  margin-top: .5rem;
+
+/* Metadata panel */
+.lightbox-meta {
+  margin-top: .625rem;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: .2rem .625rem;
+  text-align: left;
   font-size: .75rem;
-  color: rgba(255,255,255,.55);
+  max-width: 520px;
+  width: 100%;
+}
+.lightbox-meta-row {
+  display: contents;
+}
+.lightbox-meta-row[hidden] { display: none; }
+.lightbox-meta-label {
+  color: rgba(255,255,255,.45);
+  white-space: nowrap;
+  padding-top: .1rem;
+}
+.lightbox-meta-value {
+  color: rgba(255,255,255,.8);
+  word-break: break-word;
+}
+a.lightbox-meta-value { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+a.lightbox-meta-value:hover { color: rgba(255,255,255,.9); }
+
+/* License badge pills */
+.license-badge {
+  display: inline-block;
+  padding: .1rem .45rem;
+  border-radius: 4px;
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.license-badge.lic-pd { background: rgba(34,197,94,.25); color: #4ade80; }
+.license-badge.lic-by { background: rgba(59,130,246,.25); color: #60a5fa; }
+.license-badge.lic-nc { background: rgba(251,146,60,.25); color: #fb923c; }
+.license-badge.lic-unknown { background: rgba(255,255,255,.12); color: rgba(255,255,255,.6); }
+
+/* Tag pills */
+.tag-pill {
+  display: inline-block;
+  background: rgba(255,255,255,.1);
+  color: rgba(255,255,255,.75);
+  border-radius: 3px;
+  padding: .05rem .35rem;
+  font-size: .68rem;
+  margin: .05rem .1rem .05rem 0;
+}
+
+/* Reverse search row */
+.lightbox-reverse-search {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .375rem;
+  margin-top: .75rem;
+}
+.lightbox-reverse-search[hidden] { display: none; }
+.lightbox-reverse-label {
+  font-size: .75rem;
+  color: rgba(255,255,255,.45);
+  margin-right: .125rem;
+}
+.lightbox-reverse-btn {
+  font-size: .75rem;
+  color: rgba(255,255,255,.65);
   text-decoration: underline;
   text-underline-offset: 2px;
+  padding: .15rem .5rem;
+  border-radius: 4px;
+  border: 1px solid rgba(255,255,255,.12);
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
 }
-.lightbox-tools:hover { color: rgba(255,255,255,.85); }
+.lightbox-reverse-btn:hover { background: rgba(255,255,255,.1); color: rgba(255,255,255,.9); }
+
+@media (max-width: 480px) {
+  .lightbox-meta { grid-template-columns: 1fr; gap: .25rem; }
+  .lightbox-meta-label { color: rgba(255,255,255,.35); font-size: .68rem; }
+}
 
 /* ===== 16. AUTH PAGES ===== */
 /*

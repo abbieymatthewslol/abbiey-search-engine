@@ -1454,6 +1454,14 @@ document.addEventListener("DOMContentLoaded", () => {
             el.dataset.title = r.title;
             el.dataset.source = r.source || "";
             el.dataset.license = r.license || "";
+            el.dataset.width = r.width || "";
+            el.dataset.height = r.height || "";
+            el.dataset.format = r.image_format || "";
+            el.dataset.attribution = r.attribution || "";
+            el.dataset.creator = r.creator || "";
+            el.dataset.creatorUrl = r.creator_url || "";
+            el.dataset.tags = r.tags || "";
+            el.dataset.date = r.date || "";
             const lic = r.license ? `<span class="image-license" title="License">${esc(r.license)}</span>` : "";
             el.innerHTML = `<img src="${esc(r.thumbnail || r.image)}" alt="${esc(r.title)}" loading="lazy"><div class="image-card-info"><span class="image-title">${esc(r.title)}</span>${r.source ? `<span class="image-source">${esc(r.source)}</span>` : ""}${lic}</div>`;
           } else if (type === "videos") {
@@ -1491,31 +1499,173 @@ document.addEventListener("DOMContentLoaded", () => {
   observer.observe(sentinel);
   }
 
+  // ===== Image quick-filter toolbar =====
+  (function() {
+    const toolbar = document.getElementById("img-filter-toolbar");
+    if (!toolbar) return;
+    const sp = new URLSearchParams(window.location.search);
+    const sizeEl = document.getElementById("ift-size");
+    const aspectEl = document.getElementById("ift-aspect");
+    const licEl = document.getElementById("ift-license");
+    const extEl = document.getElementById("ift-ext");
+    if (sizeEl) sizeEl.value = sp.get("img_size") || "";
+    if (aspectEl) aspectEl.value = sp.get("img_aspect") || "";
+    if (licEl) licEl.value = sp.get("img_license") || "";
+    if (extEl) extEl.value = sp.get("img_ext") || "";
+    function applyFilter() {
+      const params = new URLSearchParams(window.location.search);
+      const pairs = [["img_size", sizeEl], ["img_aspect", aspectEl], ["img_license", licEl], ["img_ext", extEl]];
+      pairs.forEach(([key, el]) => {
+        if (!el) return;
+        if (el.value) params.set(key, el.value);
+        else params.delete(key);
+      });
+      window.location.search = params.toString();
+    }
+    [sizeEl, aspectEl, licEl, extEl].forEach(el => { if (el) el.addEventListener("change", applyFilter); });
+  })();
+
   // ===== Image lightbox =====
   const lightbox = document.getElementById("lightbox");
   const lightboxImg = document.getElementById("lightbox-img");
   const lightboxTitle = document.getElementById("lightbox-title");
   const lightboxSource = document.getElementById("lightbox-source");
-  const lightboxTools = document.getElementById("lightbox-tools");
   const lightboxClose = document.getElementById("lightbox-close");
+  const lightboxDimEl = document.getElementById("lightbox-dimensions");
+  const lightboxDimRow = document.getElementById("lightbox-dimensions-row");
+  const lightboxFormatEl = document.getElementById("lightbox-format");
+  const lightboxFormatRow = document.getElementById("lightbox-format-row");
+  const lightboxDateEl = document.getElementById("lightbox-date");
+  const lightboxDateRow = document.getElementById("lightbox-date-row");
+  const lightboxCreatorEl = document.getElementById("lightbox-creator");
+  const lightboxCreatorRow = document.getElementById("lightbox-creator-row");
+  const lightboxAttrEl = document.getElementById("lightbox-attribution");
+  const lightboxAttrRow = document.getElementById("lightbox-attribution-row");
+  const lightboxTagsEl = document.getElementById("lightbox-tags");
+  const lightboxTagsRow = document.getElementById("lightbox-tags-row");
+  const lightboxLicEl = document.getElementById("lightbox-license-badge");
+  const lightboxLicRow = document.getElementById("lightbox-license-row");
+  const lightboxLens = document.getElementById("lightbox-lens");
+  const lightboxBingVisual = document.getElementById("lightbox-bing-visual");
+  const lightboxTineye = document.getElementById("lightbox-tineye");
+  const lightboxReverseSearch = document.getElementById("lightbox-reverse-search");
+
+  function _licenseClass(lic) {
+    if (!lic) return "lic-unknown";
+    const l = lic.toLowerCase();
+    if (l === "cc0" || l.includes("public domain") || l === "pdm") return "lic-pd";
+    if (l.includes("nc")) return "lic-nc";
+    if (l.startsWith("cc-by") || l.startsWith("cc by")) return "lic-by";
+    return "lic-unknown";
+  }
 
   let openLightbox = null;
   if (lightbox) {
     lightbox.removeAttribute("hidden");
     openLightbox = function(card) {
-      lightboxImg.src = card.dataset.full;
+      const imageUrl = card.dataset.full;
+      lightboxImg.src = imageUrl;
       lightboxImg.alt = card.dataset.title;
       lightboxTitle.textContent = card.dataset.title;
       lightboxSource.href = card.dataset.url;
-      if (lightboxTools) {
-        const u = card.dataset.full;
-        if (u) {
-          lightboxTools.href = "https://imgops.com/" + encodeURIComponent(u);
-          lightboxTools.hidden = false;
-        } else {
-          lightboxTools.hidden = true;
+
+      // Dimensions
+      const w = card.dataset.width;
+      const h = card.dataset.height;
+      if (w && h && w !== "None" && h !== "None") {
+        lightboxDimEl.textContent = `${w} × ${h} px`;
+        lightboxDimRow.hidden = false;
+      } else {
+        lightboxDimRow.hidden = true;
+        // Fallback via naturalWidth after load
+        lightboxImg.onload = function() {
+          if (lightboxImg.naturalWidth && lightboxImg.naturalHeight) {
+            lightboxDimEl.textContent = `${lightboxImg.naturalWidth} × ${lightboxImg.naturalHeight} px`;
+            lightboxDimRow.hidden = false;
+          }
+        };
+      }
+
+      // Format — prefer from metadata, fallback to lazy /api/image-metadata
+      const fmt = (card.dataset.format || "").toUpperCase().replace("JPEG", "JPG");
+      if (fmt && fmt !== "NONE") {
+        lightboxFormatEl.textContent = fmt;
+        lightboxFormatRow.hidden = false;
+      } else {
+        lightboxFormatRow.hidden = true;
+        if (imageUrl) {
+          fetch(`/api/image-metadata?url=${encodeURIComponent(imageUrl)}`)
+            .then(r => r.ok ? r.json() : null)
+            .then(data => {
+              if (data && data.format) {
+                lightboxFormatEl.textContent = data.format;
+                lightboxFormatRow.hidden = false;
+              }
+            })
+            .catch(() => {});
         }
       }
+
+      // Date
+      const date = card.dataset.date || "";
+      if (date && date !== "None") {
+        lightboxDateEl.textContent = date;
+        lightboxDateRow.hidden = false;
+      } else {
+        lightboxDateRow.hidden = true;
+      }
+
+      // Creator
+      const creator = card.dataset.creator || "";
+      const creatorUrl = card.dataset.creatorUrl || "";
+      if (creator && creator !== "None") {
+        lightboxCreatorEl.textContent = creator;
+        lightboxCreatorEl.href = creatorUrl && creatorUrl !== "None" ? creatorUrl : "#";
+        lightboxCreatorRow.hidden = false;
+      } else {
+        lightboxCreatorRow.hidden = true;
+      }
+
+      // Attribution
+      const attr = card.dataset.attribution || "";
+      if (attr && attr !== "None") {
+        lightboxAttrEl.textContent = attr;
+        lightboxAttrRow.hidden = false;
+      } else {
+        lightboxAttrRow.hidden = true;
+      }
+
+      // Tags
+      const tags = card.dataset.tags || "";
+      if (tags && tags !== "None") {
+        lightboxTagsEl.innerHTML = tags.split(",").map(t => t.trim()).filter(Boolean)
+          .map(t => `<span class="tag-pill">${esc(t)}</span>`).join(" ");
+        lightboxTagsRow.hidden = false;
+      } else {
+        lightboxTagsRow.hidden = true;
+      }
+
+      // License badge
+      const lic = card.dataset.license || "";
+      if (lic && lic !== "None") {
+        const cls = _licenseClass(lic);
+        lightboxLicEl.textContent = lic.toUpperCase();
+        lightboxLicEl.className = `lightbox-meta-value license-badge ${cls}`;
+        lightboxLicRow.hidden = false;
+      } else {
+        lightboxLicRow.hidden = true;
+      }
+
+      // Reverse search buttons
+      if (imageUrl && lightboxLens) {
+        lightboxLens.href = `https://lens.google.com/uploadbyurl?url=${encodeURIComponent(imageUrl)}`;
+        lightboxBingVisual.href = `https://www.bing.com/images/search?view=detailv2&iss=sbi&q=imgurl:${encodeURIComponent(imageUrl)}`;
+        lightboxTineye.href = `https://tineye.com/search/?url=${encodeURIComponent(imageUrl)}`;
+        if (lightboxReverseSearch) lightboxReverseSearch.hidden = false;
+      } else if (lightboxReverseSearch) {
+        lightboxReverseSearch.hidden = true;
+      }
+
       requestAnimationFrame(() => { lightbox.classList.add("active"); document.body.style.overflow = "hidden"; });
     };
     function closeLightbox() {
