@@ -1,0 +1,37 @@
+scripts/sync_supabase_auth_config.py
+  ff3065c012908dda 1,21,23-31,34-35,38-40,42-44,47-55,58-87,90-94,97-100,102-111,113-122,124-130,132-139,141-143,145-152,155-159,162-180,183-193,195-197,199-202,204-217,219-223,225-229,231-237,239-242,244-252,254-256,258-267,269-270,273-274
+templates/login.html
+  ff3065c012908dda 130-131
+templates/forgot_password.html
+  ff3065c012908dda 55-57
+scripts/health_check.py
+  ff3065c012908dda 231-233
+templates/signup.html
+  ff3065c012908dda 143-144,177-181
+scripts/setup_supabase_env.py
+  ff3065c012908dda 18
+CLAUDE.md
+  ff3065c012908dda 98-100
+.env.example
+  ff3065c012908dda 105-114
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "a1d759d471cc233fc0d0b5f1b59a724b4dc1274b",
+  "prompts": {
+    "ff3065c012908dda": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "20f7e4d6-bdb4-41c2-89ca-903d7a2230cb",
+        "model": "default"
+      },
+      "human_author": "Abbiey",
+      "messages": [],
+      "total_additions": 966,
+      "total_deletions": 615,
+      "accepted_lines": 375,
+      "overriden_lines": 13
+    }
+  }
+}
