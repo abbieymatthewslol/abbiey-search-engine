@@ -8,7 +8,6 @@ import hmac
 import json
 import logging
 import os
-import queue
 import re
 import sqlite3
 import subprocess
@@ -120,48 +119,43 @@ def _get_deploy_hash() -> str:
 
 DEPLOY_HASH = _get_deploy_hash()
 
-# Google Search Console — HTML tag method. If GOOGLE_SITE_VERIFICATION is unset, the default
-# is used. If set to empty (e.g. GOOGLE_SITE_VERIFICATION=), the meta tag is omitted.
-_GSC_DEFAULT_VERIFICATION = "iUMaOvsVzVceHScuX-0i35fWbUJxEfZKM9QH8l3mPM8"
+# Google Search Console — HTML tag method. If GOOGLE_SITE_VERIFICATION is unset, the meta tag is omitted.
+_GSC_DEFAULT_VERIFICATION = os.environ.get("GOOGLE_SITE_VERIFICATION", "").strip()
 
 
 def _load_google_site_verification() -> str:
-    if "GOOGLE_SITE_VERIFICATION" in os.environ:
-        return os.environ["GOOGLE_SITE_VERIFICATION"].strip()
     return _GSC_DEFAULT_VERIFICATION
 
 
 _GOOGLE_SITE_VERIFICATION = _load_google_site_verification()
 
-# Google Analytics 4 (gtag.js). If GOOGLE_ANALYTICS_ID is unset, the default is used.
-# Set to empty (GOOGLE_ANALYTICS_ID=) to omit the tag.
-_GA_DEFAULT_MEASUREMENT_ID = "G-FCV6CCHNPF"
-
-
-def _load_google_analytics_id() -> str:
-    if "GOOGLE_ANALYTICS_ID" in os.environ:
-        return os.environ["GOOGLE_ANALYTICS_ID"].strip()
-    return _GA_DEFAULT_MEASUREMENT_ID
-
-
-_GOOGLE_ANALYTICS_ID = _load_google_analytics_id()
+# Google Analytics 4 (gtag.js). If GOOGLE_ANALYTICS_ID is unset, the tag is omitted.
+_GOOGLE_ANALYTICS_ID = os.environ.get("GOOGLE_ANALYTICS_ID", "").strip()
 
 # On Vercel the filesystem is read-only except /tmp; use /tmp when running there.
 _DB_DIR       = "/tmp" if os.environ.get("VERCEL") else os.path.dirname(__file__)
 _WAITLIST_DB  = os.path.join(_DB_DIR, "waitlist.db")
 _ANALYTICS_DB = os.path.join(_DB_DIR, "analytics.db")
 _USERS_DB     = os.path.join(_DB_DIR, "users.db")
+
+# Vercel /tmp is ephemeral per-invocation — all SQLite data is lost on cold start.
+# Require a persistent DB backend when deploying to Vercel.
+if os.environ.get("VERCEL"):
+    _has_persistent_db = bool(
+        os.environ.get("SUPABASE_DB_URL") or os.environ.get("LIBSQL_URL")
+    )
+    if not _has_persistent_db:
+        raise RuntimeError(
+            "Running on Vercel without a persistent database backend. "
+            "Set SUPABASE_DB_URL or LIBSQL_URL to prevent data loss on cold starts."
+        )
 _ADMIN_TOKEN  = os.environ.get("ADMIN_TOKEN", "") or None  # None when unset → admin routes reject all requests
 
 # Developer / API keys — Stripe Payment Link for purchasing access (override in env).
-STRIPE_API_KEYS_CHECKOUT_URL = os.environ.get(
-    "STRIPE_API_KEYS_CHECKOUT_URL",
-    "https://buy.stripe.com/5kQ7sK9wgboE26GfFlb7y0c",
-)
-STRIPE_SEARCH_CHECKOUT_URL = os.environ.get(
-    "STRIPE_SEARCH_CHECKOUT_URL",
-    "https://buy.stripe.com/28E7sKbEo0K07r0al1b7y0b",
-)
+# These MUST be set via environment variables — no hardcoded defaults to avoid
+# leaking live payment links into the public repo or forks.
+STRIPE_API_KEYS_CHECKOUT_URL = os.environ.get("STRIPE_API_KEYS_CHECKOUT_URL", "")
+STRIPE_SEARCH_CHECKOUT_URL = os.environ.get("STRIPE_SEARCH_CHECKOUT_URL", "")
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
 try:
     import stripe as _stripe_mod
@@ -1222,13 +1216,24 @@ def _inject_current_user():
 
 @app.after_request
 def _response_policy_headers(resp):
-    """HTML: avoid stale shells after deploy. APIs: permissive CORS so clients are not stranded."""
+    """HTML: avoid stale shells after deploy. APIs: CORS restricted to allowed origins."""
     try:
         ct = (resp.headers.get("Content-Type") or "").lower()
         if "text/html" in ct:
             resp.headers["Cache-Control"] = "private, max-age=0, must-revalidate"
         if request.path.startswith("/api/"):
-            resp.headers.setdefault("Access-Control-Allow-Origin", "*")
+            _allowed_origins = {
+                o.strip()
+                for o in os.environ.get(
+                    "CORS_ALLOWED_ORIGINS",
+                    os.environ.get("SITE_URL", ""),
+                ).split(",")
+                if o.strip()
+            }
+            origin = request.headers.get("Origin", "")
+            if origin and origin in _allowed_origins:
+                resp.headers["Access-Control-Allow-Origin"] = origin
+                resp.headers["Vary"] = "Origin"
             resp.headers.setdefault("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
             resp.headers.setdefault(
                 "Access-Control-Allow-Headers",
@@ -1351,7 +1356,7 @@ def _geo_lookup_ip(ip: str) -> str:
 
         path_ip = quote(ip.strip(), safe="")
         r = httpx.get(
-            f"http://ip-api.com/json/{path_ip}",
+            f"https://ip-api.com/json/{path_ip}",
             params={"fields": "status,country,city"},
             timeout=2.5,
             headers={"User-Agent": "abbiey.search/1.0"},
@@ -1395,6 +1400,10 @@ def _insert_search_log_row(vals: list) -> "int | None":
         return None
 
 
+# Bounded thread pool for async analytics — prevents thread explosion under load
+_analytics_pool = ThreadPoolExecutor(max_workers=8, thread_name_prefix="analytics")
+
+
 def _log_search_worker(
     query: str,
     search_type: str,
@@ -1426,7 +1435,7 @@ def _log_search_worker(
     try:
         row_id = _insert_search_log_row(vals)
     except Exception as exc:
-        log.debug("Analytics insert failed: %s", exc)
+        log.warning("Analytics insert failed: %s", exc)
     if row_id and client_ip and _is_public_ip(client_ip):
         loc = _geo_lookup_ip(client_ip)
         if loc:
@@ -1460,7 +1469,7 @@ def _log_search(
     latency_ms: int = 0,
     request=None,
 ):
-    """Async analytics log (daemon thread): query + client IP, UA, device, geo. Never blocks request."""
+    """Async analytics log (bounded thread pool): query + client IP, UA, device, geo. Never blocks request."""
     import datetime as _dt
 
     now = _dt.datetime.now(_dt.timezone.utc)
@@ -1483,7 +1492,7 @@ def _log_search(
         now.weekday(),
         ts,
     )
-    threading.Thread(target=_log_search_worker, args=args, daemon=True).start()
+    _analytics_pool.submit(_log_search_worker, *args)
 
 
 def _log_error(route: str, message: str, level: str = "error"):
@@ -1621,7 +1630,7 @@ def _security_headers(response):
         )
         csp = (
             "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com "
+            "script-src 'self' https://cdnjs.cloudflare.com "
             "https://www.googletagmanager.com https://www.google-analytics.com; "
             "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; "
             "img-src 'self' data: https: blob:; "
@@ -2542,21 +2551,19 @@ def stripe_webhook():
         except Exception:
             logger.info("stripe_webhook: payment_event already recorded (event_id=%s)", stripe_event_id)
 
-        # Auto-grant search unlock if checkout_token links to a pending checkout
+        # Auto-grant search unlock if checkout_token links to a pending checkout.
+        # Uses a single atomic UPDATE to avoid double-grant on Stripe webhook retries.
         if checkout_token:
             try:
                 rows = _users_execute(
-                    "SELECT user_id FROM pending_checkouts WHERE checkout_token=? AND status='pending' LIMIT 1",
+                    "UPDATE pending_checkouts SET status='webhook_verified' "
+                    "WHERE checkout_token=? AND status='pending' RETURNING user_id",
                     [checkout_token],
                 )
                 if rows:
                     uid = _session_user_id_int(rows[0].get("user_id"))
                     token = secrets.token_urlsafe(32)
                     _upsert_search_unlock(uid, token, source="stripe_webhook")
-                    _users_execute(
-                        "UPDATE pending_checkouts SET status='webhook_verified' WHERE checkout_token=?",
-                        [checkout_token],
-                    )
                     logger.info("stripe_webhook: auto-granted access for checkout_token=%s", checkout_token[:8])
             except Exception:
                 logger.exception("stripe_webhook: auto-grant failed for checkout_token=%s", checkout_token[:8] if checkout_token else "?")
@@ -5934,6 +5941,11 @@ def _fetch_results(
                 elif not cached:
                     notice = _ONION_UNAVAILABLE_MSG
             return {"results": page_results, "has_more": has_more, "page": page, "notice": notice}
+        # Primary fetch failed or timed out — fall through and fetch ourselves.
+        # Register our own event so subsequent waiters can piggyback on our result.
+        _my_event = threading.Event()
+        with _in_flight_lock:
+            _in_flight[cache_key] = _my_event
 
     # Build effective query with operators
     effective_query = _build_engine_query(query, operators) if operators else query
@@ -6157,14 +6169,15 @@ def _fetch_results(
     if search_type == "text" and local_rank_context and local_rank_context.get("has_local_intent"):
         results = _rank_local_search_results(results, local_rank_context)
 
-    # Store in cache
-    with _cache_lock:
-        _cache[cache_key] = results
-
-    if _my_event is not None:
-        with _in_flight_lock:
-            _in_flight.pop(cache_key, None)
-        _my_event.set()
+    # Store in cache and always release the in-flight lock so waiters are never stranded
+    try:
+        with _cache_lock:
+            _cache[cache_key] = results
+    finally:
+        if _my_event is not None:
+            with _in_flight_lock:
+                _in_flight.pop(cache_key, None)
+            _my_event.set()
 
     start = RESULTS_PER_PAGE * (page - 1)
     page_results = results[start : start + RESULTS_PER_PAGE]
