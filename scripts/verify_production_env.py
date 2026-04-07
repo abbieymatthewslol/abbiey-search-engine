@@ -135,7 +135,7 @@ def main() -> int:
     if args.json:
         out = {
             "core_ok": core_ok,
-            "strict_would_fail": strict_fail,
+            "strict_would_fail": not core_ok,
             "checks": [{"name": n, "category": c, "ok": o, "hint": h} for n, c, o, h in rows],
         }
         if args.ping:
