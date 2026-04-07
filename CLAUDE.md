@@ -67,6 +67,7 @@ pytest tests/ -v
 The app supports Supabase Auth for email/password login and **Google OAuth** (PKCE flow, Supabase JS v2.49.8).
 
 **Key settings that must be correct:**
+
 - Supabase Dashboard → Authentication → URL Configuration:
   - Site URL: `https://www.abbieysearch.com`
   - Redirect allow list: includes `*/auth/confirm` and `*/auth/callback` for both `www` and non-www
@@ -82,6 +83,7 @@ The app supports Supabase Auth for email/password login and **Google OAuth** (PK
 The app uses a **strict Content Security Policy** without `'unsafe-inline'` in `script-src`. All inline `<script>` tags across all 16 templates must have a `nonce` attribute.
 
 **How it works:**
+
 1. `app.py` `@before_request` generates `g.csp_nonce = secrets.token_urlsafe(16)` per request
 2. Context processor exposes it as `{{ csp_nonce }}` in all templates
 3. CSP header: `script-src 'self' 'nonce-{nonce}' https://cdnjs.cloudflare.com ...`
@@ -110,10 +112,10 @@ python scripts/verify_supabase_connection.py  # test DB connectivity
 Production deploys use `**vercel.json`** (Python serverless). SQLite under `**/tmp**` is ephemeral on Vercel; **use Supabase (or Turso)** for durable users, bookmarks, analytics, and waitlist.
 
 1. **Vercel → your project → Settings → Environment Variables**
-  Add `**SUPABASE_DB_URL`** (or `**DATABASE_URL`**) with the same URI as local—**Transaction pooler**, port **6543**, user usually `**postgres.<project-ref>`** as shown in Supabase. Apply to **Production** (and **Preview** if you want DB there too).
+  Add `SUPABASE_DB_URL` (or `DATABASE_URL`) with the same URI as local—**Transaction pooler**, port **6543**, user usually `postgres.<project-ref>` as shown in Supabase. Apply to **Production** (and **Preview** if you want DB there too).
 2. **Optional — Vercel Marketplace**
-  You can install the [Supabase integration](https://vercel.com/marketplace/supabase) on Vercel; it may inject a Postgres URL under a different variable name. If so, either copy that value into `**SUPABASE_DB_URL`** or set `**DATABASE_URL`** to match—this app reads only those two names.
-3. **Redeploy** after changing env vars. Confirm with `**/admin/api/health?token=...`** (`storage`: `supabase`, `analytics_db`: `ok`).
+  You can install the [Supabase integration](https://vercel.com/marketplace/supabase) on Vercel; it may inject a Postgres URL under a different variable name. If so, either copy that value into `SUPABASE_DB_URL` or set `DATABASE_URL` to match—this app reads only those two names.
+3. **Redeploy** after changing env vars. Confirm with `/admin/api/health?token=...` (`storage`: `supabase`, `analytics_db`: `ok`).
   Local sync: `vercel env pull` (CLI) if you use the Vercel-linked project.
 
 ## Deploy
