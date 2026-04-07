@@ -1,0 +1,60 @@
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "8c36aa4d5fad3435afac5507cab203a21399a52d",
+  "prompts": {
+    "468b05e1a806d96b": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "947cd012-a2d7-4bac-88b7-e16affde850c",
+        "model": "default"
+      },
+      "human_author": "Abbiey",
+      "messages": [],
+      "total_additions": 4,
+      "total_deletions": 2,
+      "accepted_lines": 4,
+      "overriden_lines": 0
+    },
+    "cbed5d3405f02634": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "055712f8-6562-4380-8d31-6f1689e56eb7",
+        "model": "default"
+      },
+      "human_author": "Abbiey",
+      "messages": [],
+      "total_additions": 82,
+      "total_deletions": 81,
+      "accepted_lines": 57,
+      "overriden_lines": 16
+    },
+    "f6beabae7e1b4243": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "c37de21b-c947-4fdd-9d92-72a6b580dc01",
+        "model": "default"
+      },
+      "human_author": "Abbiey",
+      "messages": [],
+      "total_additions": 863,
+      "total_deletions": 33,
+      "accepted_lines": 690,
+      "overriden_lines": 2
+    },
+    "fb864f0daf6d8a95": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "96dd2785-364f-4942-abec-ed7c3e76d04d",
+        "model": "default"
+      },
+      "human_author": "Abbiey",
+      "messages": [],
+      "total_additions": 280,
+      "total_deletions": 216,
+      "accepted_lines": 29,
+      "overriden_lines": 0
+    }
+  }
+}
