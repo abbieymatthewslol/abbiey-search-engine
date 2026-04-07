@@ -3688,6 +3688,8 @@ def api_image_metadata():
         # Resolve hostname to IPs and reject any private/loopback address
         try:
             resolved = _socket.getaddrinfo(host, None)
+            if not resolved:
+                return jsonify({"error": "unresolvable host"}), 400
             for _, _, _, _, sockaddr in resolved:
                 raw_ip = sockaddr[0]
                 try:
@@ -3701,7 +3703,8 @@ def api_image_metadata():
     except Exception:
         return jsonify({"error": "invalid url"}), 400
     try:
-        resp = _get_http().head(url, timeout=8.0, follow_redirects=True)
+        # Disable redirect following to prevent SSRF via open redirects to private IPs
+        resp = _get_http().head(url, timeout=8.0, follow_redirects=False)
         ct = resp.headers.get("Content-Type", "")
         cl = resp.headers.get("Content-Length")
         fmt = ct.split(";")[0].strip()
@@ -4706,7 +4709,7 @@ def _try_openverse(query, max_results=20, filters=None):
                 "height": r.get("height"),
                 "creator": r.get("creator", ""),
                 "creator_url": r.get("creator_url", ""),
-                "tags": ", ".join(
+                "tags": ",".join(
                     [t["name"] for t in r.get("tags", []) if isinstance(t, dict) and "name" in t][:5]
                 ),
             })

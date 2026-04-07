@@ -1559,6 +1559,8 @@ document.addEventListener("DOMContentLoaded", () => {
     return "lic-unknown";
   }
 
+  const _imgMetaCache = new Map();
+
   let openLightbox = null;
   if (lightbox) {
     lightbox.removeAttribute("hidden");
@@ -1586,7 +1588,7 @@ document.addEventListener("DOMContentLoaded", () => {
         };
       }
 
-      // Format — prefer from metadata, fallback to lazy /api/image-metadata
+      // Format — prefer from metadata, fallback to lazy /api/image-metadata (cached)
       const fmt = (card.dataset.format || "").toUpperCase().replace("JPEG", "JPG");
       if (fmt && fmt !== "NONE") {
         lightboxFormatEl.textContent = fmt;
@@ -1594,15 +1596,24 @@ document.addEventListener("DOMContentLoaded", () => {
       } else {
         lightboxFormatRow.hidden = true;
         if (imageUrl) {
-          fetch(`/api/image-metadata?url=${encodeURIComponent(imageUrl)}`)
-            .then(r => r.ok ? r.json() : null)
-            .then(data => {
-              if (data && data.format) {
-                lightboxFormatEl.textContent = data.format;
-                lightboxFormatRow.hidden = false;
-              }
-            })
-            .catch(err => { console.warn("Image metadata fetch failed:", err); });
+          if (_imgMetaCache.has(imageUrl)) {
+            const cached = _imgMetaCache.get(imageUrl);
+            if (cached && cached.format) {
+              lightboxFormatEl.textContent = cached.format;
+              lightboxFormatRow.hidden = false;
+            }
+          } else {
+            fetch(`/api/image-metadata?url=${encodeURIComponent(imageUrl)}`)
+              .then(r => r.ok ? r.json() : null)
+              .then(data => {
+                _imgMetaCache.set(imageUrl, data);
+                if (data && data.format) {
+                  lightboxFormatEl.textContent = data.format;
+                  lightboxFormatRow.hidden = false;
+                }
+              })
+              .catch(err => { console.warn("Image metadata fetch failed:", err); });
+          }
         }
       }
 
