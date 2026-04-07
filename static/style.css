@@ -1421,6 +1421,33 @@ article.result.code-result { font-size: .9rem; }
 .home-logo span {
   color: var(--text);
 }
+.home-intro {
+  max-width: 38rem;
+  margin: 0.85rem auto 0;
+  padding: 0 1rem;
+  font-size: clamp(0.8125rem, 1.5vw + 0.65rem, 0.9375rem);
+  line-height: 1.55;
+  color: var(--text-dim);
+  text-align: center;
+}
+.home-intro strong {
+  color: var(--text);
+  font-weight: 600;
+}
+.privacy-popover-policy {
+  margin: 0.65rem 0 0;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 0.8125rem;
+  text-align: center;
+}
+.privacy-popover-policy a {
+  color: var(--accent);
+  text-decoration: none;
+}
+.privacy-popover-policy a:hover {
+  text-decoration: underline;
+}
 .home-support {
   display: flex;
   flex-direction: row;
@@ -3930,6 +3957,25 @@ footer {
   border-radius: 4px;
 }
 
+/* No-JS and policy crawlers: visible links without executing script */
+.noscript-banner {
+  padding: 0.65rem 1rem;
+  text-align: center;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+  background: var(--bg-hover);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.noscript-banner a {
+  color: var(--accent);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.noscript-banner a:hover {
+  text-decoration: underline;
+}
+
 /* ===== Marketing /landing ===== */
 .landing-header {
   display: flex;
@@ -3959,6 +4005,19 @@ footer {
 .landing-lead strong {
   color: var(--text);
   font-weight: 600;
+}
+.landing-lead a {
+  color: var(--accent);
+  text-decoration: none;
+}
+.landing-lead a:hover {
+  text-decoration: underline;
+}
+.landing-footer {
+  max-width: 40rem;
+  margin: 0 auto 2.5rem;
+  padding: 0 1.5rem;
+  text-align: center;
 }
 .landing-points {
   margin: 0 0 1.5rem;

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>{% if query %}{{ query }} - abbiey.search{% else %}abbiey.search{% endif %}</title>
+    <title>{% if query %}{{ query }} — abbieysearch{% else %}abbieysearch — private web search{% endif %}</title>
     <script nonce="{{ csp_nonce }}">
         (function() {
             var t = localStorage.getItem('theme') || 'dark';
@@ -30,27 +30,27 @@
     <!-- SEO meta tags -->
     {% if query %}
     <meta name="description" content="Private search results for {{ query }} — no tracking, no profiling.">
-    <meta property="og:title" content="{{ query }} — abbiey.search">
+    <meta property="og:title" content="{{ query }} — abbieysearch">
     <meta property="og:description" content="Private search results for: {{ query }}">
     <meta property="og:url" content="{{ site_base_url }}/search?q={{ query|urlencode }}">
     {% else %}
-    <meta name="description" content="abbiey.search — A private, fast search engine. No tracking, no data collection, no judgment.">
-    <meta property="og:title" content="abbiey.search — Private Search Engine">
-    <meta property="og:description" content="Search the web without being tracked. No logs. No profiling. No judgment.">
+    <meta name="description" content="abbieysearch is a privacy-first web search engine. Search the web without query logging or tracking. No account required.">
+    <meta property="og:title" content="abbieysearch — private web search">
+    <meta property="og:description" content="Privacy-first web search: no query logging, no profiling. Sign in is optional for bookmarks and history.">
     <meta property="og:url" content="{{ site_base_url }}/search">
     {% endif %}
     <meta name="keywords" content="private search engine, no tracking search, privacy search, anonymous search">
-    <meta name="author" content="abbiey.search">
+    <meta name="author" content="abbieysearch">
     <meta property="og:type" content="website">
-    <meta property="og:site_name" content="abbiey.search">
+    <meta property="og:site_name" content="abbieysearch">
     <meta property="og:image" content="{{ site_base_url }}/static/og-image.png">
     <meta name="twitter:card" content="summary_large_image">
     {% if query %}
-    <meta name="twitter:title" content="{{ query }} — abbiey.search">
+    <meta name="twitter:title" content="{{ query }} — abbieysearch">
     <meta name="twitter:description" content="Private search results for: {{ query }}">
     {% else %}
-    <meta name="twitter:title" content="abbiey.search — Private Search Engine">
-    <meta name="twitter:description" content="Search the web without being tracked. No logs. No profiling. No judgment.">
+    <meta name="twitter:title" content="abbieysearch — private web search">
+    <meta name="twitter:description" content="Privacy-first web search. No account required; sign in only for optional account features.">
     {% endif %}
     <meta name="twitter:image" content="{{ site_base_url }}/static/og-image.png">
     {% if not query %}<link rel="canonical" href="{{ site_base_url }}/search">{% endif %}
@@ -60,20 +60,20 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="abbiey.search">
+    <meta name="apple-mobile-web-app-title" content="abbieysearch">
     <link rel="apple-touch-icon" href="/static/icon-192.png">
     <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png">
     <link rel="shortcut icon" href="/favicon.ico">
     <!-- OpenSearch -->
-    <link rel="search" type="application/opensearchdescription+xml" title="abbiey.search" href="/opensearch.xml">
+    <link rel="search" type="application/opensearchdescription+xml" title="abbieysearch" href="/opensearch.xml">
     <!-- JSON-LD -->
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
       "@type": "WebSite",
-      "name": "abbiey.search",
+      "name": "abbieysearch",
       "url": {{ (site_base_url + '/search')|tojson }},
-      "description": "Private search engine. No tracking. No profiling. No judgment.",
+      "description": "abbieysearch is a privacy-first web search engine. No query logging on our servers; sign in is optional.",
       "potentialAction": {
         "@type": "SearchAction",
         "target": {
@@ -86,9 +86,15 @@
     </script>
 </head>
 <body class="{% if query %}has-results{% endif %}">
+    <noscript>
+        <div class="noscript-banner" role="note">
+            <strong>abbieysearch</strong> &mdash; privacy-first web search. No account required.
+            <a href="/privacy">Privacy Policy</a> &middot; <a href="/terms">Terms</a> &middot; <a href="/search">Search</a>
+        </div>
+    </noscript>
 
     <header>
-        <a href="/" class="logo">abbiey.<span>search</span></a>
+        <a href="/" class="logo">abbiey<span>search</span></a>
         <div class="header-controls">
 
             <div class="header-overflow" id="header-overflow">
@@ -371,6 +377,7 @@
             Google collects ~39 data points per search
         </div>
         <div class="privacy-tagline">Your privacy is our priority.</div>
+        <p class="privacy-popover-policy"><a href="/privacy">Privacy Policy</a></p>
     </div>
 
     <div class="app-layout {% if query %}has-chat{% endif %}"{% if query %} data-query-intent="{{ query_ui.intent }}" data-query-local="{% if query_ui.local_intent %}1{% else %}0{% endif %}"{% endif %}>
@@ -379,7 +386,13 @@
             {% if not query %}
             {# ===== HOME: title above search; supporting copy below bar ===== #}
             <div class="home-hero">
-                <h1 class="home-logo">abbiey.<span>search</span></h1>
+                <h1 class="home-logo">abbiey<span>search</span></h1>
+                <p class="home-intro">
+                    <strong>abbieysearch</strong> is a privacy-first web search engine: we help you find information on the web
+                    without selling your searches or building a marketing profile. The search box below works immediately
+                    &mdash; <strong>no account or sign-in is required</strong>. Creating an account is optional if you want
+                    bookmarks, synced history, or developer tools.
+                </p>
             </div>
             {% endif %}
 
@@ -1191,7 +1204,14 @@
     </div>
 
     <footer>
-        <p>abbiey.search &mdash; Search with clarity.</p>
+        <p><strong>abbieysearch</strong> (abbiey.search) &mdash; Search with clarity.</p>
+        <p class="footer-links">
+            <a href="/privacy">Privacy Policy</a>
+            &nbsp;&middot;&nbsp;
+            <a href="/terms">Terms of Service</a>
+            &nbsp;&middot;&nbsp;
+            <a href="/landing">About</a>
+        </p>
     </footer>
 
     <script nonce="{{ csp_nonce }}">

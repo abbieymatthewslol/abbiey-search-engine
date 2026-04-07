@@ -83,6 +83,13 @@ class TestRoutes:
         assert b'href="/privacy"' in resp.data
         assert b"Privacy Policy" in resp.data
 
+    def test_search_googlebot_not_blocked_by_free_tier_limit(self, client, mock_ddg):
+        """Crawlers must not get 429 from the IP search cap (reads as a walled app)."""
+        googlebot = "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
+        with patch("app._server_search_limit_reached", return_value=True):
+            resp = client.get("/search?q=oauth+check", headers={"User-Agent": googlebot})
+        assert resp.status_code == 200
+
     def test_access_resources_json(self, client):
         resp = client.get("/api/access-resources")
         assert resp.status_code == 200

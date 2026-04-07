@@ -1002,6 +1002,28 @@ def _server_search_limit_reached(client_ip: str) -> bool:
         return entry["count"] > _SERVER_FREE_SEARCH_LIMIT
 
 
+def _is_oauth_verification_crawler_ua(user_agent: str) -> bool:
+    """OAuth/policy crawlers must not hit the free-tier IP cap (429 can look like a login wall)."""
+    ua = (user_agent or "").lower()
+    if not ua:
+        return False
+    return any(
+        t in ua
+        for t in (
+            "googlebot",
+            "google-inspectiontool",
+            "adsbot-google",
+            "mediapartners-google",
+            "apis-google",
+            "bingbot",
+            "slurp",
+            "duckduckbot",
+            "facebookexternalhit",
+            "linkedinbot",
+        )
+    )
+
+
 def _upsert_search_unlock(uid: int | None, token: str, source: str = "payment_return") -> str:
     token = (token or "").strip()
     if not token:
@@ -2724,7 +2746,8 @@ def search():
     # Server-side search limit for free-tier users
     if query and not current_user_has_paid_access:
         client_ip = request.remote_addr or ""
-        if _server_search_limit_reached(client_ip):
+        ua = request.headers.get("User-Agent") or ""
+        if not _is_oauth_verification_crawler_ua(ua) and _server_search_limit_reached(client_ip):
             return render_template(
                 "index.html",
                 **{**_TEMPLATE_DEFAULTS, "current_user_has_paid_access": False,
@@ -7133,7 +7156,7 @@ def api_user_history_add():
 def opensearch():
     xml = '''<?xml version="1.0" encoding="UTF-8"?>
 <OpenSearchDescription xmlns="http://a9.com/-/spec/opensearch/1.1/">
-  <ShortName>abbiey.search</ShortName>
+  <ShortName>abbieysearch</ShortName>
   <Description>Private, fast, no-tracking search engine</Description>
   <Tags>privacy search private</Tags>
   <Contact>hello@abbieysearch.com</Contact>
@@ -7150,9 +7173,9 @@ def opensearch():
 @app.route("/manifest.json")
 def manifest():
     return jsonify({
-        "name": "abbiey.search",
-        "short_name": "abbiey",
-        "description": "Private, fast, no-tracking search engine",
+        "name": "abbieysearch",
+        "short_name": "abbieysearch",
+        "description": "Privacy-first web search — no account required",
         "start_url": "/search",
         "display": "standalone",
         "background_color": "#000000",
@@ -7214,6 +7237,21 @@ def sitemap():
     <loc>https://www.abbieysearch.com/breach-check</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://www.abbieysearch.com/privacy</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.85</priority>
+  </url>
+  <url>
+    <loc>https://www.abbieysearch.com/terms</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.85</priority>
+  </url>
+  <url>
+    <loc>https://www.abbieysearch.com/landing</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
   </url>
 </urlset>'''
     return Response(xml, mimetype="application/xml")

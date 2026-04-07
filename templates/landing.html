@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>abbiey.search — Private search</title>
+    <title>abbieysearch — About · private web search</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=deploy_hash) }}">
     {% include 'includes/google_site_verification.html' %}
     {% include 'includes/google_analytics.html' %}
@@ -12,30 +12,36 @@
         window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
     </script>
     <script defer src="/_vercel/speed-insights/script.js"></script>
-    <meta name="description" content="Private search — no logs, no profiling. Your searches stay yours.">
+    <meta name="description" content="abbieysearch is a privacy-first web search engine. No account required to search. Read our Privacy Policy for details.">
     <link rel="canonical" href="{{ site_base_url }}/landing">
     <!-- Open Graph -->
     <meta property="og:type" content="website">
-    <meta property="og:site_name" content="abbiey.search">
-    <meta property="og:title" content="abbiey.search — Private search">
-    <meta property="og:description" content="Private search — no logs, no profiling. Your searches stay yours.">
+    <meta property="og:site_name" content="abbieysearch">
+    <meta property="og:title" content="abbieysearch — private web search">
+    <meta property="og:description" content="Privacy-first search: no query logging on our side. Sign in is optional for bookmarks and history.">
     <meta property="og:image" content="{{ site_base_url }}/static/og-image.png">
     <meta property="og:url" content="{{ site_base_url }}/landing">
     <!-- Twitter Card -->
     <meta name="twitter:card" content="summary">
-    <meta name="twitter:title" content="abbiey.search — Private search">
-    <meta name="twitter:description" content="Private search — no logs, no profiling. Your searches stay yours.">
+    <meta name="twitter:title" content="abbieysearch — private web search">
+    <meta name="twitter:description" content="Privacy-first search. No account required.">
 </head>
 <body>
     <header class="landing-header">
-        <a href="/search" class="logo">abbiey.<span>search</span></a>
+        <a href="/search" class="logo">abbiey<span>search</span></a>
         <a href="/search" class="header-btn landing-cta">Open search</a>
     </header>
     <main class="landing-main">
-        <h1>Search with clarity</h1>
+        <h1>abbieysearch</h1>
         <p class="landing-lead">
-            abbiey.search is for people who want results — not a dossier. We do not log your queries,
-            sell your interests, or train on what you type. <strong>Your searches stay yours.</strong>
+            <strong>abbieysearch</strong> (shown as abbiey.search in the logo) is a <strong>privacy-first web search engine</strong>.
+            We help you find information on the public web without using your queries to profile you for ads.
+            <strong>You do not need an account to search</strong> &mdash; sign in is only for optional features like bookmarks,
+            synced history, and developer tools.
+        </p>
+        <p class="landing-lead">
+            Your searches stay yours. We do not log queries for advertising or resale.
+            See our <a href="/privacy">Privacy Policy</a> for what we collect and why.
         </p>
         <ul class="landing-points">
             <li>Answers over obstacles</li>
@@ -44,5 +50,14 @@
         </ul>
         <p><a href="/search" class="header-btn">Start searching</a></p>
     </main>
+    <footer class="landing-footer">
+        <p class="footer-links">
+            <a href="/privacy">Privacy Policy</a>
+            &nbsp;&middot;&nbsp;
+            <a href="/terms">Terms of Service</a>
+            &nbsp;&middot;&nbsp;
+            <a href="/search">Search</a>
+        </p>
+    </footer>
 </body>
 </html>

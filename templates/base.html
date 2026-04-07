@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>{% block title %}abbiey.search{% endblock %}</title>
+    <title>{% block title %}abbieysearch{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=deploy_hash) }}">
     <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png">
     <link rel="shortcut icon" href="/favicon.ico">
@@ -19,23 +19,23 @@
     </script>
     <script defer src="/_vercel/speed-insights/script.js"></script>
     <!-- SEO & PWA -->
-    <meta name="description" content="{% block meta_description %}abbiey.search — Private, fast, no-tracking search engine.{% endblock %}">
+    <meta name="description" content="{% block meta_description %}abbieysearch — Privacy-first web search. No account required.{% endblock %}">
     <meta property="og:type" content="website">
-    <meta property="og:site_name" content="abbiey.search">
-    <meta property="og:title" content="{% block og_title %}abbiey.search{% endblock %}">
+    <meta property="og:site_name" content="abbieysearch">
+    <meta property="og:title" content="{% block og_title %}abbieysearch{% endblock %}">
     <meta property="og:description" content="{% block og_description %}Private search engine. No tracking. No profiling.{% endblock %}">
     <meta property="og:image" content="{{ site_base_url }}/static/og-image.png">
     <meta name="twitter:card" content="summary">
-    <meta name="twitter:title" content="{% block tw_title %}abbiey.search{% endblock %}">
+    <meta name="twitter:title" content="{% block tw_title %}abbieysearch{% endblock %}">
     <meta name="twitter:description" content="{% block tw_description %}Private search engine. No tracking. No profiling.{% endblock %}">
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#000000">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="abbiey.search">
+    <meta name="apple-mobile-web-app-title" content="abbieysearch">
     <link rel="apple-touch-icon" href="/static/icon-192.png">
-    <link rel="search" type="application/opensearchdescription+xml" title="abbiey.search" href="/opensearch.xml">
+    <link rel="search" type="application/opensearchdescription+xml" title="abbieysearch" href="/opensearch.xml">
     {# Apply saved theme + accent immediately to avoid flash #}
     <script nonce="{{ csp_nonce }}">
         (function() {
@@ -309,7 +309,7 @@
     {% block content %}{% endblock %}
 
     <footer>
-        <p>abbiey.search &mdash; No tracking. No profiling. No judgment.</p>
+        <p><strong>abbieysearch</strong> &mdash; No tracking. No profiling. No judgment.</p>
         <p class="footer-sub">We don't log your searches. Your data stays yours.</p>
         <p class="footer-links">
             <a href="/privacy">Privacy Policy</a>
