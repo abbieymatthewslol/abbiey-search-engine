@@ -32,7 +32,7 @@ Follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) conventions.
 - **Time filter** (`df` param): filter results by day / week / month / year
 - **Bookmarks**: save results client-side with localStorage + server sync for logged-in users
 - **QR card**: generate a QR code for any URL via `qr <url>` query
-- **Full settings modal**: theme, font, density, accent colour, region, safe-search, default tab, panel sizes — all persisted to localStorage
+- **Full settings modal**: theme, font, density, accent color, region, safe search, default tab, panel sizes — all persisted to localStorage
 - **AI summary**: extractive summary card above results for informational queries
 - **Deep Web tab**: Ahmia.fi integration with DDG onion fallback and clear unavailability notice
 
@@ -55,7 +55,7 @@ Follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) conventions.
 - **Freemium paywall**: 2 free searches, $10 one-time unlimited access via Stripe
 - **Waitlist & landing page**: privacy pitch, pricing, email capture
 - **Trending searches**: real-time trending pills on home page
-- **Calculator, unit converter, colour picker**: instant answer cards
+- **Calculator, unit converter, color picker**: instant answer cards
 - **Weather card**: current conditions for location queries
 
 ---
