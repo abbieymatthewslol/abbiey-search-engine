@@ -1126,7 +1126,14 @@ class TestDeveloperPage:
         assert b"Developer" in r.data
         assert b"API keys" in r.data
 
-    def test_developer_includes_stripe_checkout_link(self, client):
+    def test_developer_includes_stripe_checkout_link(self, client, monkeypatch):
+        import app as app_module
+
+        monkeypatch.setattr(
+            app_module,
+            "STRIPE_API_KEYS_CHECKOUT_URL",
+            "https://buy.stripe.com/test_payment_link",
+        )
         r = client.get("/developer")
         assert r.status_code == 200
         assert b"buy.stripe.com" in r.data

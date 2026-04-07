@@ -24,6 +24,16 @@ import urllib.request
 import urllib.error
 from pathlib import Path
 
+# Windows cp1252 consoles cannot print Unicode markers (✓/✗) by default.
+if sys.platform == "win32":
+    for stream in (sys.stdout, sys.stderr):
+        reconf = getattr(stream, "reconfigure", None)
+        if callable(reconf):
+            try:
+                reconf(encoding="utf-8", errors="replace")
+            except (OSError, ValueError):
+                pass
+
 
 def _jwt_project_ref(token):
     """Decode JWT payload (no signature check) and return the 'ref' field."""
