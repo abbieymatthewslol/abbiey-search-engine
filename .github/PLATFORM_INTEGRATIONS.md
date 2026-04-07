@@ -26,18 +26,65 @@ Two patterns work; **pick one** for production to avoid duplicate deploys:
 
 ## Supabase → Vercel
 
-1. In [Supabase](https://supabase.com/dashboard) use **one** project for production.
+**Active project:** `xwxscvllmghyogddpmii` (Singapore, ap-southeast-1)
+
+1. In [Supabase](https://supabase.com/dashboard) use **one** project for production. Current: `xwxscvllmghyogddpmii`.
 2. **Settings → Database → Connection string** → URI, **Transaction pooler** (port **6543**) for serverless.
-3. In Vercel → Project → **Settings → Environment Variables** (Production):
+3. In Vercel → Project → **Settings → Environment Variables** (Production), set ALL of these:
 
   | Variable                            | Notes                                                                              |
   | ----------------------------------- | ---------------------------------------------------------------------------------- |
-  | `SUPABASE_DB_URL` or `DATABASE_URL` | Full `postgresql://…` URI (same value in both names is unnecessary; one is enough) |
-  | `SECRET_KEY`                        | Strong random string                                                               |
-  | `ADMIN_TOKEN`                       | Protects `/admin/`*                                                                |
+  | `SUPABASE_URL`                      | `https://xwxscvllmghyogddpmii.supabase.co`                                        |
+  | `SUPABASE_ANON_KEY`                 | From Supabase Dashboard → Project Settings → API → anon/public                    |
+  | `SUPABASE_SERVICE_ROLE_KEY`         | From Supabase Dashboard → Project Settings → API → service_role                   |
+  | `SUPABASE_JWT_SECRET`               | From Supabase Dashboard → Project Settings → API → JWT Secret                     |
+  | `SUPABASE_DB_URL`                   | Full `postgresql://postgres.xwxscvllmghyogddpmii:PASSWORD@aws-1-ap-southeast-1.pooler.supabase.com:6543/postgres?sslmode=require` |
+  | `SECRET_KEY`                        | `python -c "import secrets; print(secrets.token_hex(32))"`                        |
+  | `ADMIN_TOKEN`                       | Protects `/admin/*`                                                                |
+  | `SITE_URL`                          | `https://www.abbieysearch.com`                                                     |
+  | `CORS_ALLOWED_ORIGINS`              | `https://www.abbieysearch.com,https://abbieysearch.com`                            |
 
-4. **Not** used for DB access: `sb_publishable_*` / `sb_secret_*` — the app uses `**psycopg2`** against Postgres, not the Supabase REST API.
-5. Verify after deploy: `https://www.abbieysearch.com/admin/api/health?token=YOUR_ADMIN_TOKEN` → `"storage": "supabase"`, `"analytics_db": "ok"`.
+  **Shortcut:** `python scripts/restore_vercel_env.py --apply` pushes everything from `.env` to Vercel.
+
+4. Verify after deploy: `https://www.abbieysearch.com/admin/api/health?token=YOUR_ADMIN_TOKEN` → `"storage": "supabase"`, `"analytics_db": "ok"`.
+
+## Supabase Auth (Google OAuth)
+
+Google OAuth requires configuration in **three places**:
+
+### 1. Supabase Dashboard → Authentication → URL Configuration
+```
+Site URL:              https://www.abbieysearch.com
+Redirect allow list:   https://abbieysearch.com/auth/callback
+                       https://www.abbieysearch.com/auth/confirm
+                       https://abbieysearch.com/auth/confirm
+                       http://localhost:8000/auth/confirm
+                       http://localhost:8000/auth/callback
+                       https://search-*-abbieys-projects.vercel.app/**
+```
+
+### 2. Supabase Dashboard → Authentication → Providers → Google
+- Enabled: ✅
+- Client ID: `323605814484-ncs1q3o91cucisasdii355oe59rg20gv.apps.googleusercontent.com`
+- Client Secret: (stored in Supabase, not in code)
+
+### 3. Google Cloud Console (MANUAL — critical for OAuth to work)
+URL: https://console.cloud.google.com/apis/credentials
+
+**OAuth 2.0 Client ID** for Web application:
+- **Authorized JavaScript origins:** `https://www.abbieysearch.com`, `https://abbieysearch.com`, `https://xwxscvllmghyogddpmii.supabase.co`
+- **Authorized redirect URIs:** `https://xwxscvllmghyogddpmii.supabase.co/auth/v1/callback`
+
+⚠️ If the Supabase project ever changes, update the redirect URI here **first** or OAuth will show a `redirect_uri_mismatch` error.
+
+## CSP Nonce Requirement
+
+The app enforces a strict CSP (`script-src` without `'unsafe-inline'`). All inline `<script>` tags use per-request nonces:
+- Flask generates `g.csp_nonce = secrets.token_urlsafe(16)` before each request
+- Templates use `<script nonce="{{ csp_nonce }}">` on every inline script
+- **Any new inline script added to a template MUST have the nonce attribute**
+
+To audit: `grep -rn "<script" templates/` — every `<script` line should be followed by `nonce=`.
 
 ## Quick checklist
 

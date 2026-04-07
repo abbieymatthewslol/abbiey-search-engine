@@ -54,9 +54,56 @@ pytest tests/ -v
 
 ## Supabase (production database)
 
-- Set `**SUPABASE_DB_URL**` or `**DATABASE_URL**` to the **PostgreSQL URI** from the Supabase dashboard (**Settings → Database → Connection string**). Prefer the **pooler** (port **6543**, **Transaction** mode) for serverless; the app adds `**sslmode=require`** automatically if missing on Supabase hosts.
-- **Not** used: the dashboard **sb_publishable_*** / **sb_secret_*** keys (those target the Supabase REST API; this app uses `psycopg2` + SQL).
-- On success, startup logs: `Supabase/PostgreSQL connected (host:port)`. `**/admin/api/health?token=...`** returns `"storage": "supabase"` and `"analytics_db": "ok"`.
+**Active project:** `xwxscvllmghyogddpmii` (Singapore, ap-southeast-1) — **ACTIVE_HEALTHY**
+
+- Set `SUPABASE_DB_URL` to the **PostgreSQL pooler URI** (port **6543**, Transaction mode) — required for serverless Vercel.
+- `SUPABASE_URL`: `https://xwxscvllmghyogddpmii.supabase.co`
+- `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY`: from Supabase Dashboard → Project Settings → API.
+- On success, startup logs: `Supabase/PostgreSQL connected (host:port)`. `/admin/api/health?token=...` returns `"storage": "supabase"`, `"analytics_db": "ok"`.
+- **Local dev IPv6 issue**: psycopg2 on Windows may try IPv6 and timeout. Scripts in `scripts/` monkey-patch `socket.getaddrinfo` to force IPv4.
+
+## Supabase Auth (Google OAuth)
+
+The app supports Supabase Auth for email/password login and **Google OAuth** (PKCE flow, Supabase JS v2.49.8).
+
+**Key settings that must be correct:**
+- Supabase Dashboard → Authentication → URL Configuration:
+  - Site URL: `https://www.abbieysearch.com`
+  - Redirect allow list: includes `*/auth/confirm` and `*/auth/callback` for both `www` and non-www
+- Supabase Dashboard → Authentication → Providers → Google: enabled, Client ID + Secret set
+- **Google Cloud Console** → OAuth Client `323605814484-ncs1q3o91cucisasdii355oe59rg20gv` → Authorized redirect URIs must include: `https://xwxscvllmghyogddpmii.supabase.co/auth/v1/callback`
+
+**PKCE flow:** `login.html` / `signup.html` → Supabase JS → `supabase.co/auth/v1/authorize` → Google → `supabase.co/auth/v1/callback` → `/auth/confirm?code=...` → `auth_confirm.html` exchanges code → POSTs to `/auth/callback` → Flask sets session.
+
+**`_SUPABASE_AUTH_ENABLED`** is set at import time from `SUPABASE_URL` + `SUPABASE_ANON_KEY`. If either is empty, the Google button and Supabase JS block are not rendered in templates.
+
+## CSP Nonce Pattern (CRITICAL)
+
+The app uses a **strict Content Security Policy** without `'unsafe-inline'` in `script-src`. All inline `<script>` tags across all 16 templates must have a `nonce` attribute.
+
+**How it works:**
+1. `app.py` `@before_request` generates `g.csp_nonce = secrets.token_urlsafe(16)` per request
+2. Context processor exposes it as `{{ csp_nonce }}` in all templates
+3. CSP header: `script-src 'self' 'nonce-{nonce}' https://cdnjs.cloudflare.com ...`
+4. Every `<script>` tag: `<script nonce="{{ csp_nonce }}">`
+
+**If you add a new inline `<script>` tag to any template, it MUST have `nonce="{{ csp_nonce }}"` or it will be silently blocked in production.** This is the #1 gotcha for new contributors.
+
+## Scripts
+
+```bash
+python scripts/health_check.py         # verify DB + Supabase Auth + live site + Vercel
+python scripts/restore_vercel_env.py   # dry-run: show what .env would push to Vercel
+python scripts/restore_vercel_env.py --apply  # actually push all env vars to Vercel
+python scripts/setup_supabase_env.py   # write .env from Supabase project details
+python scripts/verify_production_env.py       # pre-deploy env var check
+python scripts/verify_supabase_connection.py  # test DB connectivity
+```
+
+## See Also
+
+- `AGENTS.md` — full architecture, integration IDs, recovery runbook (AI context file)
+- `.github/PLATFORM_INTEGRATIONS.md` — platform-specific setup steps
 
 ## Vercel + Supabase
 
