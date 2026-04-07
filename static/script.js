@@ -924,15 +924,101 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // ===== Clear buttons =====
-  const clearHistBtn = document.getElementById("clear-history-btn");
-  if (clearHistBtn) {
-    clearHistBtn.addEventListener("click", () => {
-      localStorage.removeItem("abbiey_search_history");
-      clearHistBtn.textContent = "Cleared!";
-      setTimeout(() => { clearHistBtn.textContent = "Clear"; }, 1500);
-    });
-  }
+  // ===== History panel (Settings → Privacy) =====
+  (function () {
+    const HISTORY_KEY_PANEL = "abbiey_search_history";
+    const CLOCK_SVG = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`;
+
+    function panelGetHistory() {
+      try { return JSON.parse(localStorage.getItem(HISTORY_KEY_PANEL)) || []; } catch { return []; }
+    }
+    function panelRemove(term) {
+      const items = panelGetHistory().filter(i => i !== term);
+      try { localStorage.setItem(HISTORY_KEY_PANEL, JSON.stringify(items)); } catch {}
+      if (document.querySelector(".user-avatar-chip")) {
+        fetch("/api/user/history", {
+          method: "DELETE", headers: { "Content-Type": "application/json" },
+          credentials: "same-origin", body: JSON.stringify({ query: term }),
+        }).catch(() => {});
+      }
+    }
+    function panelClearAll() {
+      try { localStorage.removeItem(HISTORY_KEY_PANEL); } catch {}
+      if (document.querySelector(".user-avatar-chip")) {
+        fetch("/api/user/history", {
+          method: "DELETE", headers: { "Content-Type": "application/json" },
+          credentials: "same-origin", body: JSON.stringify({ clear_all: true }),
+        }).catch(() => {});
+      }
+    }
+
+    function renderPanel() {
+      const list = document.getElementById("history-panel-list");
+      if (!list) return;
+      const items = panelGetHistory();
+      if (!items.length) {
+        list.innerHTML = `<div class="history-panel-empty">No recent searches</div>`;
+        return;
+      }
+      list.innerHTML = items.map((text, i) =>
+        `<div class="history-panel-item" data-idx="${i}">` +
+        `<span class="history-panel-item-icon">${CLOCK_SVG}</span>` +
+        `<span class="history-panel-item-text" data-term="${esc(text)}">${esc(text)}</span>` +
+        `<button class="history-panel-item-del" data-del="${esc(text)}" title="Remove" type="button">&times;</button>` +
+        `</div>`
+      ).join("");
+
+      list.querySelectorAll(".history-panel-item-text").forEach(el => {
+        el.addEventListener("click", () => {
+          const q = el.getAttribute("data-term");
+          const searchInput = document.getElementById("search-input") || document.querySelector("input[name='q']");
+          if (searchInput) { searchInput.value = q; }
+          document.querySelector(".settings-overlay")?.classList.remove("open");
+          const sf = document.getElementById("main-search-form") || document.querySelector("form[action*='search']");
+          if (sf) sf.submit();
+        });
+      });
+      list.querySelectorAll(".history-panel-item-del").forEach(btn => {
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          panelRemove(btn.getAttribute("data-del"));
+          renderPanel();
+        });
+      });
+    }
+
+    const viewHistBtn = document.getElementById("view-history-btn");
+    const histPanel = document.getElementById("history-panel");
+    const histPanelClose = document.getElementById("history-panel-close");
+
+    if (viewHistBtn && histPanel) {
+      viewHistBtn.addEventListener("click", () => {
+        const isHidden = histPanel.hidden;
+        histPanel.hidden = !isHidden;
+        if (!isHidden) { viewHistBtn.textContent = "View"; return; }
+        viewHistBtn.textContent = "Hide";
+        renderPanel();
+      });
+    }
+    if (histPanelClose && histPanel) {
+      histPanelClose.addEventListener("click", () => {
+        histPanel.hidden = true;
+        if (viewHistBtn) viewHistBtn.textContent = "View";
+      });
+    }
+
+    // ===== Clear buttons =====
+    const clearHistBtn = document.getElementById("clear-history-btn");
+    if (clearHistBtn) {
+      clearHistBtn.addEventListener("click", () => {
+        panelClearAll();
+        if (histPanel) { histPanel.hidden = true; }
+        if (viewHistBtn) viewHistBtn.textContent = "View";
+        clearHistBtn.textContent = "Cleared!";
+        setTimeout(() => { clearHistBtn.textContent = "Clear all"; }, 1500);
+      });
+    }
+  }());
 
   const exportBookmarksBtn = document.getElementById("export-bookmarks-btn");
   if (exportBookmarksBtn) {

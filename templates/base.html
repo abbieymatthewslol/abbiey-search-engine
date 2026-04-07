@@ -268,8 +268,18 @@
                         </label>
                     </div>
                     <div class="settings-row">
-                        <span class="settings-row-label">Clear search history</span>
-                        <button type="button" class="settings-danger-btn" id="clear-history-btn">Clear</button>
+                        <span class="settings-row-label">Search history</span>
+                        <div style="display:flex;gap:.375rem;align-items:center;">
+                            <button type="button" class="settings-secondary-btn" id="view-history-btn">View</button>
+                            <button type="button" class="settings-danger-btn" id="clear-history-btn">Clear all</button>
+                        </div>
+                    </div>
+                    <div class="history-panel" id="history-panel" hidden>
+                        <div class="history-panel-header">
+                            <span class="history-panel-title">Recent searches</span>
+                            <button type="button" class="history-panel-close" id="history-panel-close">&times;</button>
+                        </div>
+                        <div id="history-panel-list" class="history-panel-list"></div>
                     </div>
                     <div class="settings-row">
                         <span class="settings-row-label">Reset all settings &amp; data</span>

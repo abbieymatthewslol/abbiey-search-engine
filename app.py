@@ -2418,7 +2418,6 @@ _TEMPLATE_DEFAULTS = dict(
     search_notice=None,
     current_user_has_paid_access=False,
     stripe_search_checkout_url=STRIPE_SEARCH_CHECKOUT_URL,
-    feature_gates=_feature_gates_for_user(False),
 )
 
 
@@ -2581,6 +2580,83 @@ def api_search_access_claim():
     return resp
 
 
+_RESTORE_BY_EMAIL_PUBLIC_MESSAGE = (
+    "If this email is associated with a purchase, unlimited search is enabled in this browser. "
+    "Otherwise, nothing has changed — you can keep using the site as usual."
+)
+
+
+def _email_acceptable_for_restore(raw: str) -> bool:
+    s = (raw or "").strip()
+    if len(s) < 3 or len(s) > 254 or s.count("@") != 1:
+        return False
+    local, domain = s.split("@", 1)
+    if not local or not domain or "." not in domain:
+        return False
+    if ".." in local or ".." in domain or local.startswith(".") or domain.startswith("."):
+        return False
+    return True
+
+
+@app.route("/api/search-access/restore-by-email", methods=["POST"])
+@limiter.limit("20/minute")
+def api_search_access_restore_by_email():
+    """Re-issue an unlock cookie when the email matches a recorded Stripe payment.
+
+    Returns HTTP 200 with the same JSON body whether or not a payment exists, so clients cannot
+    infer paid-vs-unknown from status codes (enumeration resistance). Only successful payment
+    lookups also set the HttpOnly unlock cookie.
+    """
+    if not request.is_json:
+        return jsonify({"ok": False, "error": "expected_json"}), 400
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return jsonify({"ok": False, "error": "invalid_body"}), 400
+    raw_email = (body.get("email") or "").strip()
+    if not raw_email:
+        return jsonify({"ok": False, "error": "email_required"}), 400
+    if not _email_acceptable_for_restore(raw_email):
+        return jsonify({"ok": False, "error": "invalid_email"}), 400
+
+    email_norm = raw_email.lower().strip()
+    paid_rows: list = []
+    try:
+        paid_rows = _users_execute(
+            "SELECT 1 AS ok FROM payment_events WHERE LOWER(TRIM(COALESCE(customer_email, ''))) = ? LIMIT 1",
+            [email_norm],
+        )
+    except Exception:
+        logger.exception("restore_by_email: payment_events lookup failed")
+        return jsonify({"ok": False, "error": "unavailable"}), 503
+
+    payload = {"ok": True, "message": _RESTORE_BY_EMAIL_PUBLIC_MESSAGE}
+    resp = jsonify(payload)
+
+    if not paid_rows:
+        return resp, 200
+
+    uid: int | None = None
+    try:
+        urows = _users_execute(
+            "SELECT id FROM users WHERE LOWER(email) = ? LIMIT 1",
+            [email_norm],
+        )
+        if urows:
+            uid = _session_user_id_int(urows[0].get("id"))
+    except Exception:
+        logger.exception("restore_by_email: users lookup failed")
+
+    try:
+        token = secrets.token_urlsafe(32)
+        token = _upsert_search_unlock(uid, token, source="restore_by_email")
+        _set_search_unlock_cookie(resp, token)
+    except Exception:
+        logger.exception("restore_by_email: grant failed")
+        return jsonify({"ok": False, "error": "unavailable"}), 503
+
+    return resp, 200
+
+
 # ---------------------------------------------------------------------------
 # Stripe Webhook — server-side payment verification
 # ---------------------------------------------------------------------------
@@ -2644,84 +2720,23 @@ def stripe_webhook():
             except Exception:
                 logger.exception("stripe_webhook: auto-grant failed for checkout_token=%s", checkout_token[:8] if checkout_token else "?")
 
-        # Auto-grant by email when there is no checkout_token (e.g. direct Payment Link clicks).
-        # We only do this when the checkout_token path did NOT already grant access, to avoid
-        # double-granting. The email must have a matching payment_events row (just recorded above).
-        if not checkout_token and customer_email:
+        # Email-based fallback: no checkout_token (direct Payment Link, no pre-created session).
+        # Look up the paying user by email and grant access.
+        elif customer_email:
             try:
-                uid = None
-                user_rows = _users_execute(
-                    "SELECT id FROM users WHERE LOWER(email)=LOWER(?) LIMIT 1",
+                users = _users_execute(
+                    "SELECT id FROM users WHERE LOWER(email)=LOWER(?)",
                     [customer_email],
                 )
-                if user_rows:
-                    uid = _session_user_id_int(user_rows[0].get("id"))
-                token = secrets.token_urlsafe(32)
-                _upsert_search_unlock(uid, token, source="stripe_webhook_email")
-                logger.info(
-                    "stripe_webhook: email-based auto-grant for email=%s uid=%s",
-                    customer_email[:4] + "***",
-                    uid,
-                )
+                if users:
+                    uid = _session_user_id_int(users[0].get("id"))
+                    token = secrets.token_urlsafe(32)
+                    _upsert_search_unlock(uid, token, source="stripe_webhook_email")
+                    logger.info("stripe_webhook: email-based auto-grant for email=%s", customer_email[:20])
             except Exception:
-                logger.exception("stripe_webhook: email-based auto-grant failed email=%s", customer_email[:4] + "***" if customer_email else "?")
+                logger.exception("stripe_webhook: email-based auto-grant failed")
 
     return jsonify({"received": True}), 200
-
-
-@app.route("/api/search-access/restore-by-email", methods=["POST"])
-@limiter.limit("5/minute;10/hour")
-def api_search_access_restore_by_email():
-    """Restore paid access for a user who has lost their unlock cookie.
-
-    Looks up the email in payment_events (written by the Stripe webhook) and, if a
-    verified payment is found, issues a new unlock token and sets the persistent cookie.
-
-    Rate-limited aggressively to prevent email enumeration.
-    """
-    if not request.is_json:
-        return jsonify({"error": "json_required"}), 400
-    email = ((request.json or {}).get("email") or "").strip().lower()
-    if not email or "@" not in email or len(email) > 254:
-        return jsonify({"error": "invalid_email"}), 400
-
-    try:
-        rows = _users_execute(
-            "SELECT 1 AS ok FROM payment_events WHERE LOWER(customer_email)=LOWER(?) LIMIT 1",
-            [email],
-        )
-    except Exception:
-        logger.exception("restore_by_email: db lookup failed")
-        return jsonify({"error": "unavailable"}), 503
-
-    if not rows:
-        # Return the same shape as success to avoid leaking whether an email paid or not
-        return jsonify({"ok": False, "message": "No verified payment found for this email. "
-                        "If you paid recently, please wait a few minutes and try again."}), 404
-
-    # Look up registered user account (best-effort; anon unlock works without one)
-    uid = None
-    try:
-        user_rows = _users_execute(
-            "SELECT id FROM users WHERE LOWER(email)=LOWER(?) LIMIT 1",
-            [email],
-        )
-        if user_rows:
-            uid = _session_user_id_int(user_rows[0].get("id"))
-    except Exception:
-        logger.warning("restore_by_email: user lookup failed for email", exc_info=True)
-
-    try:
-        token = secrets.token_urlsafe(32)
-        token = _upsert_search_unlock(uid, token, source="restore_by_email")
-    except Exception:
-        logger.exception("restore_by_email: _upsert_search_unlock failed")
-        return jsonify({"error": "unavailable"}), 503
-
-    resp = jsonify({"ok": True, "message": "Access restored. Your unlimited search is active."})
-    _set_search_unlock_cookie(resp, token)
-    logger.info("restore_by_email: access restored for email=%s uid=%s", email[:4] + "***", uid)
-    return resp
 
 
 ACCESS_RESOURCES_JSON = {
@@ -2843,36 +2858,31 @@ def search():
     current_user_has_paid_access = _search_access_granted(
         uid=current_uid, token=_search_unlock_cookie_token()
     )
-    user_feature_gates = _feature_gates_for_user(current_user_has_paid_access)
 
     if search_type not in ALLOWED_TYPES:
         search_type = "text"
 
-    # Feature-gate check: if the requested search type maps to a gated feature,
-    # redirect non-qualifying users to the paywall.
+    image_opts = _parse_image_search_options() if search_type == "images" else None
+
+    # Feature gate enforcement — blocks gated search types early
     _type_to_gate = {"onion": "deep_web", "code": "code_search"}
     _gate_name = _type_to_gate.get(search_type)
-    if _gate_name and not user_feature_gates.get(_gate_name, True):
-        if _FEATURE_GATES.get(_gate_name) == "none":
-            return render_template(
-                "error.html", code=404, title="Not Available",
-                message="This feature is not available.",
-            ), 404
-        return render_template(
-            "index.html",
-            **{**_TEMPLATE_DEFAULTS,
-               "current_user_has_paid_access": current_user_has_paid_access,
-               "feature_gates": user_feature_gates,
-               "search_notice": "This feature requires a paid plan. Unlock unlimited access to continue."},
-        ), 403
+    if _gate_name:
+        if not _feature_allowed(_gate_name, unlocked=current_user_has_paid_access):
+            # "none" gate → 404 (feature disabled); "paid" gate for free user → 403
+            gate_val = _FEATURE_GATES.get(_gate_name, "all")
+            if gate_val == "none":
+                return render_template("error.html", code=404, title="Feature Unavailable",
+                                       message="This search type is not available.", extra_help=False), 404
+            return render_template("error.html", code=403, title="Paid Feature",
+                                   message="This search type requires a paid account.", extra_help=False), 403
 
-    image_opts = _parse_image_search_options() if search_type == "images" else None
+    user_feature_gates = _feature_gates_for_user(current_user_has_paid_access)
 
     if not query:
         return render_template(
             "index.html",
-            **{**_TEMPLATE_DEFAULTS, "current_user_has_paid_access": current_user_has_paid_access,
-               "feature_gates": user_feature_gates},
+            **{**_TEMPLATE_DEFAULTS, "current_user_has_paid_access": current_user_has_paid_access},
         )
 
     # Server-side search limit for free-tier users
@@ -2883,7 +2893,6 @@ def search():
             return render_template(
                 "index.html",
                 **{**_TEMPLATE_DEFAULTS, "current_user_has_paid_access": False,
-                   "feature_gates": user_feature_gates,
                    "search_notice": "You\u2019ve reached your daily free search limit. Unlock unlimited searches or wait 24 hours."},
             ), 429
 
@@ -2924,7 +2933,6 @@ def search():
             show_ai_summary_block=False,
             search_notice=None,
             current_user_has_paid_access=current_user_has_paid_access,
-            feature_gates=user_feature_gates,
         )
 
     if len(query) > MAX_QUERY_LENGTH:
@@ -3136,7 +3144,6 @@ def search():
         show_ai_summary_block=show_ai_summary_block,
         search_notice=results.get("notice"),
         current_user_has_paid_access=current_user_has_paid_access,
-        feature_gates=user_feature_gates,
     )
 
 
@@ -7358,9 +7365,6 @@ def api_user_history_delete():
         logger.exception("api_user_history_delete_failed")
         return jsonify({"ok": False}), 503
     return jsonify({"ok": True})
-
-
-@app.route("/opensearch.xml")
 def opensearch():
     xml = '''<?xml version="1.0" encoding="UTF-8"?>
 <OpenSearchDescription xmlns="http://a9.com/-/spec/opensearch/1.1/">
