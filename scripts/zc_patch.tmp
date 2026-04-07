@@ -1,0 +1,6 @@
+    # ZERO-CLICK ENGINE
+    zero_click_answer, zero_click_html = build_zero_click_block(
+        query=query,
+        search_results=results,
+        weather_payload=locals().get("weather_payload")
+    )

@@ -1,0 +1,54 @@
+﻿.zero-click-card {
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 18px;
+  padding: 18px 20px;
+  margin: 0 0 18px 0;
+  background: rgba(255,255,255,0.03);
+  backdrop-filter: blur(10px);
+}
+
+.zero-click-label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0.72;
+  margin-bottom: 8px;
+}
+
+.zero-click-title {
+  margin: 0 0 8px 0;
+  font-size: 24px;
+  line-height: 1.15;
+}
+
+.zero-click-body {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.zc-facts {
+  margin: 14px 0 0 18px;
+  padding: 0;
+}
+
+.zc-warning {
+  margin-top: 10px;
+  font-size: 13px;
+  opacity: 0.82;
+}
+
+.zc-sources {
+  margin-top: 14px;
+  font-size: 14px;
+}
+
+.zero-click-meta {
+  margin-top: 10px;
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.zc-confidence-explainer {
+  margin-left: 8px;
+}

@@ -1,0 +1,32 @@
+class PhoneHandler:
+    name = "phone"
+    priority = 100  # always last
+
+    def can_handle(self, ctx):
+        import re
+
+        q = ctx.query.strip()
+
+        # reject anything with dot/comma (IPs, coords)
+        if "." in q or "," in q:
+            return False
+
+        # reject IP explicitly
+        if re.fullmatch(r"\d+\.\d+\.\d+\.\d+", q):
+            return False
+
+        # reject coordinates explicitly
+        if re.fullmatch(r"-?\d+\.\d+,\s*-?\d+\.\d+", q):
+            return False
+
+        cleaned = re.sub(r"[^\d+]", "", q)
+        digits = re.sub(r"\D", "", cleaned)
+
+        # strict phone rule: must be international format
+        if not cleaned.startswith("+"):
+            return False
+
+        if not (8 <= len(digits) <= 15):
+            return False
+
+        return bool(re.fullmatch(r"\+?[0-9]{8,15}", cleaned))
