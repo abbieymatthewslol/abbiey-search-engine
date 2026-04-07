@@ -76,6 +76,13 @@ class TestRoutes:
         assert resp.status_code == 200
         assert b"abbiey.search" in resp.data
 
+    def test_search_homepage_has_privacy_policy_link(self, client):
+        """OAuth / policy reviewers expect a visible Privacy Policy link on the home URL."""
+        resp = client.get("/search")
+        assert resp.status_code == 200
+        assert b'href="/privacy"' in resp.data
+        assert b"Privacy Policy" in resp.data
+
     def test_access_resources_json(self, client):
         resp = client.get("/api/access-resources")
         assert resp.status_code == 200
