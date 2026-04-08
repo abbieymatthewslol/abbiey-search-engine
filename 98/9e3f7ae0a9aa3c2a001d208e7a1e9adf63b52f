@@ -1,0 +1,33 @@
+scripts/setup_supabase_env.py
+  b5c26bc0b42b0f83 16,20,22-24,26-28,30-33,35,42-54,57-66,69-85,88-95,103-104,115-124,130,133,135,139,159-160,164-169
+scripts/verify_supabase_connection.py
+  b5c26bc0b42b0f83 2,4,8-9,11-12,15-21,24-28,30,32-33,35,41,45-46,67-69,72-78,80-81,83-88,90-95,97-102,104,107,109-111,113-114,116-119,121-125,127,129-130,138-139,141-143,146-147
+.env.example
+  b5c26bc0b42b0f83 87-91,93-98,100-103,107,110-113,116-119
+scripts/verify_production_env.py
+  b5c26bc0b42b0f83 37-39,49,200
+templates/signup.html
+  b5c26bc0b42b0f83 116,119-124,131-132,134-136,138-151,153-158,160-161,167,169,201,203,210,215,222,227,250
+scripts/health_check.py
+  b5c26bc0b42b0f83 89,114-116,121-123,125,173-174
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "989e3f7ae0a9aa3c2a001d208e7a1e9adf63b52f",
+  "prompts": {
+    "b5c26bc0b42b0f83": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "2b0899d5-e84b-4a2d-a85d-6f13a0fd5dc2",
+        "model": "default"
+      },
+      "human_author": "Abbiey",
+      "messages": [],
+      "total_additions": 1453,
+      "total_deletions": 1221,
+      "accepted_lines": 273,
+      "overriden_lines": 0
+    }
+  }
+}
