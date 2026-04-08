@@ -1477,6 +1477,26 @@ article.result.code-result { font-size: .9rem; }
   white-space: nowrap;
 }
 
+/* Subtle credit on the empty search home (viewport bottom, low contrast) */
+.home-creator-credit {
+  position: fixed;
+  left: 50%;
+  bottom: max(0.45rem, env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 0;
+  font-size: 0.7rem;
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+  opacity: 0.36;
+  text-align: center;
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
+  z-index: 0;
+}
+
 .home-recent-wrap {
   width: 100%;
   max-width: 600px;

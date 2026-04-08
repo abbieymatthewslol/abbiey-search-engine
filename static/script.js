@@ -1499,6 +1499,19 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     }
 
+    // Original web (anti-template ranking) — toggles hidden cleanweb=1
+    const cleanwebPill = document.getElementById("cleanweb-pill");
+    const cleanwebInput = document.getElementById("cleanweb-input");
+    if (cleanwebPill && cleanwebInput && filterForm) {
+      cleanwebPill.addEventListener("click", () => {
+        const on = cleanwebInput.value === "1";
+        cleanwebInput.value = on ? "" : "1";
+        cleanwebPill.classList.toggle("active", !on);
+        cleanwebPill.setAttribute("aria-pressed", (!on).toString());
+        applyFilter();
+      });
+    }
+
     // Site filter
     const siteInput = document.getElementById("filter-site");
     if (siteInput) {
@@ -1566,6 +1579,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (regionVal) scrollUrl += `&region=${encodeURIComponent(regionVal)}`;
     if (langVal) scrollUrl += `&lang=${encodeURIComponent(langVal)}`;
     if (dfVal) scrollUrl += `&df=${encodeURIComponent(dfVal)}`;
+    if (sentinel.dataset.cleanweb === "1") scrollUrl += "&cleanweb=1";
     const imgExtra = sentinel.dataset.imgExtra;
     if (type === "images" && imgExtra) scrollUrl += `&${imgExtra}`;
     let geoSuf = geoQuerySuffix();

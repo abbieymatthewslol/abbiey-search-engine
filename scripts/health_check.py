@@ -86,6 +86,8 @@ for k, v in os.environ.items():
     if k not in env:
         env[k] = v
 
+EXPECTED_REF = (env.get("ABBIEY_SUPABASE_PROJECT_REF") or "xwxscvllmghyogddpmii").strip()
+
 # ─── Check 1: Required environment variables ───────────────────────────────────
 header("1. Environment Variables")
 
@@ -109,17 +111,18 @@ for var in REQUIRED_VARS:
     elif var in ("SUPABASE_ANON_KEY", "SUPABASE_SERVICE_ROLE_KEY"):
         # Project ref is embedded in the JWT payload (base64), not as a literal string
         ref = _jwt_project_ref(val)
-        if ref and ref != "xwxscvllmghyogddpmii":
-            fail(f"{var} JWT ref is '{ref}' — expected xwxscvllmghyogddpmii")
-        elif ref == "xwxscvllmghyogddpmii":
+        if ref and ref != EXPECTED_REF:
+            fail(f"{var} JWT ref is '{ref}' — expected {EXPECTED_REF}")
+        elif ref == EXPECTED_REF:
             ok(f"{var} set (JWT ref: {ref} ✓)")
         else:
             ok(f"{var} set (JWT ref not decoded — verify manually)")
     elif var == "SUPABASE_DB_URL":
-        if "xwxscvllmghyogddpmii" not in val:
-            fail(f"{var} contains wrong project ref (expected xwxscvllmghyogddpmii)")
+        need = f"postgres.{EXPECTED_REF}"
+        if need not in val:
+            fail(f"{var} must include pooler user {need} (set ABBIEY_SUPABASE_PROJECT_REF if using another project)")
         else:
-            ok(f"{var} set (correct project ref)")
+            ok(f"{var} set (correct pooler user)")
     else:
         ok(f"{var} set")
 
@@ -167,9 +170,9 @@ else:
 # ─── Check 3: Supabase Auth API ────────────────────────────────────────────────
 header("3. Supabase Auth API")
 
-SUPABASE_URL = env.get("SUPABASE_URL", "https://xwxscvllmghyogddpmii.supabase.co")
+SUPABASE_PROJECT_REF = EXPECTED_REF
+SUPABASE_URL = env.get("SUPABASE_URL", f"https://{SUPABASE_PROJECT_REF}.supabase.co")
 SUPABASE_ANON_KEY = env.get("SUPABASE_ANON_KEY", "")
-SUPABASE_PROJECT_REF = "xwxscvllmghyogddpmii"
 
 # Check the project is reachable
 def http_get(url, headers=None, timeout=10):

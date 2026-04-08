@@ -6,9 +6,11 @@ No tracking. No filtering. No logs. Just results.
 import hashlib
 import hmac
 import json
+from collections import Counter
 import logging
 import os
 import re
+import sys
 import sqlite3
 import subprocess
 import threading
@@ -46,8 +48,8 @@ try:
     from dotenv import load_dotenv
 
     _env_root = os.path.dirname(os.path.abspath(__file__))
-    load_dotenv(os.path.join(_env_root, ".env"))
-    load_dotenv(os.path.join(_env_root, ".env.local"), override=True)
+    # Single source of truth: .env overrides inherited shell vars for local dev.
+    load_dotenv(os.path.join(_env_root, ".env"), override=True)
 except ImportError:
     pass
 
@@ -89,7 +91,9 @@ if os.environ.get("SITE_URL", "").startswith("https"):
     app.config["SESSION_COOKIE_SECURE"] = True
 
 # Supabase Auth (JS SDK handled client-side; server validates JWT)
-_ABBIEY_CANONICAL_SUPABASE_URL = "https://xwxscvllmghyogddpmii.supabase.co"
+# Override for a different Supabase project (e.g. Vercel integration): ABBIEY_SUPABASE_PROJECT_REF + SUPABASE_URL
+_ABBIEY_SUPABASE_PROJECT_REF = (os.environ.get("ABBIEY_SUPABASE_PROJECT_REF") or "xwxscvllmghyogddpmii").strip()
+_ABBIEY_CANONICAL_SUPABASE_URL = f"https://{_ABBIEY_SUPABASE_PROJECT_REF}.supabase.co"
 _RAW_SUPABASE_URL = (os.environ.get("SUPABASE_URL") or "").strip()
 _SUPABASE_URL = _RAW_SUPABASE_URL.rstrip("/")
 _SUPABASE_ANON_KEY = (os.environ.get("SUPABASE_ANON_KEY") or "").strip()
@@ -102,12 +106,12 @@ def _enforce_canonical_supabase_url(raw: str, normalized: str, label: str) -> No
         return
     if "xwxcvllmghyogddpmii" in normalized:
         raise RuntimeError(
-            f"{label} must not contain typo host xwxcvllmghyogddpmii. "
-            f"Use exactly {_ABBIEY_CANONICAL_SUPABASE_URL!r}."
+            f"{label} must not contain typo host xwxcvllmghyogddpmii (missing 's' in ref). "
+            f"Expected project URL {_ABBIEY_CANONICAL_SUPABASE_URL!r}."
         )
     if normalized != _ABBIEY_CANONICAL_SUPABASE_URL:
         raise RuntimeError(
-            f"{label} must match production Supabase project exactly: "
+            f"{label} must match configured Supabase project (ABBIEY_SUPABASE_PROJECT_REF): "
             f"{_ABBIEY_CANONICAL_SUPABASE_URL!r} (no trailing slash). Got {raw!r}."
         )
 
@@ -388,6 +392,29 @@ def _normalize_supabase_db_url(db_url: str) -> str:
 _SUPABASE_DB_URL = _normalize_supabase_db_url(
     os.environ.get("SUPABASE_DB_URL", "") or os.environ.get("DATABASE_URL", "")
 )
+
+
+def _fatal_if_invalid_pooler_db_url(db_url: str) -> None:
+    if not db_url or "pooler.supabase.com" not in db_url.lower():
+        return
+    try:
+        u = db_url.replace("postgresql+psycopg2://", "postgresql://", 1)
+        p = urlparse(u)
+        user = unquote((p.username or "").strip())
+        port = p.port or 5432
+    except Exception:
+        return
+    if port == 6543 and user == "postgres":
+        logging.getLogger(__name__).error(
+            "Invalid DB URL: Transaction pooler (port 6543) must use user "
+            f"postgres.{_ABBIEY_SUPABASE_PROJECT_REF}, not 'postgres'. "
+            "Run: python scripts/setup_supabase_env.py"
+        )
+        sys.exit(1)
+
+
+_fatal_if_invalid_pooler_db_url(_SUPABASE_DB_URL)
+
 # True only after table init + ping succeed; avoids 500s when URL is set but DB is unreachable.
 _SUPABASE_DB_READY = False
 _pg_conn_lock = threading.Lock()
@@ -2428,6 +2455,7 @@ _TEMPLATE_DEFAULTS = dict(
     search_notice=None,
     current_user_has_paid_access=False,
     stripe_search_checkout_url=STRIPE_SEARCH_CHECKOUT_URL,
+    cleanweb=False,
 )
 def should_show_ai_summary(query: str, intent: str) -> bool:
     """Gate AI summary card + /api/ai-summary: block obvious local/transactional queries."""
@@ -2843,6 +2871,93 @@ def _rank_local_search_results(results, loc_ctx):
     return [r for _, r in scored]
 
 
+# Heuristic re-ranking: demote common SEO listicle / affiliate patterns; boost substantive snippets
+# and spread domains. Best-effort only — skips when local intent ranking already ran.
+_LISTICLE_HEADLINE_RE = re.compile(
+    r"(?i)(^|\s)(best|top)\s*\d+|\d+\s+(best|top|ways|tips|reasons|things)\b|"
+    r"ultimate\s+guide|buyers?\s+guide|buying\s+guide|"
+    r"(roundup|ranked|we\s+tested|products?\s+you)\b|"
+    r"#\d+\s|^\d+[\.)]\s",
+)
+_AFFILIATE_SNIPPET_RE = re.compile(
+    r"(?i)affiliate|commission|sponsored\s+post|paid\s+link|amazon\s+associate|"
+    r"advertiser\s+disclosure|this\s+post\s+contains\s+affiliate",
+)
+_VS_SPAM_RE = re.compile(r"(?i)\bvs\.?\b.*\bvs\.?\b")
+
+
+def _host_key_for_diversity(url: str) -> str:
+    try:
+        host = (urlparse(url).netloc or "").lower()
+    except Exception:
+        return ""
+    if host.startswith("www."):
+        host = host[4:]
+    return host
+
+
+def _anti_template_base_score(result: dict) -> float:
+    title = (result.get("title") or "")[:220]
+    body = (result.get("body") or result.get("description") or "")[:600]
+    blob = f"{title} {body}".strip()
+    title_l = title.lower()
+    blob_l = blob.lower()
+    score = 0.0
+    blen = len(body.strip())
+    if blen >= 160:
+        score += 0.38
+    elif blen >= 85:
+        score += 0.2
+    elif blen > 0 and blen < 38:
+        score -= 0.22
+
+    if _LISTICLE_HEADLINE_RE.search(title_l) or _LISTICLE_HEADLINE_RE.search(blob_l):
+        score -= 0.52
+    if _VS_SPAM_RE.search(title_l):
+        score -= 0.35
+    if _AFFILIATE_SNIPPET_RE.search(blob_l):
+        score -= 0.65
+
+    st = (result.get("source_type") or "").lower()
+    if st == "academic":
+        score += 0.42
+    src_l = (result.get("source") or "").lower()
+    for needle in ("marginalia", "wikipedia", "arxiv", "pubmed", "crossref", "internet archive"):
+        if needle in src_l:
+            score += 0.22
+            break
+
+    date_s = (result.get("date") or "")[:32]
+    if re.search(r"202[4-9]", date_s):
+        score += 0.06
+    elif re.search(r"201[0-9]", date_s) and not re.search(r"202[0-9]", title_l):
+        score -= 0.05
+
+    return score
+
+
+def _rank_anti_template_results(results: list) -> list:
+    """Re-order text hits to surface more original / substantive pages (optional user mode)."""
+    if not results or len(results) < 2:
+        return results
+    n = len(results)
+    keys = [_host_key_for_diversity(r.get("url") or "") for r in results]
+    host_freq = Counter(k for k in keys if k)
+    base = [_anti_template_base_score(r) for r in results]
+    domain_counts: dict[str, int] = {}
+    adjusted = []
+    for i in range(n):
+        key = keys[i]
+        prior = domain_counts.get(key, 0) if key else 0
+        if key:
+            domain_counts[key] = prior + 1
+        dup_penalty = 0.14 * prior if key else 0.0
+        solo_bonus = 0.12 if key and host_freq.get(key, 0) == 1 else 0.0
+        adjusted.append(base[i] - dup_penalty + solo_bonus)
+    order = sorted(range(n), key=lambda i: (-adjusted[i], i))
+    return [results[i] for i in order]
+
+
 @app.route("/search")
 @limiter.limit("120/minute")
 def search():
@@ -2864,6 +2979,9 @@ def search():
     )
     if search_type not in ALLOWED_TYPES:
         search_type = "text"
+
+    cleanweb = request.args.get("cleanweb", "").strip().lower() in ("1", "true", "yes", "on")
+    anti_template = bool(cleanweb and search_type == "text")
 
     image_opts = _parse_image_search_options() if search_type == "images" else None
 
@@ -2935,6 +3053,7 @@ def search():
             show_ai_summary_block=False,
             search_notice=None,
             current_user_has_paid_access=current_user_has_paid_access,
+            cleanweb=False,
         )
     if len(query) > MAX_QUERY_LENGTH:
         return render_template(
@@ -3006,6 +3125,7 @@ def search():
             safesearch=safesearch,
             image_opts=image_opts,
             local_rank_context=local_rank_context,
+            anti_template=anti_template,
         )
         _ajax_ms = int((time.perf_counter() - _t_ajax) * 1000)
         if page == 1:
@@ -3024,6 +3144,7 @@ def search():
         safesearch=safesearch,
         image_opts=image_opts,
         local_rank_context=local_rank_context,
+        anti_template=anti_template,
     )
     _latency_ms = int((time.perf_counter() - _t0) * 1000)
 
@@ -3145,6 +3266,7 @@ def search():
         show_ai_summary_block=show_ai_summary_block,
         search_notice=results.get("notice"),
         current_user_has_paid_access=current_user_has_paid_access,
+        cleanweb=cleanweb,
     )
 @app.route("/api/suggestions")
 @limiter.limit("200/minute")
@@ -6054,6 +6176,7 @@ def _fetch_results(
     safesearch="off",
     image_opts=None,
     local_rank_context=None,
+    anti_template=False,
 ):
     """Fetch results with caching. Returns paginated slice."""
     operators = operators or {}
@@ -6062,7 +6185,8 @@ def _fetch_results(
     img_seg = ""
     if image_opts and search_type == "images":
         img_seg = "|img:" + json.dumps(image_opts, sort_keys=True, separators=(",", ":"))
-    cache_key = f"{query}|{search_type}|{region or ''}|{lang or ''}|{ops_str}|{time_filter or ''}|{safesearch or 'off'}{img_seg}"
+    cw_seg = "|cw=1" if (search_type == "text" and anti_template) else ""
+    cache_key = f"{query}|{search_type}|{region or ''}|{lang or ''}|{ops_str}|{time_filter or ''}|{safesearch or 'off'}{img_seg}{cw_seg}"
 
     # Check cache
     with _cache_lock:
@@ -6333,6 +6457,8 @@ def _fetch_results(
     results = _deduplicate(results)
     if search_type == "text" and local_rank_context and local_rank_context.get("has_local_intent"):
         results = _rank_local_search_results(results, local_rank_context)
+    elif search_type == "text" and anti_template:
+        results = _rank_anti_template_results(results)
     # Store in cache and always release the in-flight lock so waiters are never stranded
     try:
         with _cache_lock:

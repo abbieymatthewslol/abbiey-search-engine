@@ -113,27 +113,60 @@
 {% block extra_scripts %}
 {% if supabase_auth %}
 <script src="{{ url_for('static', filename='vendor/supabase.min.js') }}"></script>
+<script type="application/json" id="auth-supabase-signup">{{ {'url': supabase_url, 'anon_key': supabase_anon_key} | tojson }}</script>
 <script nonce="{{ csp_nonce }}">
 (function () {
-    var sb = window.supabase.createClient({{ supabase_url | tojson }}, {{ supabase_anon_key | tojson }}, {
-        auth: {
-            flowType: 'pkce',
-            detectSessionInUrl: true,
-            persistSession: true,
-            autoRefreshToken: true
-        }
-    });
+    var cfgEl = document.getElementById('auth-supabase-signup');
+    var cfg = {};
+    try {
+        cfg = JSON.parse((cfgEl && cfgEl.textContent) ? cfgEl.textContent.trim() : '{}') || {};
+    } catch (_e) {
+        cfg = {};
+    }
     var errEl = document.getElementById('sb-error');
     var form = document.getElementById('sb-signup-form');
     var submitBtn = document.getElementById('signup-submit');
     var googleBtn = document.getElementById('sb-google-btn');
 
-    function showErr(msg) { errEl.style.display = 'block'; errEl.innerHTML = '<p>' + msg + '</p>'; }
+    function showErr(msg) {
+        if (errEl) {
+            errEl.style.display = 'block';
+            errEl.innerHTML = '<p>' + msg + '</p>';
+        }
+    }
+
+    var sb;
+    try {
+        sb = window.supabase.createClient(cfg.url || '', cfg.anon_key || '', {
+            auth: {
+                flowType: 'pkce',
+                detectSessionInUrl: true,
+                persistSession: true,
+                autoRefreshToken: true
+            }
+        });
+    } catch (_e2) {
+        showErr('Sign-up is unavailable. Check configuration and reload.');
+        return;
+    }
+
+    function releaseSubmit() {
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.removeAttribute('aria-busy');
+        }
+    }
+
+    if (!form || !submitBtn) {
+        return;
+    }
 
     if (googleBtn) {
         var googleBtnHtml = googleBtn.innerHTML;
         googleBtn.addEventListener('click', async function () {
-            errEl.style.display = 'none';
+            if (errEl) {
+                errEl.style.display = 'none';
+            }
             googleBtn.disabled = true;
             googleBtn.innerHTML = 'Redirecting to Google\u2026';
             try {
@@ -165,19 +198,33 @@
 
     form.addEventListener('submit', async function (e) {
         e.preventDefault();
-        errEl.style.display = 'none';
+        if (errEl) {
+            errEl.style.display = 'none';
+        }
         submitBtn.disabled = true;
         submitBtn.setAttribute('aria-busy', 'true');
         var email = form.email.value.trim();
         var password = form.password.value;
-        if (!email || !password) { showErr('Email and password are required.'); submitBtn.disabled = false; return; }
-        if (password.length < 6) { showErr('Password must be at least 6 characters.'); submitBtn.disabled = false; return; }
+        if (!email || !password) {
+            showErr('Email and password are required.');
+            releaseSubmit();
+            return;
+        }
+        if (password.length < 6) {
+            showErr('Password must be at least 6 characters.');
+            releaseSubmit();
+            return;
+        }
         try {
             var res = await sb.auth.signUp({ email: email, password: password });
-            if (res.error) { showErr(res.error.message); submitBtn.disabled = false; return; }
+            if (res.error) {
+                showErr(res.error.message);
+                releaseSubmit();
+                return;
+            }
             if (res.data && res.data.user && !res.data.session) {
                 showErr('Check your email for a confirmation link, then come back and sign in.');
-                submitBtn.disabled = false;
+                releaseSubmit();
                 return;
             }
             if (res.data && res.data.session) {
@@ -185,14 +232,22 @@
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     credentials: 'same-origin',
-                    body: JSON.stringify({ email: res.data.user.email, display_name: (res.data.user.user_metadata || {}).full_name || '' })
+                    body: JSON.stringify({
+                        email: res.data.user.email,
+                        display_name: (res.data.user.user_metadata || {}).full_name || ''
+                    })
                 });
                 var cdata = await cb.json().catch(function () { return null; });
-                if (cb.ok && cdata && cdata.ok) { window.location.href = '/search'; return; }
+                if (cb.ok && cdata && cdata.ok) {
+                    window.location.href = '/search';
+                    return;
+                }
             }
             showErr('Account created. Please check your email to confirm, then sign in.');
-        } catch (err) { showErr('Something went wrong. Please try again.'); }
-        submitBtn.disabled = false;
+        } catch (err) {
+            showErr('Something went wrong. Please try again.');
+        }
+        releaseSubmit();
     });
 })();
 </script>

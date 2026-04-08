@@ -9,6 +9,7 @@ from app import (
     MAX_QUERY_LENGTH,
     _try_calculator, _try_color_picker, _try_unit_convert,
     _try_knowledge_panel,
+    _rank_anti_template_results,
 )
 
 
@@ -75,6 +76,11 @@ class TestRoutes:
         resp = client.get("/search?q=")
         assert resp.status_code == 200
         assert b"abbiey.search" in resp.data
+
+    def test_search_home_shows_creator_credit(self, client):
+        resp = client.get("/search", follow_redirects=False)
+        assert resp.status_code == 200
+        assert b"abbiey matthews" in resp.data.lower()
 
     def test_search_homepage_has_privacy_policy_link(self, client):
         """OAuth / policy reviewers expect a visible Privacy Policy link on the home URL."""
@@ -1367,6 +1373,29 @@ class TestPreviewSsrfRedirect:
                 query_string={"url": "https://evil.example.com/onion-redirect"},
             )
         assert resp.status_code == 400
+
+
+class TestAntiTemplateRanking:
+    def test_demotes_listicle_style_results(self):
+        listicle = {
+            "title": "Top 10 Best Widgets You Need in 2026",
+            "url": "https://listicles.example/top-widgets",
+            "body": "Discover our picks.",
+        }
+        substantive = {
+            "title": "Widget architecture notes",
+            "url": "https://docs.example/widgets/internals",
+            "body": "x" * 200,
+        }
+        out = _rank_anti_template_results([listicle, substantive])
+        assert out[0]["url"] == substantive["url"]
+
+    def test_prefers_first_of_duplicate_domains_lower(self):
+        a = {"title": "Article one", "url": "https://blog.example/post-1", "body": "content " * 30}
+        b = {"title": "Article two", "url": "https://blog.example/post-2", "body": "content " * 30}
+        c = {"title": "Different host write-up", "url": "https://elsewhere.net/x", "body": "content " * 30}
+        out = _rank_anti_template_results([a, b, c])
+        assert out[0]["url"] == c["url"]
 
 
 class TestCheckoutCookieNotForgeable:

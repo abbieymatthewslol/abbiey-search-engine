@@ -34,7 +34,9 @@ def _load_dotenv() -> None:
         pass
 
 
-_ABBIEY_CANONICAL_SUPABASE_URL = "https://xwxscvllmghyogddpmii.supabase.co"
+def _abbiey_canonical_supabase_url() -> str:
+    ref = (os.environ.get("ABBIEY_SUPABASE_PROJECT_REF") or "xwxscvllmghyogddpmii").strip()
+    return f"https://{ref}.supabase.co"
 
 
 def _canonical_supabase_url_ok(var_name: str) -> bool:
@@ -44,7 +46,7 @@ def _canonical_supabase_url_ok(var_name: str) -> bool:
     norm = raw.rstrip("/")
     if "xwxcvllmghyogddpmii" in norm:
         return False
-    return norm == _ABBIEY_CANONICAL_SUPABASE_URL
+    return norm == _abbiey_canonical_supabase_url()
 
 
 def _sk_ok() -> bool:
@@ -90,17 +92,18 @@ def main() -> int:
     db = _truthy(os.environ.get("SUPABASE_DB_URL") or os.environ.get("DATABASE_URL"))
     add("SUPABASE_DB_URL or DATABASE_URL", "database", db, "Pooler URI on Vercel (port 6543)")
 
+    _canon = _abbiey_canonical_supabase_url()
     add(
         "SUPABASE_URL (canonical)",
         "auth",
         _canonical_supabase_url_ok("SUPABASE_URL"),
-        f"Must be {_ABBIEY_CANONICAL_SUPABASE_URL} when set (no typo xwxcvll…)",
+        f"Must be {_canon} when set (set ABBIEY_SUPABASE_PROJECT_REF to change; no typo xwxcvll…)",
     )
     add(
         "NEXT_PUBLIC_SUPABASE_URL (canonical)",
         "auth",
         _canonical_supabase_url_ok("NEXT_PUBLIC_SUPABASE_URL"),
-        f"Empty or exactly {_ABBIEY_CANONICAL_SUPABASE_URL}",
+        f"Empty or exactly {_canon}",
     )
 
     resend = _truthy(os.environ.get("RESEND_API_KEY"))
@@ -194,7 +197,7 @@ def main() -> int:
     if strict_fail:
         print(
             "Strict mode: fix core variables (SECRET_KEY, ADMIN_TOKEN) and/or "
-            f"SUPABASE_URL / NEXT_PUBLIC_SUPABASE_URL (must be {_ABBIEY_CANONICAL_SUPABASE_URL}).",
+            f"SUPABASE_URL / NEXT_PUBLIC_SUPABASE_URL (must be {_abbiey_canonical_supabase_url()}).",
             file=sys.stderr,
         )
         return 1

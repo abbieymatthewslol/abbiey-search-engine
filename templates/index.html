@@ -431,6 +431,7 @@
                 <input type="hidden" name="region" id="region-input" value="{{ region or '' }}">
                 <input type="hidden" name="lang" id="lang-input" value="{{ lang or '' }}">
                 <input type="hidden" name="df" id="df-input" value="{{ time_filter or '' }}">
+                <input type="hidden" name="cleanweb" id="cleanweb-input" value="{% if cleanweb %}1{% endif %}">
                 <input type="hidden" name="safesearch" id="safesearch-input" value="off">
                 <input type="hidden" name="lat" id="geo-lat-input" value="{% if search_lat is not none %}{{ search_lat }}{% endif %}">
                 <input type="hidden" name="lon" id="geo-lon-input" value="{% if search_lon is not none %}{{ search_lon }}{% endif %}">
@@ -448,6 +449,7 @@
             <div class="home-recent-wrap">
                 <div id="recent-searches-home" class="recent-searches-home"></div>
             </div>
+            <p class="home-creator-credit" aria-hidden="true">abbiey matthews</p>
             {% endif %}
 
             {% if query %}
@@ -467,11 +469,11 @@
 
             <nav class="search-tabs">
                 <div class="search-tabs-scroll">
-                <a href="/search?q={{ query|urlencode }}&type=text{% if region %}&region={{ region }}{% endif %}" class="tab {% if search_type == 'text' %}active{% endif %}">All</a>
-                <a href="/search?q={{ query|urlencode }}&type=images{% if region %}&region={{ region }}{% endif %}{% if time_filter %}&df={{ time_filter|urlencode }}{% endif %}{% if img_scroll_extras %}&amp;{{ img_scroll_extras }}{% endif %}" class="tab {% if search_type == 'images' %}active{% endif %}">Images</a>
-                <a href="/search?q={{ query|urlencode }}&type=news{% if region %}&region={{ region }}{% endif %}" class="tab {% if search_type == 'news' %}active{% endif %}">News</a>
-                <a href="/search?q={{ query|urlencode }}&type=videos{% if region %}&region={{ region }}{% endif %}" class="tab {% if search_type == 'videos' %}active{% endif %}">Videos</a>
-                <a href="/search?q={{ query|urlencode }}&type=code{% if region %}&region={{ region }}{% endif %}" class="tab {% if search_type == 'code' %}active{% endif %}">Code</a>
+                <a href="/search?q={{ query|urlencode }}&type=text{% if region %}&region={{ region }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab {% if search_type == 'text' %}active{% endif %}">All</a>
+                <a href="/search?q={{ query|urlencode }}&type=images{% if region %}&region={{ region }}{% endif %}{% if time_filter %}&df={{ time_filter|urlencode }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}{% if img_scroll_extras %}&amp;{{ img_scroll_extras }}{% endif %}" class="tab {% if search_type == 'images' %}active{% endif %}">Images</a>
+                <a href="/search?q={{ query|urlencode }}&type=news{% if region %}&region={{ region }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab {% if search_type == 'news' %}active{% endif %}">News</a>
+                <a href="/search?q={{ query|urlencode }}&type=videos{% if region %}&region={{ region }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab {% if search_type == 'videos' %}active{% endif %}">Videos</a>
+                <a href="/search?q={{ query|urlencode }}&type=code{% if region %}&region={{ region }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab {% if search_type == 'code' %}active{% endif %}">Code</a>
                 </div>
                 <div class="tab-more-wrap {% if search_type in ('onion', 'saved') %}has-active{% endif %}" id="tab-more-wrap">
                     <button type="button" class="tab tab-more-btn {% if search_type in ('onion', 'saved') %}active{% endif %}" id="tab-more-btn" aria-haspopup="true" aria-expanded="false" aria-controls="tab-more-menu">
@@ -479,8 +481,8 @@
                         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
                     </button>
                     <div class="tab-more-menu" id="tab-more-menu" hidden>
-                        <a href="/search?q={{ query|urlencode }}&type=onion{% if region %}&region={{ region }}{% endif %}" class="tab-more-item {% if search_type == 'onion' %}active{% endif %}">Deep Web</a>
-                        <a href="/search?q={{ query|urlencode }}&type=saved" class="tab-more-item {% if search_type == 'saved' %}active{% endif %}">Saved <span class="bookmark-count-badge" id="bookmark-count-badge"></span></a>
+                        <a href="/search?q={{ query|urlencode }}&type=onion{% if region %}&region={{ region }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab-more-item {% if search_type == 'onion' %}active{% endif %}">Deep Web</a>
+                        <a href="/search?q={{ query|urlencode }}&type=saved{% if cleanweb %}&cleanweb=1{% endif %}" class="tab-more-item {% if search_type == 'saved' %}active{% endif %}">Saved <span class="bookmark-count-badge" id="bookmark-count-badge"></span></a>
                     </div>
                 </div>
             </nav>
@@ -521,6 +523,9 @@
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 10h18M3 14h18M3 18h18"/></svg>
                     </button>
                 </div>
+                {% if search_type == 'text' %}
+                <button type="button" class="filter-pill filter-pill-toggle{% if cleanweb %} active{% endif %}" id="cleanweb-pill" title="Re-rank results: fewer listicles and affiliate-style pages, more diverse domains" aria-pressed="{% if cleanweb %}true{% else %}false{% endif %}">Original web</button>
+                {% endif %}
             </div>
             {# Filter extras — shown when Filters button is toggled #}
             <div class="filter-extras" id="filter-extras" {% if not (operators and ('filetype' in operators or 'site' in operators)) %}hidden{% endif %}>
@@ -1081,7 +1086,7 @@
         <div id="trending-searches" class="trending-searches" style="display:none"></div>
 
         {% if has_more %}
-        <div id="scroll-sentinel" data-page="1" data-query="{{ query }}" data-type="{{ search_type }}" data-has-more="true" data-img-extra="{{ img_scroll_extras or '' }}" data-lat="{% if search_lat is not none %}{{ search_lat }}{% endif %}" data-lon="{% if search_lon is not none %}{{ search_lon }}{% endif %}">
+        <div id="scroll-sentinel" data-page="1" data-query="{{ query }}" data-type="{{ search_type }}" data-has-more="true" data-img-extra="{{ img_scroll_extras or '' }}" data-cleanweb="{% if cleanweb %}1{% endif %}" data-lat="{% if search_lat is not none %}{{ search_lat }}{% endif %}" data-lon="{% if search_lon is not none %}{{ search_lon }}{% endif %}">
             <div class="scroll-loader">
                 <div class="spinner"></div>
             </div>
