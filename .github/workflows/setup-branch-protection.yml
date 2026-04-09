@@ -1,0 +1,37 @@
+name: Setup Branch Protection
+
+# Run this once (manually) to require pull requests before merging to master.
+# After it runs, direct pushes to master will be blocked and all changes must
+# go through a PR — matching the "pull requests by default" setting.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  administration: write
+
+jobs:
+  protect-master:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require pull requests on master
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.repos.updateBranchProtection({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              branch: 'master',
+              required_status_checks: null,
+              enforce_admins: false,
+              required_pull_request_reviews: {
+                required_approving_review_count: 0,
+                dismiss_stale_reviews: false,
+                require_last_push_approval: false,
+              },
+              restrictions: null,
+              allow_force_pushes: false,
+              allow_deletions: false,
+            });
+            console.log('✅ Branch protection applied to master: PRs are now required before merging.');
