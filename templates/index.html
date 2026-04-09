@@ -626,13 +626,25 @@
 
         {% if query %}
 
+        {# ===== CLARIFYING CHIPS (ambiguous terms; text tab) ===== #}
+        {% if search_type == 'text' and query_ui.clarify %}
+        <div class="clarify-query-card" id="clarify-query-card" role="region" aria-label="Clarify search">
+            <p class="clarify-query-prompt">{{ query_ui.clarify.prompt }}</p>
+            <div class="clarify-query-chips">
+                {% for opt in query_ui.clarify.options %}
+                <a href="/search?q={{ opt.q|urlencode }}&amp;type=text" class="clarify-chip">{{ opt.label }}</a>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
         {# ===== AI SUMMARY SKELETON (text tab, page 1 only; gated by query type) ===== #}
         {% if search_type == 'text' and show_ai_summary_block %}
-        <div class="ai-summary-card" id="ai-summary-card">
+        <div class="ai-summary-card{% if query_ui.answer_mode == 'single' %} answer-single{% endif %}" id="ai-summary-card" data-answer-mode="{{ query_ui.answer_mode or 'standard' }}">
             <div class="ai-summary-header">
                 <div class="ai-summary-header-left">
                     <svg class="ai-sparkle" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.09 6.26L20 10l-5.91 1.74L12 18l-2.09-6.26L4 10l5.91-1.74L12 2z"/></svg>
-                    <span class="ai-summary-label">Summary</span>
+                    <span class="ai-summary-label" id="ai-summary-label">{% if query_ui.answer_mode == 'single' %}Answer{% else %}Summary{% endif %}</span>
                 </div>
                 <button type="button" class="ai-summary-dismiss" id="ai-summary-dismiss" aria-label="Hide summary for this visit" title="Hide for this visit">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 15l-6-6-6 6"/></svg>

@@ -41,6 +41,8 @@ from query_understanding import (
     query_ui_hints,
     should_enable_ai_summary,
     has_local_intent_signals,
+    detect_query_clarification,
+    is_simple_answer_query,
 )
 from retrieval.pipeline import run_text_retrieval_pipeline_sync
 
@@ -2448,6 +2450,8 @@ _TEMPLATE_DEFAULTS = dict(
         "transactional_local_keywords": False,
         "prefer_local_ui": False,
         "show_ai_summary": False,
+        "clarify": None,
+        "answer_mode": "standard",
     },
     search_lat=None,
     search_lon=None,
@@ -3820,9 +3824,12 @@ def api_ai_summary():
 
     prep = preprocess_query(query)
     if not should_enable_ai_summary(prep):
-        return jsonify({"enabled": False})
+        return jsonify({"enabled": False, "clarify": detect_query_clarification(prep)})
     if not should_show_ai_summary(query, prep.intent):
-        return jsonify({"enabled": False})
+        return jsonify({"enabled": False, "clarify": detect_query_clarification(prep)})
+
+    clarify = detect_query_clarification(prep)
+    simple = is_simple_answer_query(query, clarify)
 
     user_lat = _parse_request_coord("lat")
     user_lon = _parse_request_coord("lon")
@@ -3843,7 +3850,13 @@ def api_ai_summary():
     top5 = context_results["results"][:5]
     if not top5:
         return jsonify(
-            {"enabled": True, "error": "unavailable", "message": _AI_SUMMARY_MSG_NO_CONTEXT}
+            {
+                "enabled": True,
+                "error": "unavailable",
+                "message": _AI_SUMMARY_MSG_NO_CONTEXT,
+                "clarify": clarify,
+                "answer_mode": "single" if simple else "standard",
+            }
         ), 404
 
     # Build context
@@ -3857,24 +3870,38 @@ def api_ai_summary():
         sources.append({"title": title, "url": url})
     context = "\n".join(context_lines)
 
-    prompt = (
-        f"Based on these search results, summarize the answer to '{query}' in 2-3 sentences. "
-        f"Cite sources as [1], [2] etc. Be concise and factual.\n\n{context}"
-    )
+    if simple:
+        system_msg = (
+            "You are a search assistant. Given web results as context, reply with ONE direct answer: "
+            "use at most 2 short sentences total. The first sentence must answer the question outright. "
+            "Cite sources as [1], [2] only where needed. No bullet lists. No preamble like \"Based on the results\"."
+        )
+    elif clarify:
+        system_msg = (
+            "You are a search assistant. The user's query may name an ambiguous topic (multiple common meanings). "
+            "Using the web results, answer for the most likely interpretation in 2 short sentences, then add "
+            "one brief sentence acknowledging other meanings exist. Cite sources as [1], [2]. Be factual."
+        )
+    else:
+        system_msg = (
+            "You are a search assistant. Given web results as context, write a 2-3 sentence "
+            "factual answer to the query. Cite sources by number [1], [2]. Be concise and direct."
+        )
     try:
         summary_messages = [
-            {
-                "role": "system",
-                "content": (
-                    "You are a search assistant. Given web results as context, write a 2-3 sentence "
-                    "factual answer to the query. Cite sources by number [1], [2]. Be concise and direct."
-                ),
-            },
+            {"role": "system", "content": system_msg},
             {"role": "user", "content": f"Query: {query}\n\n{context}"},
         ]
         response = _ollama_chat(summary_messages)
         if response:
-            return jsonify({"summary": response, "sources": sources})
+            return jsonify(
+                {
+                    "summary": response,
+                    "sources": sources,
+                    "answer_mode": "single" if simple else "standard",
+                    "clarify": clarify,
+                }
+            )
     except Exception:
         _log_event("ai_summary_ollama_failed", fallback="extractive")
 
@@ -3885,10 +3912,23 @@ def api_ai_summary():
         if body:
             parts.append(f"{body} [{i}]")
     if parts:
-        return jsonify({"summary": " ".join(parts), "sources": sources})
+        return jsonify(
+            {
+                "summary": " ".join(parts),
+                "sources": sources,
+                "answer_mode": "single" if simple else "standard",
+                "clarify": clarify,
+            }
+        )
 
     return jsonify(
-        {"enabled": True, "error": "unavailable", "message": _AI_SUMMARY_MSG_UNAVAILABLE}
+        {
+            "enabled": True,
+            "error": "unavailable",
+            "message": _AI_SUMMARY_MSG_UNAVAILABLE,
+            "clarify": clarify,
+            "answer_mode": "single" if simple else "standard",
+        }
     ), 503
 
 

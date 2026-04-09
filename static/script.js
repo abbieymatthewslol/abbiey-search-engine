@@ -1232,6 +1232,16 @@ document.addEventListener("DOMContentLoaded", () => {
             aiSources.innerHTML = "";
             return;
           }
+          const lbl = document.getElementById("ai-summary-label");
+          if (lbl && data.answer_mode === "single") {
+            lbl.textContent = "Answer";
+            aiCard.classList.add("answer-single");
+            aiCard.setAttribute("data-answer-mode", "single");
+          } else if (lbl && data.answer_mode === "standard") {
+            lbl.textContent = "Summary";
+            aiCard.classList.remove("answer-single");
+            aiCard.setAttribute("data-answer-mode", "standard");
+          }
           let summary = esc(data.summary);
           summary = summary.replace(/\[(\d+)\]/g, (match, num) => {
             const idx = parseInt(num) - 1;

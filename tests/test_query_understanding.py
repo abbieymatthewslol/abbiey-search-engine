@@ -13,6 +13,8 @@ from query_understanding import (
     query_ui_hints,
     resolve_location_for_search,
     should_enable_ai_summary,
+    detect_query_clarification,
+    is_simple_answer_query,
 )
 
 
@@ -116,3 +118,31 @@ def test_query_ui_hints_local():
     ui = query_ui_hints(prep)
     assert ui["local_intent"] is True
     assert ui["show_ai_summary"] is False
+    assert ui.get("clarify") is None
+    assert ui.get("answer_mode") == "standard"
+
+
+def test_clarify_polysemous_python():
+    prep = preprocess_query("what is python")
+    c = detect_query_clarification(prep)
+    assert c is not None
+    assert c["term"] == "python"
+    assert len(c["options"]) >= 2
+
+
+def test_simple_answer_mode_for_plain_fact_question():
+    prep = preprocess_query("what is photosynthesis")
+    ui = query_ui_hints(prep)
+    assert ui["clarify"] is None
+    assert ui["answer_mode"] == "single"
+
+
+def test_answer_mode_standard_when_clarify_present():
+    prep = preprocess_query("what is python")
+    ui = query_ui_hints(prep)
+    assert ui["clarify"] is not None
+    assert ui["answer_mode"] == "standard"
+
+
+def test_is_simple_false_when_comparison():
+    assert is_simple_answer_query("difference between x and y", None) is False

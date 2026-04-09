@@ -390,6 +390,73 @@ def has_local_intent_signals(prep: PreprocessedQuery) -> bool:
     return False
 
 
+# Terms that often need disambiguation before a single “right” answer makes sense.
+_POLYSEMOUS: Dict[str, List[Tuple[str, str]]] = {
+    "python": [("Programming language", "python programming language"), ("Snake", "python snake animal")],
+    "ruby": [("Programming language", "ruby programming language"), ("Gemstone", "ruby gemstone")],
+    "swift": [("Swift (Apple)", "swift apple programming language"), ("Bird", "swift bird")],
+    "go": [("Go / Golang", "golang programming language"), ("Board game Go", "go board game weiqi")],
+    "rust": [("Rust language", "rust programming language"), ("Corrosion / iron rust", "rust metal oxidation")],
+    "jaguar": [("Animal", "jaguar big cat animal"), ("Car brand", "jaguar cars uk")],
+    "apple": [("Company", "apple inc company"), ("Fruit", "apple fruit malus")],
+    "amazon": [("Company", "amazon company shopping"), ("River", "amazon river brazil")],
+    "oracle": [("Software company", "oracle database company"), ("Meaning / prophecy", "oracle definition mythology")],
+    "chrome": [("Browser", "google chrome web browser"), ("Metal plating", "chrome metal element")],
+    "shell": [("Computing CLI", "unix shell command line"), ("Seafood / egg", "shell egg seashell")],
+    "java": [("Programming language", "java programming language"), ("Island / coffee", "java island indonesia")],
+}
+
+
+def _clarification_focus(normalized: str) -> Optional[str]:
+    """Single-token topic after stripping common question prefixes (for polysemy lookup)."""
+    s = (normalized or "").strip().lower().rstrip("?").strip()
+    if not s:
+        return None
+    s = re.sub(
+        r"^(what|who|which|where|when|why|how)\s+(is|are|was|were|does|do|did|can|could|would|should)\s+",
+        "",
+        s,
+        count=1,
+    ).strip()
+    s = re.sub(r"^(define|explain|meaning of|tell me about)\s+", "", s, count=1).strip()
+    if re.fullmatch(r"[a-z0-9][a-z0-9\-\.]*", s):
+        return s
+    return None
+
+
+def detect_query_clarification(prep: PreprocessedQuery) -> Optional[Dict[str, Any]]:
+    """If the query names an ambiguous term, suggest follow-up searches (chips in UI)."""
+    focus = _clarification_focus(prep.normalized or prep.original)
+    if not focus:
+        return None
+    options = _POLYSEMOUS.get(focus)
+    if not options:
+        return None
+    return {
+        "prompt": f'“{focus}” can mean more than one thing. Which fits what you want?',
+        "term": focus,
+        "options": [{"label": label, "q": q} for label, q in options],
+    }
+
+
+def is_simple_answer_query(text: str, clarify: Optional[Dict[str, Any]]) -> bool:
+    """Short, single-focus questions → one tight answer (vs. a longer summary)."""
+    if clarify:
+        return False
+    s = (text or "").strip()
+    if not s:
+        return False
+    if re.search(
+        r"\b(vs\.?|versus|compare|comparison|difference between|differences between|pros and cons)\b",
+        s,
+        re.I,
+    ):
+        return False
+    if len(s.split()) > 14:
+        return False
+    return bool(has_informational_summary_signals(s))
+
+
 def query_ui_hints(prep: PreprocessedQuery) -> Dict[str, Any]:
     """Signals for template/JS: interrogative vs transactional/local, AI summary, local chrome."""
     info_sig = has_informational_summary_signals(prep.original) or has_informational_summary_signals(
@@ -397,13 +464,18 @@ def query_ui_hints(prep: PreprocessedQuery) -> Dict[str, Any]:
     )
     local_sig = has_local_intent_signals(prep)
     transactional_local = bool(_TRANSACTIONAL_LOCAL_UI.search(prep.normalized))
+    clarify = detect_query_clarification(prep)
+    summary_ok = should_enable_ai_summary(prep)
+    answer_mode = "single" if (summary_ok and is_simple_answer_query(prep.original, clarify)) else "standard"
     return {
         "intent": prep.intent,
         "interrogative_or_explanatory": bool(info_sig),
         "local_intent": bool(local_sig),
         "transactional_local_keywords": transactional_local,
         "prefer_local_ui": bool(local_sig or transactional_local),
-        "show_ai_summary": should_enable_ai_summary(prep),
+        "show_ai_summary": summary_ok,
+        "clarify": clarify,
+        "answer_mode": answer_mode,
     }
 
 

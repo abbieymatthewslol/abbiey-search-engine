@@ -879,6 +879,16 @@ class TestAISummary:
         assert "summary" in data
         assert "sources" in data
         assert len(data["sources"]) > 0
+        assert data.get("clarify") is not None
+        assert data.get("answer_mode") == "standard"
+
+    def test_ai_summary_single_mode_simple_query(self, client, mock_ddg, mock_chat):
+        mock_chat.return_value = "Water is H2O [1]."
+        resp = client.get("/api/ai-summary?q=what+is+water")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data.get("answer_mode") == "single"
+        assert data.get("clarify") is None
 
     def test_ai_summary_empty_query(self, client):
         resp = client.get("/api/ai-summary?q=")
@@ -914,12 +924,16 @@ class TestAISummary:
         """Bare local lookups should not run summarization."""
         resp = client.get("/api/ai-summary?q=closest+pizza")
         assert resp.status_code == 200
-        assert resp.get_json() == {"enabled": False}
+        data = resp.get_json()
+        assert data.get("enabled") is False
+        assert "clarify" in data
 
     def test_ai_summary_gated_for_near_me_phrase(self, client, mock_ddg):
         resp = client.get("/api/ai-summary?q=coffee+near+me")
         assert resp.status_code == 200
-        assert resp.get_json() == {"enabled": False}
+        data = resp.get_json()
+        assert data.get("enabled") is False
+        assert "clarify" in data
 
 
 # =====================================================================
@@ -982,6 +996,12 @@ class TestFeatureCardLogic:
     def test_ai_summary_on_text_tab(self, client, mock_ddg):
         resp = client.get("/search?q=what+is+a+test&type=text")
         assert b"ai-summary-card" in resp.data
+
+    def test_clarify_chips_on_polysemous_query(self, client, mock_ddg):
+        resp = client.get("/search?q=what+is+python&type=text")
+        assert resp.status_code == 200
+        assert b"clarify-query-card" in resp.data
+        assert b"Programming language" in resp.data
 
 
 class TestAdminQueryLog:

@@ -1676,6 +1676,43 @@ article.result.code-result { font-size: .9rem; }
 .welcome-skip { color: var(--text-dim); font-size: .85rem; text-decoration: none; }
 .welcome-skip:hover { color: var(--text); }
 
+.clarify-query-card {
+  margin: 0.5rem 0 0.75rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  font-size: 0.8125rem;
+}
+.clarify-query-prompt {
+  margin: 0 0 0.5rem;
+  color: var(--text);
+  font-weight: 500;
+  line-height: 1.4;
+}
+.clarify-query-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+a.clarify-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.28rem 0.55rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-size: 0.78rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+a.clarify-chip:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 /* ===== 10. ANSWER CARDS ===== */
 .ai-summary-card,
 .calculator-card,
@@ -1772,6 +1809,10 @@ article.result.code-result { font-size: .9rem; }
   font-weight: 600;
   color: var(--text-dim);
   letter-spacing: 0;
+}
+.ai-summary-card.answer-single .ai-summary-body {
+  font-size: 1.02rem;
+  line-height: 1.65;
 }
 .ai-summary-body { font-size: .9375rem; color: var(--text); line-height: 1.75; }
 .ai-summary-body p { margin-bottom: .5rem; }
