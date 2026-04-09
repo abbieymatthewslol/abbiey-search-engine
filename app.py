@@ -6,6 +6,7 @@ No tracking. No filtering. No logs. Just results.
 import hashlib
 import hmac
 import json
+import queue
 from collections import Counter
 import logging
 import os
@@ -2369,8 +2370,8 @@ def _try_weather(location):
             "https://geocoding-api.open-meteo.com/v1/search",
             params={"name": location, "count": 1, "language": "en"},
             timeout=3.0,
-        geo_data = geo.json().get("results")
         )
+        geo_data = geo.json().get("results")
         if not geo_data:
             return None
         place = geo_data[0]
@@ -2594,8 +2595,8 @@ def api_search_access_claim():
             rows = _users_execute(
                 "SELECT 1 AS ok FROM payment_events WHERE checkout_token=? LIMIT 1",
                 [checkout_token],
-            webhook_verified = bool(rows)
             )
+            webhook_verified = bool(rows)
         except Exception:
             pass
     if not webhook_verified and not _search_checkout_pending():
@@ -3306,8 +3307,8 @@ def api_suggestions():
             "https://duckduckgo.com/ac/",
             params={"q": query, "type": "list"},
             timeout=2.0,
-        data = resp.json()
         )
+        data = resp.json()
         if isinstance(data, list) and len(data) > 1 and isinstance(data[1], list):
             return jsonify(data[1][:8])
         if isinstance(data, list) and data and isinstance(data[0], dict):
@@ -3366,8 +3367,8 @@ def api_related():
             "https://duckduckgo.com/ac/",
             params={"q": query, "type": "list"},
             timeout=2.0,
-        data = resp.json()
         )
+        data = resp.json()
         if isinstance(data, list) and len(data) > 1 and isinstance(data[1], list):
             for s in data[1]:
                 if s.lower() != query.lower():
@@ -3397,8 +3398,8 @@ def api_related():
                         "https://duckduckgo.com/ac/",
                         params={"q": word, "type": "list"},
                         timeout=1.5,
-                    d2 = resp2.json()
                     )
+                    d2 = resp2.json()
                     if isinstance(d2, list) and len(d2) > 1 and isinstance(d2[1], list):
                         for s in d2[1][:3]:
                             if s.lower() != query.lower() and s.lower() != word.lower():
@@ -3495,8 +3496,8 @@ def _check_single_onion(url):
             resp = client.head(
                 url,
                 headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; rv:128.0) Gecko/20100101 Firefox/128.0"},
-        status = "live" if resp.status_code < 400 else "down"
             )
+        status = "live" if resp.status_code < 400 else "down"
     except Exception:
         # Tor not running or site unreachable — can't distinguish, report unknown
         status = "unknown"
@@ -5254,7 +5255,6 @@ def _inclusive_text_recovery_bridge(
     out: list = []
 
     def _take(batch):
-        nonlocal out
         for r in batch or []:
             u = (r.get("url") or "").strip()
             if not u or u in seen:
@@ -6395,8 +6395,8 @@ def _try_prices(query, max_results=40):
     with_price = sorted(
         [r for r in results if r.get("price_val") is not None],
         key=lambda x: x["price_val"],
-    without_price = [r for r in results if r.get("price_val") is None]
     )
+    without_price = [r for r in results if r.get("price_val") is None]
     return (with_price + without_price)[:max_results]
 
 
@@ -7201,8 +7201,8 @@ def verify_email():
             return render_template(
                 "verify_email.html",
                 errors=["That link is invalid or has already been used."],
-        u = rows[0]
             )
+        u = rows[0]
         if _user_is_email_verified(u):
             return render_template(
                 "verify_email.html",
@@ -7242,8 +7242,8 @@ def verify_email():
                 "verify_email.html",
                 errors=["No account found for that email. Check the address or sign up again."],
                 email=email_in,
-        u = rows[0]
             )
+        u = rows[0]
         if _user_is_email_verified(u):
             return render_template(
                 "verify_email.html",
@@ -7291,8 +7291,8 @@ def verify_email_resend():
             "verify_email.html",
             errors=["Enter your email address."],
             email=email_in,
-    rows = _users_execute("SELECT * FROM users WHERE LOWER(email)=LOWER(?) LIMIT 1", [email_in])
         )
+    rows = _users_execute("SELECT * FROM users WHERE LOWER(email)=LOWER(?) LIMIT 1", [email_in])
     if not rows or _user_is_email_verified(rows[0]):
         return redirect(url_for("verify_email", email=email_in, resent="1"))
     u = rows[0]
