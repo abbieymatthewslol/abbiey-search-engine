@@ -1454,6 +1454,22 @@ def _handle_rate_limit(err):
     )
 
 
+_AUTH_PATHS = ("/login", "/signup", "/auth", "/forgot-password", "/reset-password", "/verify-email")
+
+
+@app.before_request
+def _redirect_127_to_localhost():
+    """127.0.0.1 and localhost are different browser origins (separate localStorage).
+    Supabase's OAuth redirect allowlist uses localhost, so PKCE verifier stored at
+    127.0.0.1 is invisible when the callback lands — causing 'invalid flow state'.
+    Redirect auth pages to localhost so the entire OAuth round-trip stays on one origin."""
+    host = request.host  # e.g. "127.0.0.1:8000"
+    if host.startswith("127.0.0.1:") and request.path.startswith(_AUTH_PATHS):
+        port = host.split(":", 1)[1]
+        new_url = request.url.replace(f"http://127.0.0.1:{port}", f"http://localhost:{port}", 1)
+        return redirect(new_url, 302)
+
+
 @app.before_request
 def _api_cors_preflight():
     if request.method != "OPTIONS" or not request.path.startswith("/api/"):
