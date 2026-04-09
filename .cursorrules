@@ -1,0 +1,95 @@
+# abbiey.search — Cursor AI Rules
+
+> Full architecture context is in AGENTS.md. Read it before making changes.
+
+## Stack
+
+- **Backend:** Python 3.12 / Flask (`app.py` ~6,000 lines, serverless on Vercel)
+- **Frontend:** Vanilla JS + Jinja2 (`static/script.js` single bundle, `templates/`)
+- **Database:** PostgreSQL 17 via Supabase (project `xwxscvllmghyogddpmii`, Singapore)
+- **Auth:** Supabase Auth (GoTrue) + Supabase JS v2.49.8 — Google OAuth (PKCE), email/password
+- **Hosting:** Vercel serverless Python (`vercel.json`)
+- **CI:** GitHub Actions — `.github/workflows/deploy.yml` (runs pytest then deploys)
+
+## Key Files
+
+| File | Purpose |
+|------|---------|
+| `app.py` | All Flask routes, APIs, entity detection, security headers |
+| `entity_parser.py` | 12 entity-type detection (phone, email, IP, weather, …) |
+| `query_understanding.py` | Query intent classification |
+| `templates/index.html` | Main search UI template |
+| `static/script.js` | Entire frontend bundle |
+| `static/style.css` | All styles (dark/light, responsive) |
+| `tests/` | pytest suite — run with `pytest tests/ -v` |
+
+## Critical Conventions
+
+### CSP Nonce (MUST follow)
+The app has a strict CSP without `unsafe-inline`. Every `<script>` tag in every
+template **must** carry `nonce="{{ csp_nonce }}"` or it will be silently blocked
+in production.
+
+```html
+<!-- correct -->
+<script nonce="{{ csp_nonce }}">...</script>
+
+<!-- WRONG — blocked by CSP -->
+<script>...</script>
+```
+
+How it works:
+1. `app.py` `@before_request` sets `g.csp_nonce = secrets.token_urlsafe(16)`
+2. Context processor exposes it as `{{ csp_nonce }}` in all templates
+3. CSP header includes `'nonce-{nonce}'` in `script-src`
+
+### Flask Patterns
+- Rate limiting via `flask-limiter` decorators
+- Admin routes protected by `_admin_check()` — accepts `?token=` or `X-Admin-Token`
+- Root `/` redirects (301) to `/search`; marketing page at `/landing`
+- `site_base_url` injected into templates via `_inject_current_user()` context processor
+
+### Database
+- Use the **Transaction pooler** (port **6543**) for Supabase — required for serverless
+- Never use direct connection (port 5432) in production code
+- `SUPABASE_DB_URL` / `DATABASE_URL` env vars hold the connection string
+
+## Running Locally
+
+```bash
+python scripts/setup_supabase_env.py   # create .env with DB URL
+pip install -r requirements.txt
+python app.py                          # http://127.0.0.1:8000
+pytest tests/ -v                       # run test suite
+```
+
+## Do's and Don'ts
+
+**DO:**
+- Add `nonce="{{ csp_nonce }}"` to every new `<script>` tag
+- Use `AGENTS.md` for integration IDs, OAuth flow details, and recovery steps
+- Write pytest tests in `tests/` for new endpoints or logic
+- Use `flask-limiter` decorators for rate-sensitive routes
+- Prefer `httpx` for HTTP calls (already imported as `_get_http()`)
+
+**DON'T:**
+- Hard-code secrets or API keys — use env vars (see `.env.example`)
+- Use `eval()` or dynamic code execution in templates or JS
+- Add `unsafe-inline` or `unsafe-eval` to the CSP
+- Use SQLite in production — use Supabase PostgreSQL
+- Import app-level globals (e.g., `_cache`) outside `app.py` — use the provided helpers
+
+## Environment Variables
+
+See `.env.example` for the full list. Minimum required:
+- `SECRET_KEY` — Flask session key
+- `SUPABASE_DB_URL` — PostgreSQL pooler URI (port 6543)
+- `SUPABASE_URL` + `SUPABASE_ANON_KEY` — Supabase Auth
+
+## Deployment
+
+```
+git push origin master
+  → GitHub Actions: pytest → vercel build → vercel deploy --prod
+  → Live at https://www.abbieysearch.com
+```
