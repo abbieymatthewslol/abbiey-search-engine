@@ -10,6 +10,9 @@ from app import (
     _try_calculator, _try_color_picker, _try_unit_convert,
     _try_knowledge_panel,
     _rank_anti_template_results,
+    search_safeguard_meta,
+    _static_search_portal_links,
+    _simplify_query_for_fallback,
 )
 
 
@@ -1373,6 +1376,26 @@ class TestPreviewSsrfRedirect:
                 query_string={"url": "https://evil.example.com/onion-redirect"},
             )
         assert resp.status_code == 400
+
+
+class TestInclusiveSearchSafeguards:
+    def test_crisis_meta_flags_distress_language(self):
+        assert search_safeguard_meta("suicide hotline")["show_crisis_strip"]
+        assert search_safeguard_meta("python asyncio tutorial")["show_crisis_strip"] is False
+
+    def test_chaotic_long_query_gets_inclusive_hint(self):
+        noise = "?! " * 40 + "why " * 5
+        meta = search_safeguard_meta(noise)
+        assert meta["chaotic_query"] or meta["show_inclusive_hint"]
+
+    def test_static_portal_links_always_present(self):
+        links = _static_search_portal_links("anything")
+        assert len(links) >= 3
+        assert any("duckduckgo.com" in (r.get("url") or "") for r in links)
+
+    def test_simplify_query_strips_noise(self):
+        s = _simplify_query_for_fallback("  hello!!!  world---  ")
+        assert "hello" in s and "world" in s
 
 
 class TestAntiTemplateRanking:

@@ -2456,6 +2456,7 @@ _TEMPLATE_DEFAULTS = dict(
     current_user_has_paid_access=False,
     stripe_search_checkout_url=STRIPE_SEARCH_CHECKOUT_URL,
     cleanweb=False,
+    safeguard={"show_crisis_strip": False, "show_inclusive_hint": False, "chaotic_query": False},
 )
 def should_show_ai_summary(query: str, intent: str) -> bool:
     """Gate AI summary card + /api/ai-summary: block obvious local/transactional queries."""
@@ -3054,6 +3055,7 @@ def search():
             search_notice=None,
             current_user_has_paid_access=current_user_has_paid_access,
             cleanweb=False,
+            safeguard={"show_crisis_strip": False, "show_inclusive_hint": False, "chaotic_query": False},
         )
     if len(query) > MAX_QUERY_LENGTH:
         return render_template(
@@ -3126,6 +3128,7 @@ def search():
             image_opts=image_opts,
             local_rank_context=local_rank_context,
             anti_template=anti_template,
+            source_query_for_fallback=query,
         )
         _ajax_ms = int((time.perf_counter() - _t_ajax) * 1000)
         if page == 1:
@@ -3145,6 +3148,7 @@ def search():
         image_opts=image_opts,
         local_rank_context=local_rank_context,
         anti_template=anti_template,
+        source_query_for_fallback=query,
     )
     _latency_ms = int((time.perf_counter() - _t0) * 1000)
 
@@ -3229,6 +3233,14 @@ def search():
     )
     query_ui = {**query_ui, "show_ai_summary": _ai_summary_ok}
     show_ai_summary_block = search_type == "text" and _ai_summary_ok
+    safeguard = (
+        search_safeguard_meta(query)
+        if (query and page == 1)
+        else {"show_crisis_strip": False, "show_inclusive_hint": False, "chaotic_query": False}
+    )
+    if safeguard.get("show_crisis_strip"):
+        show_ai_summary_block = False
+        query_ui = {**query_ui, "show_ai_summary": False}
     return render_template(
         "index.html",
         query=query,
@@ -3267,6 +3279,7 @@ def search():
         search_notice=results.get("notice"),
         current_user_has_paid_access=current_user_has_paid_access,
         cleanweb=cleanweb,
+        safeguard=safeguard,
     )
 @app.route("/api/suggestions")
 @limiter.limit("200/minute")
@@ -4841,6 +4854,158 @@ def _try_ddg_instant(query):
     return results
 
 
+# ---- Inclusive search: no one lands on a totally blank page ----
+
+_CRISIS_QUERY_RE = re.compile(
+    r"(?i)\b("
+    r"suicide|suicidal|kill\s*my\s*self|killing\s*my\s*self|end\s*my\s*life|want\s*to\s*die|"
+    r"don'?t\s*want\s*to\s*live|better\s*off\s*dead|no\s*reason\s*to\s*live|"
+    r"self[\s-]*harm|hurt\s*my\s*self|cut\s*my\s*self|"
+    r"over\s*dose|overdose|"
+    r"can'?t\s*go\s*on|cannot\s*go\s*on|end\s*it\s*all|"
+    r"wish\s*i\s*(was|were)\s*dead"
+    r")\b",
+)
+
+
+def _query_looks_chaotic(q: str) -> bool:
+    """Very long, symbol-heavy, or frantic punctuation — indexes may struggle; still deserves help."""
+    s = (q or "").strip()
+    if len(s) > 320:
+        return True
+    if len(s) < 12:
+        return False
+    alnum = sum(1 for c in s if c.isalnum())
+    if len(s) >= 48 and alnum / len(s) < 0.32:
+        return True
+    if s.count("?") >= 6 or s.count("!") >= 8:
+        return True
+    return False
+
+
+def search_safeguard_meta(raw_query: str) -> dict:
+    """UI hints + optional crisis strip. Does not block or alter the query."""
+    q = (raw_query or "").strip()
+    crisis = bool(_CRISIS_QUERY_RE.search(q))
+    chaotic = _query_looks_chaotic(q)
+    return {
+        "show_crisis_strip": crisis,
+        "show_inclusive_hint": crisis or chaotic,
+        "chaotic_query": chaotic,
+    }
+
+
+def _simplify_query_for_fallback(q: str) -> str:
+    s = re.sub(r"[^\w\s]", " ", (q or ""), flags=re.UNICODE)
+    s = re.sub(r"\s+", " ", s).strip()
+    words = s.split()[:16]
+    return " ".join(words)
+
+
+def _static_search_portal_links(q: str) -> list:
+    """Curated outbound searches so the SERP is never completely empty."""
+    enc = quote_plus((q or "information")[:280])
+    base = (os.environ.get("SITE_URL") or "https://www.abbieysearch.com").rstrip("/")
+    return [
+        {
+            "title": "DuckDuckGo — open full web results",
+            "url": f"https://duckduckgo.com/?q={enc}",
+            "body": "Same query in a broad web index (off-site).",
+            "source": "Search portal",
+        },
+        {
+            "title": "Wikipedia — article search",
+            "url": f"https://en.wikipedia.org/w/index.php?search={enc}&title=Special%3ASearch",
+            "body": "Encyclopedia pages and disambiguation for your words.",
+            "source": "Search portal",
+        },
+        {
+            "title": "Internet Archive — archived pages",
+            "url": f"https://archive.org/search?query={enc}",
+            "body": "Billions of archived URLs; strong for older or niche material.",
+            "source": "Search portal",
+        },
+        {
+            "title": "abbiey.search — access & alternatives (JSON)",
+            "url": f"{base}/api/access-resources",
+            "body": "Tor, archives, independent indexes, and tips if one backend is empty.",
+            "source": "Search portal",
+        },
+    ]
+
+
+def _inclusive_text_recovery_bridge(
+    backend_query: str,
+    lang,
+    region,
+    time_filter,
+    safesearch,
+    raw_query: str | None = None,
+    max_hits: int = 22,
+) -> list:
+    """
+    After normal text fallbacks still return nothing: milder queries + portals.
+    Never judges the user; only adds more retrieval paths.
+    """
+    raw = (raw_query or backend_query or "").strip()
+    bq = (backend_query or raw).strip()
+    if not raw and not bq:
+        return _static_search_portal_links("")
+
+    seen: set[str] = set()
+    out: list = []
+
+    def _take(batch):
+        nonlocal out
+        for r in batch or []:
+            u = (r.get("url") or "").strip()
+            if not u or u in seen:
+                continue
+            seen.add(u)
+            out.append(r)
+            if len(out) >= max_hits:
+                return True
+        return False
+
+    variants = []
+    for cand in (bq, raw):
+        c = (cand or "").strip()
+        if c and c not in variants:
+            variants.append(c)
+    simp = _simplify_query_for_fallback(raw)
+    if simp and simp.lower() not in {v.lower() for v in variants}:
+        variants.append(simp)
+    head = " ".join(raw.split()[:10]).strip()
+    if head and head.lower() not in {v.lower() for v in variants}:
+        variants.append(head)
+
+    for v in variants:
+        try:
+            if _take(_try_ddg(v, min(24, max_hits), "text", region, time_filter, safesearch)):
+                logger.info("inclusive_recovery: DDG ok for variant len=%s", len(v))
+                return out
+        except Exception:
+            logger.debug("inclusive_recovery_ddg_failed", exc_info=True)
+
+    for v in variants[:3]:
+        try:
+            if _take(_try_wikipedia(v, lang)):
+                logger.info("inclusive_recovery: Wikipedia ok")
+                return out
+        except Exception:
+            logger.debug("inclusive_recovery_wiki_failed", exc_info=True)
+
+    try:
+        if _take(_try_wiby(simp or bq or raw)):
+            logger.info("inclusive_recovery: Wiby ok")
+            return out
+    except Exception:
+        logger.debug("inclusive_recovery_wiby_failed", exc_info=True)
+
+    _take(_static_search_portal_links(raw or bq))
+    return out[:max_hits]
+
+
 # ---- Image fallback layers ----
 
 def _try_openverse(query, max_results=20, filters=None):
@@ -6177,6 +6342,7 @@ def _fetch_results(
     image_opts=None,
     local_rank_context=None,
     anti_template=False,
+    source_query_for_fallback=None,
 ):
     """Fetch results with caching. Returns paginated slice."""
     operators = operators or {}
@@ -6454,6 +6620,16 @@ def _fetch_results(
     if not results and search_type == "text":
         logger.info("All engines empty, trying DDG instant answers")
         results = _try_ddg_instant(query)
+    if not results and search_type == "text":
+        logger.info("Inclusive bridge: milder queries + curated portals (no blank SERP)")
+        results = _inclusive_text_recovery_bridge(
+            query,
+            lang,
+            region,
+            time_filter,
+            safesearch,
+            raw_query=(source_query_for_fallback or "").strip() or None,
+        )
     results = _deduplicate(results)
     if search_type == "text" and local_rank_context and local_rank_context.get("has_local_intent"):
         results = _rank_local_search_results(results, local_rank_context)

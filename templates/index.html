@@ -990,6 +990,17 @@
             {% if search_notice %}
             <div class="search-status-banner" role="status">{{ search_notice }}</div>
             {% endif %}
+            {% if safeguard and safeguard.show_crisis_strip %}
+            <aside class="crisis-resources-banner" role="note" aria-label="Crisis support resources">
+                <p class="crisis-resources-lead">If you may hurt yourself or feel unsafe, you deserve support right now. These services are free and confidential.</p>
+                <ul class="crisis-resources-list">
+                    <li><strong>US:</strong> Call or text <a href="tel:988" rel="noopener">988</a> — <a href="https://988lifeline.org/" target="_blank" rel="noopener noreferrer">988 Suicide &amp; Crisis Lifeline</a></li>
+                    <li><strong>US text:</strong> Text <strong>HOME</strong> to <a href="sms:741741" rel="noopener">741741</a> — <a href="https://www.crisistextline.org/" target="_blank" rel="noopener noreferrer">Crisis Text Line</a></li>
+                    <li><strong>Worldwide:</strong> <a href="https://findahelpline.com/" target="_blank" rel="noopener noreferrer">findahelpline.com</a> — helplines by country and topic</li>
+                </ul>
+                <p class="crisis-resources-foot">We are not a crisis service; your search still runs as usual below. If this does not apply to you, you can ignore this box.</p>
+            </aside>
+            {% endif %}
 
         {# ===== MAIN RESULTS ===== #}
         <div id="results" class="results-container" data-type="{{ search_type }}">
@@ -1074,7 +1085,19 @@
                     <p class="no-results-hint">Ahmia.fi may be temporarily unreachable, or no .onion sites matched your query. Try broader keywords or check back shortly.</p>
                 </div>
                 {% else %}
-                <p class="no-results">No results found. Try different keywords.</p>
+                <div class="no-results-inclusive">
+                    <p class="no-results">Nothing matched in our blend yet — that does not mean your question is wrong.</p>
+                    <p class="no-results-hint">Indexes miss things, especially unusual wording. Try a shorter phrase, fewer symbols, or the same words in a portal below.</p>
+                    {% if safeguard and safeguard.show_inclusive_hint %}
+                    <p class="no-results-hint">Long or intense queries are still valid: search engines sometimes need the <em>first few words</em> only.</p>
+                    {% endif %}
+                    <ul class="search-help-portals" role="list">
+                        <li><a href="https://duckduckgo.com/?q={{ query|urlencode }}" target="_blank" rel="noopener noreferrer">Open in DuckDuckGo</a></li>
+                        <li><a href="https://en.wikipedia.org/w/index.php?search={{ query|urlencode }}&amp;title=Special%3ASearch" target="_blank" rel="noopener noreferrer">Search Wikipedia</a></li>
+                        <li><a href="https://archive.org/search?query={{ query|urlencode }}" target="_blank" rel="noopener noreferrer">Internet Archive</a></li>
+                        <li><a href="{{ url_for('api_access_resources') }}">Access resources (JSON)</a> — Tor, archives, independent indexes</li>
+                    </ul>
+                </div>
                 {% endif %}
             {% endif %}
         </div>

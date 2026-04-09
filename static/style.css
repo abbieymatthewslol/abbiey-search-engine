@@ -1269,6 +1269,56 @@ article.result.code-result { font-size: .9rem; }
 }
 .no-results-deep { text-align: center; padding: 2rem 0; }
 .no-results-hint { color: var(--text-muted); font-size: .875rem; margin-top: .5rem; }
+
+.no-results-inclusive {
+  max-width: 36rem;
+  margin: 0 auto;
+  padding: 1rem 0 1.5rem;
+  text-align: center;
+}
+.search-help-portals {
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  justify-content: center;
+}
+.search-help-portals a {
+  color: var(--accent);
+  font-size: 0.875rem;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.search-help-portals a:hover {
+  color: var(--text);
+}
+
+.crisis-resources-banner {
+  margin: 0.65rem 0 0.85rem;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-surface);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--text);
+}
+.crisis-resources-lead {
+  margin: 0 0 0.5rem;
+  font-weight: 600;
+}
+.crisis-resources-list {
+  margin: 0.35rem 0 0.5rem;
+  padding-left: 1.15rem;
+}
+.crisis-resources-list li { margin: 0.25rem 0; }
+.crisis-resources-foot {
+  margin: 0.5rem 0 0;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
 .onion-end-notice {
   text-align: center;
   padding: 1.5rem 0;
