@@ -6,5 +6,7 @@ venv/
 dist/
 *.egg-info/
 *.db
-.vercel
+# Vercel CLI: commit project link only; never commit pulled env (see vercel pull)
+.vercel/*
+!.vercel/project.json
 .env*.local

@@ -13,7 +13,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  VERCEL_ORG_ID: ynmEwQEoP5I6GjvWlRkxa34I
+  # Must match .vercel/project.json (abbieys-projects / search-engine)
+  VERCEL_ORG_ID: team_YeguIG4NHm4Kp0Jf5AbOwgFN
   VERCEL_PROJECT_ID: prj_hGdLqDsNtQK2A57hWyZNxdZKMi3b
 
 jobs:
