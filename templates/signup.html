@@ -41,6 +41,16 @@
                 </div>
             </div>
 
+            <div class="auth-field">
+                <label for="signup-phone">Phone <span class="form-hint">(optional)</span></label>
+                <div class="auth-input-pill">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="auth-input-icon" aria-hidden="true"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/></svg>
+                    <input type="tel" name="phone" id="signup-phone" value="{{ phone or '' }}"
+                           placeholder="+1 555 123 4567" autocomplete="tel" inputmode="tel">
+                </div>
+                <span class="form-hint">International format with country code (stored securely; not used for ads)</span>
+            </div>
+
             <button type="submit" class="search-btn auth-submit" id="signup-submit">Create account</button>
         </form>
 
@@ -100,6 +110,15 @@
                     <button type="button" class="pw-toggle" aria-label="Show password" aria-controls="confirm_password">
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                     </button>
+                </div>
+            </div>
+
+            <div class="auth-field">
+                <label for="signup-phone-legacy">Phone <span class="form-hint">(optional)</span></label>
+                <div class="auth-input-pill">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="auth-input-icon" aria-hidden="true"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/></svg>
+                    <input type="tel" name="phone" id="signup-phone-legacy" value="{{ phone or '' }}"
+                           placeholder="+1 555 123 4567" autocomplete="tel" inputmode="tel">
                 </div>
             </div>
 
@@ -167,6 +186,15 @@
             if (errEl) {
                 errEl.style.display = 'none';
             }
+            try {
+                var phEl = document.getElementById('signup-phone');
+                var phv = phEl && phEl.value ? phEl.value.trim() : '';
+                if (phv) {
+                    sessionStorage.setItem('abbiey_onboarding_phone', phv);
+                } else {
+                    sessionStorage.removeItem('abbiey_onboarding_phone');
+                }
+            } catch (_ps) { /* ignore */ }
             googleBtn.disabled = true;
             googleBtn.innerHTML = 'Redirecting to Google\u2026';
             try {
@@ -228,13 +256,22 @@
                 return;
             }
             if (res.data && res.data.session) {
+                var phonePayload = '';
+                try {
+                    var pEl = document.getElementById('signup-phone');
+                    phonePayload = (pEl && pEl.value) ? pEl.value.trim() : '';
+                    if (!phonePayload) {
+                        phonePayload = sessionStorage.getItem('abbiey_onboarding_phone') || '';
+                    }
+                } catch (_p2) { phonePayload = ''; }
                 var cb = await fetch('/auth/callback', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     credentials: 'same-origin',
                     body: JSON.stringify({
                         email: res.data.user.email,
-                        display_name: (res.data.user.user_metadata || {}).full_name || ''
+                        display_name: (res.data.user.user_metadata || {}).full_name || '',
+                        phone: phonePayload || undefined
                     })
                 });
                 var cdata = await cb.json().catch(function () { return null; });

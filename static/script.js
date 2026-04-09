@@ -1883,6 +1883,143 @@ document.addEventListener("DOMContentLoaded", () => {
     document.addEventListener("mouseover", (e) => { const card = e.target.closest(".image-card"); if (card && !card._preloaded) { card._preloaded = true; new Image().src = card.dataset.full; } }, { passive: true });
   }
 
+  // ===== On-demand OSINT (entity card + image lightbox host) =====
+  const lightboxOsintBtn = document.getElementById("lightbox-osint-btn");
+  const lightboxOsintResults = document.getElementById("lightbox-osint-results");
+  const osintPanel = document.getElementById("osint-panel");
+  const osintToggle = document.getElementById("osint-toggle");
+  const osintBody = document.getElementById("osint-body");
+  const osintFacts = document.getElementById("osint-facts");
+  const osintStatus = document.getElementById("osint-status");
+
+  function renderOsintFactsList(ul, facts, disclaimer) {
+    if (!ul) return;
+    ul.innerHTML = "";
+    if (!facts || !facts.length) {
+      const li = document.createElement("li");
+      li.textContent = "No public records returned (or lookup failed).";
+      ul.appendChild(li);
+    } else {
+      for (const f of facts) {
+        const li = document.createElement("li");
+        const lb = document.createElement("span");
+        lb.className = "osint-fact-label";
+        lb.textContent = f.label || f.type || "Fact";
+        const val = document.createElement("span");
+        val.className = "osint-fact-value";
+        val.textContent = f.value != null ? String(f.value) : "";
+        const src = document.createElement("span");
+        src.className = "osint-fact-src";
+        src.append(document.createTextNode(f.source ? String(f.source) : ""));
+        if (f.evidence_url) {
+          src.append(document.createTextNode(" "));
+          const a = document.createElement("a");
+          a.href = f.evidence_url;
+          a.target = "_blank";
+          a.rel = "noopener noreferrer";
+          a.textContent = "Evidence";
+          src.appendChild(a);
+        }
+        li.appendChild(lb);
+        li.appendChild(val);
+        li.appendChild(src);
+        ul.appendChild(li);
+      }
+    }
+    if (disclaimer && ul.parentElement) {
+      let disc = ul.parentElement.querySelector(".osint-disclaimer");
+      if (!disc) {
+        disc = document.createElement("p");
+        disc.className = "osint-disclaimer";
+        ul.parentElement.appendChild(disc);
+      }
+      disc.textContent = String(disclaimer);
+    }
+  }
+
+  let osintEntityLoaded = false;
+  if (window.__osintEnabled && osintToggle && osintPanel && osintBody && osintFacts && osintStatus) {
+    osintToggle.addEventListener("click", async () => {
+      const expanded = osintToggle.getAttribute("aria-expanded") === "true";
+      if (expanded) {
+        osintToggle.setAttribute("aria-expanded", "false");
+        osintBody.hidden = true;
+        return;
+      }
+      osintToggle.setAttribute("aria-expanded", "true");
+      osintBody.hidden = false;
+      if (osintEntityLoaded) return;
+      osintEntityLoaded = true;
+      osintStatus.textContent = "Loading public signals…";
+      const body = {
+        entity_type: osintPanel.dataset.osintType,
+        value: osintPanel.dataset.osintValue,
+      };
+      const { ok, data } = await fetchJson("/api/osint/enrich", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!ok || !data || data.ok === false) {
+        osintStatus.textContent = userFacingApiError(
+          data && data.error,
+          "Could not load public signals for this entity.",
+        );
+        renderOsintFactsList(osintFacts, [], data && data.disclaimer);
+        return;
+      }
+      osintStatus.textContent = data.modules && data.modules.length
+        ? `Sources used: ${data.modules.join(", ")}`
+        : "";
+      renderOsintFactsList(osintFacts, data.facts || [], data.disclaimer);
+    });
+  }
+
+  if (window.__osintEnabled && lightboxOsintBtn && lightboxOsintResults && openLightbox) {
+    const _origOpen = openLightbox;
+    openLightbox = function(card) {
+      _origOpen(card);
+      let host = "";
+      try {
+        const u = new URL(card.dataset.url || "", window.location.origin);
+        host = (u.hostname || "").toLowerCase();
+      } catch (_) {
+        host = "";
+      }
+      const looksHost = /^[a-z0-9][a-z0-9.-]*\.[a-z]{2,63}$/i.test(host) && !host.startsWith("data:");
+      if (looksHost) {
+        lightboxOsintBtn.hidden = false;
+        lightboxOsintBtn.dataset.osintHost = host;
+      } else {
+        lightboxOsintBtn.hidden = true;
+        lightboxOsintBtn.dataset.osintHost = "";
+      }
+      lightboxOsintResults.hidden = true;
+      lightboxOsintResults.innerHTML = "";
+    };
+    lightboxOsintBtn.addEventListener("click", async () => {
+      const host = lightboxOsintBtn.dataset.osintHost;
+      if (!host) return;
+      lightboxOsintResults.hidden = false;
+      lightboxOsintResults.innerHTML = "<p class=\"osint-fact-line\">Loading…</p>";
+      const { ok, data } = await fetchJson("/api/osint/enrich", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ entity_type: "domain", value: host }),
+      });
+      if (!ok || !data || data.ok === false) {
+        lightboxOsintResults.innerHTML = `<p class="osint-fact-line">${esc(userFacingApiError(data && data.error, "Could not load signals for this host."))}</p>`;
+        return;
+      }
+      const parts = (data.facts || []).map((f) => {
+        const line = `<div class="osint-fact-line"><strong>${esc(f.label || f.type)}</strong> — ${esc(f.value != null ? String(f.value) : "")}</div><div class="osint-fact-meta">${esc(f.source || "")}</div>`;
+        return line;
+      });
+      parts.push(`<div class="osint-fact-meta" style="margin-top:.5rem">${esc(data.disclaimer || "")}</div>`);
+      lightboxOsintResults.innerHTML = parts.join("") || "<p class=\"osint-fact-line\">No records.</p>";
+    });
+  }
+
   // ===== Consolidated click-outside handler (single delegated listener) =====
   document.addEventListener("click", (e) => {
     const target = e.target;

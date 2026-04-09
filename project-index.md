@@ -1,6 +1,6 @@
 # abbiey.search — Project Index
 
-> **Last updated:** 2026-04-07  
+> **Last updated:** 2026-04-09  
 > **Status:** Active, deployed on Vercel + Supabase
 
 ---
@@ -46,6 +46,11 @@ Privacy-first web search engine built with Python/Flask. No server-side query lo
 - **Code** (`type=code`) — code-focused results (feature-gated)
 - **Deep Web** (`type=onion`) — .onion search via Ahmia.fi with DDG fallback (feature-gated)
 - **Saved** (`type=saved`) — bookmarked results (localStorage + server sync)
+
+### Public signals (OSINT)
+- Optional **Public signals (OSINT)** on the entity card for detected **domain**, **IPv4**, or **email** (mail-domain DNS/RDAP); image lightbox **Public signals (page host)** for the result page hostname
+- Server-side modules (whitelist via `ABBIEY_OSINT_MODULES`): DNS-over-HTTPS (Cloudflare), RDAP via `rdap.org`, reverse DNS (PTR) for IPv4
+- Short TTL in-memory cache; not stored as search history; kill-switch `ABBIEY_OSINT_ENABLED`
 
 ### Answer Cards (inline above results)
 - Calculator (`sqrt(144)`, `2^10`, `sin(pi/4)`)
@@ -100,6 +105,7 @@ Privacy-first web search engine built with Python/Flask. No server-side query lo
 |--------|------|-------------|
 | GET | `/search` | Main search (params: `q`, `type`, `df`, `region`, `page`) |
 | GET | `/api/suggestions` | Autocomplete suggestions |
+| POST | `/api/osint/enrich` | On-demand public OSINT (JSON body: `entity_type`+`value` or `query`; rate-limited) |
 
 ### Auth
 | Method | Path | Description |

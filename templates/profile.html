@@ -4,6 +4,14 @@
 {% block content %}
 <main class="profile-page">
 
+    {% with messages = get_flashed_messages(category_filter=["error"]) %}
+    {% if messages %}
+    <div class="auth-errors profile-flash" role="alert" style="max-width:42rem;margin:0 auto 1rem">
+        {% for m in messages %}<p>{{ m }}</p>{% endfor %}
+    </div>
+    {% endif %}
+    {% endwith %}
+
     {# ── Profile header ── #}
     <section class="profile-hero">
         <div class="profile-avatar-wrap">
@@ -29,6 +37,10 @@
                 Member since {% if user.created_at is string %}{{ user.created_at[:10] }}{% else %}{{ user.created_at.strftime("%Y-%m-%d") }}{% endif %}
                 &nbsp;·&nbsp;
                 {{ bookmarks|length }} bookmark{% if bookmarks|length != 1 %}s{% endif %}
+                {% if user.phone %}
+                &nbsp;·&nbsp;
+                <span class="profile-phone-meta" title="Phone on file">{{ user.phone }}</span>
+                {% endif %}
             </p>
         </div>
     </section>
@@ -56,6 +68,14 @@
                         <textarea id="bio" name="bio" rows="2" maxlength="200"
                                   placeholder="A short line about you">{{ user.bio or '' }}</textarea>
                     </div>
+                </div>
+                <div class="auth-field">
+                    <label for="profile-phone">Phone <span class="form-hint">(optional)</span></label>
+                    <div class="auth-input-pill">
+                        <input type="tel" id="profile-phone" name="phone" value="{{ user.phone or '' }}"
+                               placeholder="+1 555 123 4567" autocomplete="tel" inputmode="tel" maxlength="32">
+                    </div>
+                    <span class="form-hint">International format with country code. Clear the field to remove.</span>
                 </div>
                 <button type="submit" class="auth-submit-btn">Save changes</button>
             </form>

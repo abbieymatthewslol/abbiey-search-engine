@@ -282,7 +282,8 @@ class TestFallbackChain:
              patch("app._try_searxng", return_value=[]), \
              patch("app._try_hackernews_text", return_value=[]), \
              patch("app._try_reddit_text", return_value=[]), \
-             patch("app._try_internet_archive_text", return_value=[]):
+             patch("app._try_internet_archive_text", return_value=[]), \
+             patch("app._inclusive_text_recovery_bridge", return_value=[]):
 
             resp = client.get("/search?q=obscure_xyz", headers={"X-Requested-With": "XMLHttpRequest"})
             data = resp.get_json()

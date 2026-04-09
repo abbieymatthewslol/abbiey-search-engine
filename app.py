@@ -25,6 +25,8 @@ from urllib.parse import parse_qs, quote_plus, unquote, urlparse, urlencode
 
 import feedparser
 import httpx
+import phonenumbers
+from phonenumbers import NumberParseException
 from cachetools import TTLCache
 from ddgs import DDGS
 from flask import Flask, render_template, request, jsonify, redirect, session, url_for, flash, Response, has_request_context, g
@@ -45,6 +47,9 @@ from query_understanding import (
     is_simple_answer_query,
 )
 from retrieval.pipeline import run_text_retrieval_pipeline_sync
+from osint.service import enrich as _osint_enrich_run
+from osint.service import enrich_from_query as _osint_enrich_from_query
+from osint.service import is_osint_enabled as _abbiey_osint_enabled
 
 try:
     from dotenv import load_dotenv
@@ -307,6 +312,8 @@ _ONION_UNAVAILABLE_MSG = (
 )
 _SEARCH_UNLOCK_COOKIE = "abbiey_search_unlock"
 _SEARCH_UNLOCK_COOKIE_MAX_AGE = 315360000
+_WELCOME_COOKIE = "abbiey_welcome_seen"
+_WELCOME_COOKIE_MAX_AGE = 60 * 60 * 24 * 400  # ~13 months — first-visit onboarding
 _SEARCH_CHECKOUT_PENDING_SESSION_KEY = "abbiey_search_checkout_started_at"
 _SEARCH_CHECKOUT_PENDING_WINDOW_SECONDS = 4 * 60 * 60
 _SEARCH_CHECKOUT_PENDING_COOKIE = "abbiey_search_checkout_pending"
@@ -952,6 +959,23 @@ def _migrate_users_email_verification_columns():
 _init_users_db()
 _migrate_users_email_verification_columns()
 
+
+def _migrate_users_phone_column():
+    """Optional E.164 phone on user profile (signup + OAuth sync)."""
+    try:
+        with sqlite3.connect(_USERS_DB) as con:
+            con.execute("ALTER TABLE users ADD COLUMN phone TEXT")
+    except Exception:
+        pass
+    if _SUPABASE_DB_URL and _SUPABASE_DB_READY:
+        try:
+            _pg_execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT", [])
+        except Exception as exc:
+            logging.warning("PG users phone migration: %s", exc)
+
+
+_migrate_users_phone_column()
+
 # Avatar column migration — SQLite only (PG schema already includes it)
 if not _SUPABASE_DB_URL:
     try:
@@ -1015,6 +1039,34 @@ def _set_search_unlock_cookie(resp: Response, token: str) -> None:
         samesite="Lax",
         path="/",
     )
+
+
+def _set_welcome_seen_cookie(resp: Response) -> None:
+    """Mark browser as having completed or skipped first-visit onboarding."""
+    secure = request.is_secure or _site_base_url().startswith("https://")
+    resp.set_cookie(
+        _WELCOME_COOKIE,
+        "1",
+        max_age=_WELCOME_COOKIE_MAX_AGE,
+        secure=secure,
+        httponly=False,
+        samesite="Lax",
+        path="/",
+    )
+
+
+def _normalize_e164_phone(raw: str, default_region: str = "US") -> str | None:
+    """Return E.164 (e.g. +15551234567) or None if invalid / empty."""
+    s = (raw or "").strip()
+    if not s:
+        return None
+    try:
+        parsed = phonenumbers.parse(s, default_region if not s.startswith("+") else None)
+        if not phonenumbers.is_valid_number(parsed):
+            return None
+        return phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164)
+    except NumberParseException:
+        return None
 
 
 def _checkout_hmac_key() -> bytes:
@@ -2369,8 +2421,8 @@ def _try_weather(location):
             "https://geocoding-api.open-meteo.com/v1/search",
             params={"name": location, "count": 1, "language": "en"},
             timeout=3.0,
-        geo_data = geo.json().get("results")
         )
+        geo_data = geo.json().get("results")
         if not geo_data:
             return None
         place = geo_data[0]
@@ -2463,6 +2515,7 @@ _TEMPLATE_DEFAULTS = dict(
     stripe_search_checkout_url=STRIPE_SEARCH_CHECKOUT_URL,
     cleanweb=False,
     safeguard={"show_crisis_strip": False, "show_inclusive_hint": False, "chaotic_query": False},
+    osint_enabled=True,
 )
 def should_show_ai_summary(query: str, intent: str) -> bool:
     """Gate AI summary card + /api/ai-summary: block obvious local/transactional queries."""
@@ -2485,8 +2538,37 @@ def should_show_ai_summary(query: str, intent: str) -> bool:
 
 @app.route("/")
 def index():
-    """Root URL shows the main search UI (same as /search). Marketing copy lives at /landing."""
-    return redirect(url_for("search"), code=301)
+    """First visit: onboarding at /welcome. Returning visitors and signed-in users: /search."""
+    if os.environ.get("ABBIEY_SKIP_WELCOME_SCREEN") == "1":
+        return redirect(url_for("search"), code=301)
+    if _session_user_id_int(session.get("user_id")):
+        return redirect(url_for("search"), code=301)
+    if (request.cookies.get(_WELCOME_COOKIE) or "").strip() == "1":
+        return redirect(url_for("search"), code=301)
+    return redirect(url_for("welcome"), code=302)
+
+
+@app.route("/welcome")
+def welcome():
+    """First-visit signup walkthrough (Google OAuth + optional phone). Direct URL always works; root / uses env + cookie."""
+    if _session_user_id_int(session.get("user_id")):
+        return redirect(url_for("search"))
+    if (request.cookies.get(_WELCOME_COOKIE) or "").strip() == "1":
+        return redirect(url_for("search"))
+    return render_template(
+        "welcome.html",
+        supabase_url=_SUPABASE_URL,
+        supabase_anon_key=_SUPABASE_ANON_KEY,
+        supabase_auth=_SUPABASE_AUTH_ENABLED,
+    )
+
+
+@app.route("/welcome/dismiss")
+def welcome_dismiss():
+    """Skip onboarding and use search without an account."""
+    resp = redirect(url_for("search"))
+    _set_welcome_seen_cookie(resp)
+    return resp
 
 
 @app.route("/landing")
@@ -3010,7 +3092,11 @@ def search():
     if not query:
         return render_template(
             "index.html",
-            **{**_TEMPLATE_DEFAULTS, "current_user_has_paid_access": current_user_has_paid_access},
+            **{
+                **_TEMPLATE_DEFAULTS,
+                "current_user_has_paid_access": current_user_has_paid_access,
+                "osint_enabled": _abbiey_osint_enabled(),
+            },
     # Server-side search limit for free-tier users
         )
     if query and not current_user_has_paid_access:
@@ -3019,8 +3105,12 @@ def search():
         if not _is_oauth_verification_crawler_ua(ua) and _server_search_limit_reached(client_ip):
             return render_template(
                 "index.html",
-                **{**_TEMPLATE_DEFAULTS, "current_user_has_paid_access": False,
-                   "search_notice": "You\u2019ve reached your daily free search limit. Unlock unlimited searches or wait 24 hours."},
+                **{
+                    **_TEMPLATE_DEFAULTS,
+                    "current_user_has_paid_access": False,
+                    "osint_enabled": _abbiey_osint_enabled(),
+                    "search_notice": "You\u2019ve reached your daily free search limit. Unlock unlimited searches or wait 24 hours.",
+                },
             ), 429
 
     if search_type == "saved":
@@ -3063,6 +3153,7 @@ def search():
             current_user_has_paid_access=current_user_has_paid_access,
             cleanweb=False,
             safeguard={"show_crisis_strip": False, "show_inclusive_hint": False, "chaotic_query": False},
+            osint_enabled=_abbiey_osint_enabled(),
         )
     if len(query) > MAX_QUERY_LENGTH:
         return render_template(
@@ -3293,6 +3384,7 @@ def search():
         current_user_has_paid_access=current_user_has_paid_access,
         cleanweb=cleanweb,
         safeguard=safeguard,
+        osint_enabled=_abbiey_osint_enabled(),
     )
 @app.route("/api/suggestions")
 @limiter.limit("200/minute")
@@ -3345,6 +3437,28 @@ def api_entity():
         "primary": asdict(primary) if primary else None,
         "queries": queries,
     })
+
+
+@app.route("/api/osint/enrich", methods=["POST"])
+@limiter.limit("30/minute")
+def api_osint_enrich():
+    """On-demand public OSINT (DNS / RDAP / PTR). Not logged as search history."""
+    if not _abbiey_osint_enabled():
+        return jsonify({"ok": False, "error": "disabled", "facts": [], "modules": [], "entity": None}), 404
+    if not request.is_json:
+        return jsonify({"ok": False, "error": "json_required", "facts": [], "modules": [], "entity": None}), 400
+    data = request.get_json(silent=True) or {}
+    q = (data.get("query") or "").strip()
+    et = (data.get("entity_type") or "").strip().lower()
+    val = (data.get("value") or "").strip()
+    if et and val:
+        payload = _osint_enrich_run(entity_type=et, value=val)
+    elif q:
+        payload = _osint_enrich_from_query(q)
+    else:
+        return jsonify({"ok": False, "error": "missing_body", "facts": [], "modules": [], "entity": None}), 400
+    status = 200 if payload.get("ok") else 422
+    return jsonify(payload), status
 
 
 # ---------------------------------------------------------------------------
@@ -3688,7 +3802,12 @@ def _ollama_chat(messages, model=None, timeout=30.0):
 
 # ---- Answer Layer: structured multi-source synthesis (JSON from LLM) ----
 ANSWER_LAYER_MAX_SOURCES = 10
-ANSWER_LAYER_SNIPPET_LEN = 300
+ANSWER_LAYER_SNIPPET_LEN = 480
+
+# ---- AI summary: context window (snippet caps keep prompts bounded) ----
+_AI_SUMMARY_MAX_SOURCES_SIMPLE = 5
+_AI_SUMMARY_MAX_SOURCES_STANDARD = 8
+_AI_SUMMARY_BODY_CHARS = 400
 
 
 def _parse_llm_json_object(raw: str) -> dict | None:
@@ -3718,7 +3837,7 @@ def _normalize_answer_layer_payload(data: dict, num_sources: int) -> dict:
     """Clamp and validate Answer Layer fields for safe JSON → UI."""
     out = {
         "headline": (data.get("headline") or data.get("title") or "").strip()[:200],
-        "synthesis": (data.get("synthesis") or data.get("answer") or data.get("body") or "").strip()[:4000],
+        "synthesis": (data.get("synthesis") or data.get("answer") or data.get("body") or "").strip()[:5500],
         "claims": [],
         "contradictions": [],
         "reasoning_steps": [],
@@ -4005,26 +4124,43 @@ def api_answer_layer():
 
     bundle = "\n\n".join(lines)
     sys_prompt = (
-        "You are a careful research synthesizer. Output ONLY valid JSON, no markdown, no prose outside JSON.\n"
+        "You are an expert research synthesizer. Output ONLY a single valid JSON object—no markdown fences, "
+        "no commentary before or after. Escape quotes inside strings properly.\n\n"
+        "Grounding (critical): Every substantive statement in synthesis and claims must be supported by "
+        "the numbered snippets. Do not invent facts, dates, numbers, or quotes. If evidence is thin, say so "
+        "in the synthesis and use lower confidence. If you are inferring, label it as inference in the claim "
+        "text and lower confidence.\n\n"
         "Schema:\n"
         "{\n"
-        '  "headline": "short neutral title (max 12 words)",\n'
-        '  "synthesis": "2-4 paragraphs merging what sources agree on; plain text; no URLs in body",\n'
+        '  "headline": "neutral, specific title (max 12 words); no clickbait",\n'
+        '  "synthesis": "2–4 paragraphs, plain text, no URLs. Paragraph 1: direct, precise answer to the '
+        'user question. Later paragraphs: important context, limits of knowledge, who/when/where if relevant.",\n'
         '  "claims": [\n'
-        '    {"statement": "one factual claim", "confidence": 0.0-1.0, "source_indices": [1,2]}\n'
+        '    {"statement": "one atomic factual claim", "confidence": 0.0-1.0, "source_indices": [1,2]}\n'
         "  ],\n"
         '  "contradictions": [\n'
-        '    {"summary": "what conflicts", "position_a": "...", "position_b": "...", '
+        '    {"summary": "one line: what is disputed", "position_a": "...", "position_b": "...", '
         '"sources_a": [1], "sources_b": [2]}\n'
         "  ],\n"
         '  "reasoning_steps": [\n'
-        '    {"step": "how you combined sources", "source_indices": [1,3]}\n'
+        '    {"step": "specific step: what you read, what agreed/disagreed, how you merged it", '
+        '"source_indices": [1,3]}\n'
         "  ]\n"
-        "}\n"
-        "Rules: Use source_indices 1–N matching [N] in the bundle. If sources agree, contradictions can be []. "
-        "Include 3–8 claims when possible. Confidence reflects agreement and snippet strength."
+        "}\n\n"
+        "Quality rules:\n"
+        "- claims: 4–10 items when snippets allow; each claim needs at least one source_index.\n"
+        "- confidence: high (0.75–1.0) only when 2+ independent sources agree or one authoritative snippet "
+        "is explicit; medium 0.45–0.74 for single-source or partial evidence; low below 0.45 when weak or disputed.\n"
+        "- contradictions: [] if sources align; otherwise capture real tensions visible in snippets (not trivia).\n"
+        "- reasoning_steps: 4–7 concrete steps tracing sources → conclusions.\n"
+        "- Use source_indices 1–N only (matching the bundle)."
     )
-    user_prompt = f"User question: {query}\n\nSources (numbered):\n{bundle}"
+    user_prompt = (
+        f"User question: {query}\n\n"
+        "Instructions: Answer the question using ONLY the sources below. Prefer accuracy over flair. "
+        "If the question is ambiguous, address the most likely meaning and note uncertainty in synthesis.\n\n"
+        f"Sources (numbered):\n{bundle}"
+    )
 
     try:
         raw = _ollama_chat(
@@ -4101,11 +4237,11 @@ def api_ai_summary():
     loc_ctx = resolve_location_for_search(prep, user_lat, user_lon, anchor_geo)
     backend_q = build_backend_search_query(query, prep, loc_ctx)
 
-    # Fetch top 5 results
+    _n_ctx = _AI_SUMMARY_MAX_SOURCES_SIMPLE if simple else _AI_SUMMARY_MAX_SOURCES_STANDARD
     context_results = _fetch_results(
         backend_q, 1, "text", local_rank_context=loc_ctx if loc_ctx.get("has_local_intent") else None
     )
-    top5 = context_results["results"][:5]
+    top5 = context_results["results"][:_n_ctx]
     if not top5:
         return jsonify(
             {
@@ -4117,38 +4253,50 @@ def api_ai_summary():
             }
         ), 404
 
-    # Build context
+    # Build context (truncated bodies so the model focuses on on-SERP evidence)
     context_lines = []
     sources = []
     for i, r in enumerate(top5, 1):
-        title = r.get("title", "")
-        body = r.get("body", "")
+        title = (r.get("title") or "").strip()
+        body = (r.get("body") or "").strip()
+        if len(body) > _AI_SUMMARY_BODY_CHARS:
+            body = body[: _AI_SUMMARY_BODY_CHARS].rsplit(" ", 1)[0] + "…"
         url = r.get("url", "")
-        context_lines.append(f"[{i}] {title}: {body}")
+        context_lines.append(f"[{i}] {title}\n    Snippet: {body}")
         sources.append({"title": title, "url": url})
     context = "\n".join(context_lines)
 
+    _ground = (
+        "You only use information from the numbered snippets. Do not invent facts, statistics, or quotes. "
+        "If snippets are insufficient, say only what they support and avoid filling gaps. "
+        "If snippets disagree, mention that briefly. Cite [n] only for claims those snippets support."
+    )
     if simple:
         system_msg = (
-            "You are a search assistant. Given web results as context, reply with ONE direct answer: "
-            "use at most 2 short sentences total. The first sentence must answer the question outright. "
-            "Cite sources as [1], [2] only where needed. No bullet lists. No preamble like \"Based on the results\"."
+            "You are a precise search assistant. " + _ground + " "
+            "Reply with at most 2 short sentences total. The first sentence must answer the question outright. "
+            "Cite as [1], [2] where needed. No bullet lists. No preamble (e.g. no \"Based on the results\")."
         )
     elif clarify:
         system_msg = (
-            "You are a search assistant. The user's query may name an ambiguous topic (multiple common meanings). "
-            "Using the web results, answer for the most likely interpretation in 2 short sentences, then add "
-            "one brief sentence acknowledging other meanings exist. Cite sources as [1], [2]. Be factual."
+            "You are a precise search assistant. " + _ground + " "
+            "The query may name an ambiguous topic. Answer for the most likely interpretation in 2 short sentences, "
+            "then one brief sentence noting other common meanings exist. Cite [1], [2]."
         )
     else:
         system_msg = (
-            "You are a search assistant. Given web results as context, write a 2-3 sentence "
-            "factual answer to the query. Cite sources by number [1], [2]. Be concise and direct."
+            "You are a precise search assistant. " + _ground + " "
+            "Write 2–4 sentences: lead with the clearest direct answer, then add one or two sentences of "
+            "useful context (scope, caveats, or timeframe) only if supported by the snippets. "
+            "Cite sources as [1], [2]. Be concise; avoid generic filler."
         )
     try:
         summary_messages = [
             {"role": "system", "content": system_msg},
-            {"role": "user", "content": f"Query: {query}\n\n{context}"},
+            {
+                "role": "user",
+                "content": f"Query: {query}\n\nWeb snippets:\n{context}",
+            },
         ]
         response = _ollama_chat(summary_messages)
         if response:
@@ -7025,14 +7173,20 @@ def _safe_redirect_url(next_url: str) -> str:
     return next_url
 
 
-def _sync_supabase_auth_user(email: str, display_name: str = "") -> int | None:
+def _sync_supabase_auth_user(email: str, display_name: str = "", phone: str | None = None) -> int | None:
     """Ensure a Supabase-authenticated user exists in our local users table. Returns user id."""
     email = (email or "").strip().lower()
     if not email:
         return None
     rows = _users_execute("SELECT id FROM users WHERE LOWER(email)=LOWER(?)", [email])
     if rows:
-        return rows[0]["id"]
+        uid = rows[0]["id"]
+        if phone:
+            try:
+                _users_execute("UPDATE users SET phone=? WHERE id=?", [phone, uid])
+            except Exception:
+                logger.exception("sync_supabase_phone_update_failed")
+        return uid
     username = email.split("@")[0][:30].lower()
     username = _re.sub(r'[^a-z0-9_]', '_', username)
     if len(username) < 3:
@@ -7057,11 +7211,25 @@ def _sync_supabase_auth_user(email: str, display_name: str = "") -> int | None:
             return_id=True,
         )
         uid = _row_returning_id(rows)
-        return int(uid) if uid else None
+        out = int(uid) if uid else None
+        if out and phone:
+            try:
+                _users_execute("UPDATE users SET phone=? WHERE id=?", [phone, out])
+            except Exception:
+                logger.exception("sync_supabase_phone_insert_followup_failed")
+        return out
     except Exception:
         # Race condition — another request created it
         rows = _users_execute("SELECT id FROM users WHERE LOWER(email)=LOWER(?)", [email])
-        return rows[0]["id"] if rows else None
+        if not rows:
+            return None
+        rid = rows[0]["id"]
+        if phone:
+            try:
+                _users_execute("UPDATE users SET phone=? WHERE id=?", [phone, rid])
+            except Exception:
+                logger.exception("sync_supabase_phone_race_update_failed")
+        return rid
 
 
 def _signup_process_post():
@@ -7070,6 +7238,7 @@ def _signup_process_post():
     email = request.form.get("email", "").strip().lower()
     password = request.form.get("password", "")
     confirm = request.form.get("confirm_password", "")
+    phone_raw = (request.form.get("phone") or "").strip()
 
     errors = []
     if not _USERNAME_RE.match(username_raw):
@@ -7082,9 +7251,18 @@ def _signup_process_post():
         errors.append("Password must be at least 8 characters.")
     if password != confirm:
         errors.append("Passwords do not match.")
+    phone_norm = _normalize_e164_phone(phone_raw) if phone_raw else None
+    if phone_raw and not phone_norm:
+        errors.append("Invalid phone number. Use international format (e.g. +1 555 123 4567).")
 
     if errors:
-        return render_template("signup.html", errors=errors, username=username_raw, email=email)
+        return render_template(
+            "signup.html",
+            errors=errors,
+            username=username_raw,
+            email=email,
+            phone=phone_raw,
+        )
 
     username_key = username_raw.lower()
     display_name = username_raw
@@ -7110,13 +7288,19 @@ def _signup_process_post():
                 "An account with that email already exists. Sign in or use a different email address."
             )
         if errors:
-            return render_template("signup.html", errors=errors, username=username_raw, email=email)
+            return render_template(
+                "signup.html",
+                errors=errors,
+                username=username_raw,
+                email=email,
+                phone=phone_raw,
+            )
 
         try:
             rows = _users_execute(
-                "INSERT INTO users (username, email, password_hash, display_name, email_verified) "
-                "VALUES (?,?,?,?,?)",
-                [username_key, email, pw_hash, display_name, False],
+                "INSERT INTO users (username, email, password_hash, display_name, email_verified, phone) "
+                "VALUES (?,?,?,?,?,?)",
+                [username_key, email, pw_hash, display_name, False, phone_norm],
                 return_id=True,
             )
             uid = _row_returning_id(rows)
@@ -7133,7 +7317,13 @@ def _signup_process_post():
             else:
                 logger.warning("signup_insert_failed: %s", exc)
                 errors.append("Account could not be created. Please try again.")
-            return render_template("signup.html", errors=errors, username=username_raw, email=email)
+            return render_template(
+                "signup.html",
+                errors=errors,
+                username=username_raw,
+                email=email,
+                phone=phone_raw,
+            )
 
     if not uid:
         logger.error(
@@ -7144,6 +7334,7 @@ def _signup_process_post():
             errors=["Account could not be created. Please try again."],
             username=username_raw,
             email=email,
+            phone=phone_raw,
         )
     try:
         otp, vtok = _set_verification_challenge(int(uid))
@@ -7154,6 +7345,7 @@ def _signup_process_post():
             errors=["Account was created but verification could not be started. Please contact support."],
             username=username_raw,
             email=email,
+            phone=phone_raw,
         )
     sent = _send_signup_verification_email(email, display_name, otp, vtok)
     vq = {"email": email, "new": "1"}
@@ -7189,6 +7381,7 @@ def signup():
             ],
             username=(request.form.get("username") or "").strip(),
             email=(request.form.get("email") or "").strip().lower(),
+            phone=(request.form.get("phone") or "").strip(),
             **sb_ctx,
         )
 @app.route("/verify-email", methods=["GET", "POST"])
@@ -7201,8 +7394,8 @@ def verify_email():
             return render_template(
                 "verify_email.html",
                 errors=["That link is invalid or has already been used."],
-        u = rows[0]
             )
+        u = rows[0]
         if _user_is_email_verified(u):
             return render_template(
                 "verify_email.html",
@@ -7224,7 +7417,9 @@ def verify_email():
         session.permanent = True
         session["user_id"] = uid_ok
         flash("welcome", "welcome")
-        return redirect(url_for("index") + "?welcome=1")
+        r = redirect(url_for("search") + "?welcome=1")
+        _set_welcome_seen_cookie(r)
+        return r
 
     if request.method == "POST":
         email_in = (request.form.get("email") or "").strip().lower()
@@ -7242,8 +7437,8 @@ def verify_email():
                 "verify_email.html",
                 errors=["No account found for that email. Check the address or sign up again."],
                 email=email_in,
-        u = rows[0]
             )
+        u = rows[0]
         if _user_is_email_verified(u):
             return render_template(
                 "verify_email.html",
@@ -7272,7 +7467,9 @@ def verify_email():
         session.permanent = True
         session["user_id"] = uid_ok
         flash("welcome", "welcome")
-        return redirect(url_for("index") + "?welcome=1")
+        r = redirect(url_for("search") + "?welcome=1")
+        _set_welcome_seen_cookie(r)
+        return r
 
     email_q = (request.args.get("email") or "").strip().lower()
     return render_template(
@@ -7291,8 +7488,8 @@ def verify_email_resend():
             "verify_email.html",
             errors=["Enter your email address."],
             email=email_in,
-    rows = _users_execute("SELECT * FROM users WHERE LOWER(email)=LOWER(?) LIMIT 1", [email_in])
         )
+    rows = _users_execute("SELECT * FROM users WHERE LOWER(email)=LOWER(?) LIMIT 1", [email_in])
     if not rows or _user_is_email_verified(rows[0]):
         return redirect(url_for("verify_email", email=email_in, resent="1"))
     u = rows[0]
@@ -7391,10 +7588,16 @@ def auth_callback():
     data = request.get_json(silent=True) or {}
     email = (data.get("email") or "").strip().lower()
     display_name = (data.get("display_name") or "").strip()
+    phone_raw = (data.get("phone") or "").strip()
+    phone_e164 = None
+    if phone_raw:
+        phone_e164 = _normalize_e164_phone(phone_raw)
+        if not phone_e164:
+            return jsonify({"error": "Invalid phone number. Use international format (e.g. +1 555 123 4567)."}), 400
     if not email or "@" not in email:
         return jsonify({"error": "Invalid email"}), 400
     try:
-        uid = _sync_supabase_auth_user(email, display_name)
+        uid = _sync_supabase_auth_user(email, display_name, phone_e164)
     except Exception:
         logger.exception("auth_callback_sync_failed")
         return jsonify({"error": "Could not sync account"}), 500
@@ -7402,7 +7605,9 @@ def auth_callback():
         return jsonify({"error": "Could not create account"}), 500
     session.permanent = True
     session["user_id"] = uid
-    return jsonify({"ok": True, "user_id": uid})
+    resp = jsonify({"ok": True, "user_id": uid})
+    _set_welcome_seen_cookie(resp)
+    return resp
 
 
 @app.route("/auth/confirm")
@@ -7602,11 +7807,16 @@ def profile_update():
     uid          = session["user_id"]
     display_name = request.form.get("display_name", "").strip()[:60]
     bio          = request.form.get("bio", "").strip()[:200]
+    phone_raw = (request.form.get("phone") or "").strip()
+    phone_e164 = _normalize_e164_phone(phone_raw) if phone_raw else None
+    if phone_raw and not phone_e164:
+        flash("Invalid phone number. Use international format (e.g. +1 555 123 4567).", "error")
+        return redirect(url_for("profile"))
 
     try:
         _users_execute(
-            "UPDATE users SET display_name=?, bio=? WHERE id=?",
-            [display_name or None, bio, uid],
+            "UPDATE users SET display_name=?, bio=?, phone=? WHERE id=?",
+            [display_name or None, bio, phone_e164 if phone_raw else None, uid],
         )
     except Exception:
         logger.exception("profile_update_failed")

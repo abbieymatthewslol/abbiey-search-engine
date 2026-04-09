@@ -106,13 +106,18 @@
 
             var ctrl = new AbortController();
             var abortTimer = setTimeout(function () { ctrl.abort(); }, 20000);
+            var phonePayload = '';
+            try {
+                phonePayload = sessionStorage.getItem('abbiey_onboarding_phone') || '';
+            } catch (_p0) { phonePayload = ''; }
             var cb = await fetch('/auth/callback', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'same-origin',
                 body: JSON.stringify({
                     email: emailAddr,
-                    display_name: (user.user_metadata || {}).full_name || ''
+                    display_name: (user.user_metadata || {}).full_name || '',
+                    phone: phonePayload || undefined
                 }),
                 signal: ctrl.signal
             });
@@ -122,6 +127,9 @@
 
             if (cb.ok && data && data.ok) {
                 finished = true;
+                try {
+                    sessionStorage.removeItem('abbiey_onboarding_phone');
+                } catch (_p1) { /* ignore */ }
                 window.location.replace('/search');
                 return;
             }

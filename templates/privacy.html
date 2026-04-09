@@ -7,7 +7,7 @@
     <div class="legal-container">
 
         <h1>Privacy Policy</h1>
-        <p class="legal-meta">Last updated: <time datetime="2025-05-01">1 May 2025</time> &nbsp;·&nbsp; Effective immediately</p>
+        <p class="legal-meta">Last updated: <time datetime="2026-04-09">9 April 2026</time> &nbsp;·&nbsp; Effective immediately</p>
 
         <p>abbiey.search is a privacy-first search engine. This policy explains what data we collect, why, and how. We keep it short because we genuinely collect very little.</p>
 
@@ -42,7 +42,18 @@
         <h3>3.3 Technical / Server Logs</h3>
         <p>Our hosting provider (Vercel) automatically records standard web server logs (IP address, HTTP method, URL path, response code, timestamp) for up to 30 days for security and abuse prevention. We do not analyse these logs for marketing purposes. Search query text is <strong>not</strong> present in these logs.</p>
 
-        <h3>3.4 Cookies</h3>
+        <h3 id="osint">3.4 Public signals (OSINT)</h3>
+        <p>Optional <strong>Public signals</strong> lookups run only when you choose them (for example, expanding &ldquo;Public signals (OSINT)&rdquo; on a detected domain, IP, or email, or using the image lightbox action for the page host). They are <strong>not</strong> part of normal web search and are <strong>not written to your search history</strong>.</p>
+        <p>When you use this feature, our servers query <strong>public</strong> technical sources on your behalf, currently including:</p>
+        <ul>
+            <li><strong>DNS-over-HTTPS</strong> (Cloudflare resolver at <code>cloudflare-dns.com</code>) for DNS records such as A, AAAA, MX, NS, and TXT.</li>
+            <li><strong>RDAP</strong> via <code>rdap.org</code> for registration metadata for domains and IPv4 addresses.</li>
+            <li><strong>Reverse DNS (PTR)</strong> via the platform resolver for IPv4 addresses.</li>
+        </ul>
+        <p>Those operators may process the hostname or IP you looked up according to their own policies. We apply short-lived in-memory caching on our side to reduce repeat queries; we do <strong>not</strong> store OSINT result payloads in your account or in analytics tables.</p>
+        <p>Self-hosters can disable or narrow OSINT using environment variables documented in <code>.env.example</code> (<code>ABBIEY_OSINT_ENABLED</code>, <code>ABBIEY_OSINT_MODULES</code>).</p>
+
+        <h3>3.5 Cookies</h3>
         <p>We set the minimum cookies required to operate the service:</p>
         <ul>
             <li><code>session</code> — a signed, server-side session cookie that keeps you logged in. HttpOnly, Secure, SameSite=Lax. Expires when your browser session ends (or 7 days if you tick "remember me").</li>
@@ -69,6 +80,8 @@
             <li><strong>Stripe</strong> (stripe.com) — payment processing. <a href="https://stripe.com/privacy" target="_blank" rel="noopener">Stripe Privacy Policy</a></li>
             <li><strong>Google Analytics</strong> (google.com/analytics) — aggregate, anonymised usage statistics. IP anonymisation enabled. <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google Privacy Policy</a></li>
             <li><strong>DuckDuckGo</strong> (duckduckgo.com) — search results are proxied through our servers. Your IP is not sent to DuckDuckGo.</li>
+            <li><strong>Cloudflare</strong> (cloudflare.com) — DNS-over-HTTPS resolver when you explicitly use <a href="#osint">Public signals (OSINT)</a>.</li>
+            <li><strong>RDAP / registry operators</strong> — when you use OSINT, we follow redirects from <code>rdap.org</code> to the relevant registry or RIR; those operators process the domain or IP being looked up.</li>
         </ul>
 
         <h2>6. Data Retention</h2>

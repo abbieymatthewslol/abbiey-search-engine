@@ -4,6 +4,8 @@ import os
 
 # Strict SUPABASE_URL checks in app.py skip under pytest (dev .env may vary).
 os.environ["RUNNING_PYTEST"] = "1"
+# First-visit welcome screen is off in tests so "/" still resolves to /search like before.
+os.environ.setdefault("ABBIEY_SKIP_WELCOME_SCREEN", "1")
 
 import pytest
 from unittest.mock import patch, MagicMock

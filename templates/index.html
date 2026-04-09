@@ -94,7 +94,16 @@
     </noscript>
 
     <header>
-        <a href="/" class="logo">abbiey<span>search</span></a>
+        <div class="header-brand">
+            <a href="/" class="logo">abbiey<span>search</span></a>
+            {% if not query %}
+            <ul class="home-support" role="list" aria-label="Principles">
+                <li class="home-support-item">answers over obstacles</li>
+                <li class="home-support-item">context over constraints</li>
+                <li class="home-support-item">clarity over confusion</li>
+            </ul>
+            {% endif %}
+        </div>
         <div class="header-controls">
 
             <div class="header-overflow" id="header-overflow">
@@ -436,14 +445,6 @@
                 <input type="hidden" name="lat" id="geo-lat-input" value="{% if search_lat is not none %}{{ search_lat }}{% endif %}">
                 <input type="hidden" name="lon" id="geo-lon-input" value="{% if search_lon is not none %}{{ search_lon }}{% endif %}">
             </form>
-
-            {% if not query %}
-            <ul class="home-support" role="list">
-                <li class="home-support-item">answers over obstacles</li>
-                <li class="home-support-item">context over constraints</li>
-                <li class="home-support-item">clarity over confusion</li>
-            </ul>
-            {% endif %}
 
             {% if not query %}
             <div class="home-recent-wrap">
@@ -998,6 +999,21 @@
                 {% endfor %}
             </div>
             {% endif %}
+
+            {% if osint_enabled and primary_entity.type in ('domain', 'ip', 'email') %}
+            <div class="osint-panel" id="osint-panel"
+                 data-osint-type={{ primary_entity.type|tojson }}
+                 data-osint-value={{ primary_entity.normalized|tojson }}>
+                <button type="button" class="osint-toggle" id="osint-toggle" aria-expanded="false" aria-controls="osint-body">
+                    Public signals (OSINT)
+                </button>
+                <div class="osint-body" id="osint-body" hidden>
+                    <p class="osint-hint">Loads only when you expand. Queries public DNS (Cloudflare DoH), RDAP (<code>rdap.org</code>), and reverse DNS where applicable. See <a href="/privacy#osint">how we handle OSINT</a>.</p>
+                    <div class="osint-status" id="osint-status" aria-live="polite"></div>
+                    <ul class="osint-facts" id="osint-facts"></ul>
+                </div>
+            </div>
+            {% endif %}
         </div>
         {% endif %}
 
@@ -1261,6 +1277,10 @@
                 <p class="lightbox-title" id="lightbox-title"></p>
                 <a class="lightbox-source" id="lightbox-source" href="" target="_blank" rel="noopener">View source</a>
                 <a class="lightbox-tools" id="lightbox-tools" href="#" target="_blank" rel="noopener noreferrer">Image tools (reverse search &amp; metadata)</a>
+                {% if osint_enabled %}
+                <button type="button" class="lightbox-osint-btn" id="lightbox-osint-btn" hidden>Public signals (page host)</button>
+                <div class="lightbox-osint-results" id="lightbox-osint-results" hidden></div>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -1305,6 +1325,7 @@
         window.__searchType = {{ search_type|tojson }};
         window.__queryUi = {{ query_ui|tojson }};
         window.__showAnswerLayer = {{ show_answer_layer_block|tojson }};
+        window.__osintEnabled = {{ osint_enabled|tojson }};
     </script>
 
     {% if query and search_type == 'code' %}
