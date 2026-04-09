@@ -10,11 +10,14 @@ import ipaddress
 import logging
 import re
 import socket
+import ssl
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import quote
 
 import httpx
+from cryptography import x509
+from cryptography.hazmat.backends import default_backend
 
 from osint.schema import fact
 
@@ -290,3 +293,53 @@ def rdap_ip_facts(ip: str, client: httpx.Client) -> list[dict[str, Any]]:
                 break
         break
     return out[:12]
+
+
+def tls_cert_facts(hostname: str, *, port: int = 443, timeout: float = 8.0) -> list[dict[str, Any]]:
+    """Public TLS certificate metadata via standard library handshake (validated chain)."""
+    host = _validate_domain(hostname)
+    if not host:
+        return []
+    p = int(port)
+    if p < 1 or p > 65535:
+        p = 443
+    ts = _now_iso()
+    to = max(3, min(int(timeout), 30))
+    try:
+        pem = ssl.get_server_certificate((host, p), timeout=to)
+    except Exception:
+        logger.debug("tls_get_cert_failed host=%s port=%s", host, p, exc_info=True)
+        return []
+    try:
+        cert = x509.load_pem_x509_certificate(pem.encode("ascii", errors="replace"), default_backend())
+    except Exception:
+        logger.debug("tls_parse_failed host=%s", host, exc_info=True)
+        return []
+    lines: list[str] = [
+        f"subject: {cert.subject.rfc4514_string()[:400]}",
+        f"issuer: {cert.issuer.rfc4514_string()[:400]}",
+        f"notBefore: {cert.not_valid_before_utc.isoformat()}",
+        f"notAfter: {cert.not_valid_after_utc.isoformat()}",
+    ]
+    try:
+        ext = cert.extensions.get_extension_for_class(x509.SubjectAlternativeName)
+        sans = ext.value.get_values_for_type(x509.DNSName)[:16]
+        if sans:
+            lines.append("SAN DNS: " + ", ".join(sans))
+    except x509.ExtensionNotFound:
+        pass
+    blob = " · ".join(lines)[:900]
+    detail = "\n".join(lines)
+    if len(detail) > 1200:
+        detail = detail[:1199] + "…"
+    return [
+        fact(
+            type="tls_cert",
+            label="TLS certificate (handshake)",
+            value=blob,
+            source="Python ssl + cryptography (live handshake)",
+            observed_at=ts,
+            confidence=0.86,
+            detail=detail,
+        )
+    ]

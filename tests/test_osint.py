@@ -35,3 +35,15 @@ def test_parse_enabled_modules_default():
 def test_parse_enabled_modules_subset(monkeypatch):
     monkeypatch.setenv("ABBIEY_OSINT_MODULES", "dns")
     assert parse_enabled_modules() == frozenset({"dns"})
+
+
+def test_parse_enabled_modules_kali_extras(monkeypatch):
+    monkeypatch.setenv("ABBIEY_OSINT_MODULES", "dns,tls,dig,whois")
+    m = parse_enabled_modules()
+    assert m == frozenset({"dns", "tls", "dig", "whois"})
+
+
+def test_parse_enabled_modules_rejects_unknown(monkeypatch):
+    monkeypatch.setenv("ABBIEY_OSINT_MODULES", "dns,nmap,ptr")
+    m = parse_enabled_modules()
+    assert m == frozenset({"dns", "ptr"})

@@ -1008,7 +1008,7 @@
                     Public signals (OSINT)
                 </button>
                 <div class="osint-body" id="osint-body" hidden>
-                    <p class="osint-hint">Loads only when you expand. Queries public DNS (Cloudflare DoH), RDAP (<code>rdap.org</code>), and reverse DNS where applicable. See <a href="/privacy#osint">how we handle OSINT</a>.</p>
+                    <p class="osint-hint">Loads only when you expand. Uses public DNS (Cloudflare DoH), RDAP (<code>rdap.org</code>), reverse DNS where applicable, optional TLS cert metadata, and—if your server has <code>dig</code>/<code>whois</code> (common on Kali/Linux dev)—those tools when enabled via <code>ABBIEY_OSINT_MODULES</code>. See <a href="/privacy#osint">how we handle OSINT</a>.</p>
                     <div class="osint-status" id="osint-status" aria-live="polite"></div>
                     <ul class="osint-facts" id="osint-facts"></ul>
                 </div>

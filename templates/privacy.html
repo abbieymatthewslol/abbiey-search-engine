@@ -49,6 +49,8 @@
             <li><strong>DNS-over-HTTPS</strong> (Cloudflare resolver at <code>cloudflare-dns.com</code>) for DNS records such as A, AAAA, MX, NS, and TXT.</li>
             <li><strong>RDAP</strong> via <code>rdap.org</code> for registration metadata for domains and IPv4 addresses.</li>
             <li><strong>Reverse DNS (PTR)</strong> via the platform resolver for IPv4 addresses.</li>
+            <li><strong>TLS certificate metadata</strong> (optional module) from a standard TLS handshake to port 443, parsed with our application libraries.</li>
+            <li><strong>Local <code>dig</code> / <code>whois</code></strong> (optional self-hosted module) only when those programs are installed on the server and enabled in configuration—typical for developer setups on Linux/Kali, not used on our default production image.</li>
         </ul>
         <p>Those operators may process the hostname or IP you looked up according to their own policies. We apply short-lived in-memory caching on our side to reduce repeat queries; we do <strong>not</strong> store OSINT result payloads in your account or in analytics tables.</p>
         <p>Self-hosters can disable or narrow OSINT using environment variables documented in <code>.env.example</code> (<code>ABBIEY_OSINT_ENABLED</code>, <code>ABBIEY_OSINT_MODULES</code>).</p>

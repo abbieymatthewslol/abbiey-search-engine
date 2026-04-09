@@ -13,13 +13,14 @@ import httpx
 from cachetools import TTLCache
 
 from entity_parser import Entity, detect_entities, primary_entity
-from osint import modules
+from osint import kali_tools, modules
 
 _CACHE: TTLCache = TTLCache(maxsize=400, ttl=300)
 _CACHE_LOCK = __import__("threading").Lock()
 
 _DISCLAIMER = (
-    "Signals are derived from public DNS, RDAP, and reverse-DNS sources only. "
+    "Signals are derived from public DNS, RDAP, reverse-DNS, optional TLS metadata, "
+    "and—when installed—local dig/whois output (typical on Kali/Linux dev systems). "
     "They may be incomplete or stale. Do not use this output for unlawful or harmful purposes."
 )
 
@@ -38,7 +39,7 @@ def parse_enabled_modules() -> frozenset[str]:
     if not raw:
         return _DEFAULT_MODULES
     parts = {p.strip() for p in raw.split(",") if p.strip()}
-    allowed = {"dns", "rdap", "ptr"}
+    allowed = {"dns", "rdap", "ptr", "tls", "dig", "whois"}
     return frozenset(parts & allowed) or _DEFAULT_MODULES
 
 
@@ -131,6 +132,21 @@ def enrich(
             if "rdap" in mods:
                 facts.extend(modules.rdap_domain_facts(val, client))
                 used.append("rdap")
+            if "tls" in mods:
+                tls_rows = modules.tls_cert_facts(val)
+                if tls_rows:
+                    facts.extend(tls_rows)
+                    used.append("tls")
+            if "dig" in mods:
+                dig_rows = kali_tools.dig_facts(val)
+                if dig_rows:
+                    facts.extend(dig_rows)
+                    used.append("dig")
+            if "whois" in mods:
+                whois_rows = kali_tools.whois_facts(val)
+                if whois_rows:
+                    facts.extend(whois_rows)
+                    used.append("whois")
         elif et == "ip":
             if "ptr" in mods:
                 facts.extend(modules.ptr_fact(val))
@@ -138,6 +154,11 @@ def enrich(
             if "rdap" in mods:
                 facts.extend(modules.rdap_ip_facts(val, client))
                 used.append("rdap")
+            if "dig" in mods:
+                dig_rev = kali_tools.dig_reverse_facts(val)
+                if dig_rev:
+                    facts.extend(dig_rev)
+                    used.append("dig")
 
     out = {
         "ok": True,

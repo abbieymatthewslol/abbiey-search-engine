@@ -3442,7 +3442,7 @@ def api_entity():
 @app.route("/api/osint/enrich", methods=["POST"])
 @limiter.limit("30/minute")
 def api_osint_enrich():
-    """On-demand public OSINT (DNS / RDAP / PTR). Not logged as search history."""
+    """On-demand public OSINT (DNS / RDAP / PTR; optional TLS, dig, whois). Not logged as search history."""
     if not _abbiey_osint_enabled():
         return jsonify({"ok": False, "error": "disabled", "facts": [], "modules": [], "entity": None}), 404
     if not request.is_json:

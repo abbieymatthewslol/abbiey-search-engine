@@ -6,3 +6,18 @@ services:
     environment:
       - PORT=8000
     restart: unless-stopped
+
+  # docker compose --profile kali up abbiey-search-kali
+  abbiey-search-kali:
+    profiles: ["kali"]
+    build:
+      context: .
+      dockerfile: Dockerfile.kali-dev
+    ports:
+      - "8001:8000"
+    environment:
+      - PORT=8000
+      - ABBIEY_OSINT_MODULES=dns,rdap,ptr,tls,dig,whois
+    volumes:
+      - .:/app
+    working_dir: /app
