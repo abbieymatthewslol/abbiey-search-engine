@@ -101,9 +101,32 @@ if os.environ.get("SITE_URL", "").startswith("https"):
 # Override for a different Supabase project (e.g. Vercel integration): ABBIEY_SUPABASE_PROJECT_REF + SUPABASE_URL
 _ABBIEY_SUPABASE_PROJECT_REF = (os.environ.get("ABBIEY_SUPABASE_PROJECT_REF") or "xwxscvllmghyogddpmii").strip()
 _ABBIEY_CANONICAL_SUPABASE_URL = f"https://{_ABBIEY_SUPABASE_PROJECT_REF}.supabase.co"
-_RAW_SUPABASE_URL = (os.environ.get("SUPABASE_URL") or "").strip()
+
+
+def _env_first_nonempty(*names: str) -> str:
+    """Read first set env var (Vercel Marketplace often uses abbiey_SUPABASE_* instead of SUPABASE_*)."""
+    for n in names:
+        v = (os.environ.get(n) or "").strip()
+        if v:
+            return v
+    return ""
+
+
+_RAW_SUPABASE_URL = _env_first_nonempty(
+    "SUPABASE_URL",
+    "abbiey_SUPABASE_URL",
+    "NEXT_PUBLIC_SUPABASE_URL",
+    "NEXT_PUBLIC_abbiey_SUPABASE_URL",
+).strip()
 _SUPABASE_URL = _RAW_SUPABASE_URL.rstrip("/")
-_SUPABASE_ANON_KEY = (os.environ.get("SUPABASE_ANON_KEY") or "").strip()
+_SUPABASE_ANON_KEY = _env_first_nonempty(
+    "SUPABASE_ANON_KEY",
+    "abbiey_SUPABASE_ANON_KEY",
+    "abbiey_SUPABASE_PUBLISHABLE_KEY",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+    "NEXT_PUBLIC_abbiey_SUPABASE_ANON_KEY",
+    "NEXT_PUBLIC_abbiey_SUPABASE_PUBLISHABLE_KEY",
+).strip()
 _SUPABASE_AUTH_ENABLED = bool(_SUPABASE_URL and _SUPABASE_ANON_KEY)
 _SUPABASE_URL_ENFORCE = os.environ.get("RUNNING_PYTEST") != "1"
 
