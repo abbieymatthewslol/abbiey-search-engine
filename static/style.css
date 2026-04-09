@@ -4645,3 +4645,176 @@ footer {
   color: var(--text-muted);
   font-style: italic;
 }
+
+/* ----- Digital animal (gamification) ----- */
+.header-pet-link {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-decoration: none;
+  padding: 0.35rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-subtle);
+  margin-right: 0.35rem;
+}
+.header-pet-link:hover {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border-subtle));
+}
+
+.pet-page {
+  padding: 1.5rem 1rem 3rem;
+  max-width: 44rem;
+  margin: 0 auto;
+}
+.pet-page-inner { width: 100%; }
+.pet-breadcrumb {
+  font-size: 0.8125rem;
+  color: var(--text-dim);
+  margin: 0 0 0.5rem;
+}
+.pet-breadcrumb a { color: var(--accent); text-decoration: none; }
+.pet-breadcrumb a:hover { text-decoration: underline; }
+.pet-title {
+  font-size: 1.65rem;
+  font-weight: 700;
+  margin: 0 0 0.35rem;
+  color: var(--text);
+}
+.pet-lead {
+  color: var(--text-dim);
+  font-size: 0.9375rem;
+  line-height: 1.55;
+  margin: 0 0 1.5rem;
+}
+.pet-card {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  align-items: center;
+  padding: 1.25rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-raised);
+  margin-bottom: 1.75rem;
+}
+.pet-avatar-visual {
+  width: 6.5rem;
+  height: 6.5rem;
+  border-radius: 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  border: 2px solid var(--border-subtle);
+  transition: filter 0.35s ease, box-shadow 0.35s ease, transform 0.35s ease;
+}
+.pet-avatar-emoji { font-size: 3rem; line-height: 1; }
+.pet-stage-0 { filter: grayscale(0.35) brightness(0.82); }
+.pet-stage-1 { filter: grayscale(0.12) brightness(0.95); }
+.pet-stage-2 {
+  filter: brightness(1.05) saturate(1.15);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent),
+    0 0 24px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.pet-stage-3 {
+  filter: brightness(1.12) saturate(1.25);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent),
+    0 0 36px color-mix(in srgb, var(--accent) 28%, transparent);
+  animation: pet-pulse-glow 3.2s ease-in-out infinite;
+}
+@keyframes pet-pulse-glow {
+  0%, 100% { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent), 0 0 28px color-mix(in srgb, var(--accent) 22%, transparent); }
+  50% { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 70%, transparent), 0 0 44px color-mix(in srgb, var(--accent) 35%, transparent); }
+}
+.pet-tier-silver.pet-avatar-visual { border-color: color-mix(in srgb, #c0c0c0 55%, var(--border-subtle)); }
+.pet-tier-gold.pet-avatar-visual { border-color: color-mix(in srgb, #eab308 50%, var(--border-subtle)); }
+.pet-tier-platinum.pet-avatar-visual { border-color: color-mix(in srgb, #e5e7eb 65%, var(--border-subtle)); }
+.pet-stats { flex: 1; min-width: 12rem; }
+.pet-species-line { margin: 0 0 0.5rem; font-size: 1.05rem; color: var(--text); }
+.pet-stat-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.875rem;
+}
+.pet-stat-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  color: var(--text-dim);
+}
+.pet-stat-list strong { color: var(--text); }
+.pet-section { margin-bottom: 1.75rem; }
+.pet-section-title {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 0 0 0.35rem;
+  color: var(--text);
+}
+.pet-species-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr));
+  gap: 0.65rem;
+  margin-top: 0.75rem;
+}
+.pet-species-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.75rem 0.5rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.8125rem;
+}
+.pet-species-btn:hover { border-color: var(--accent); }
+.pet-species-btn.is-active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg));
+}
+.pet-species-emoji { font-size: 1.75rem; line-height: 1; }
+.pet-perk-list {
+  margin: 0.5rem 0 0;
+  padding-left: 1.25rem;
+  color: var(--text-dim);
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+.pet-footer-actions { margin-top: 2rem; }
+.pet-lb-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  margin-bottom: 1rem;
+}
+.pet-lb-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+.pet-lb-table th,
+.pet-lb-table td {
+  padding: 0.55rem 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-dim);
+}
+.pet-lb-table th {
+  background: var(--bg-raised);
+  color: var(--text);
+  font-weight: 600;
+}
+.pet-lb-you { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.pet-lb-you-badge {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  margin-left: 0.25rem;
+}

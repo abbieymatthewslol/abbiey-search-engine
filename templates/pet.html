@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}Digital animal · abbieysearch{% endblock %}
+
+{% block body_class %}page-pet{% endblock %}
+
+{% block content %}
+<main class="pet-page">
+    <div class="pet-page-inner">
+        <p class="pet-breadcrumb"><a href="/search">Search</a> · <span>Digital animal</span></p>
+        <h1 class="pet-title">Your digital animal</h1>
+        <p class="pet-lead">Searches, saved results, and shares earn XP. Stay within daily limits—spam does not rank you up.</p>
+
+        <div class="pet-card">
+            <div class="pet-avatar-visual pet-stage-{{ pet.stage }} pet-tier-{{ pet.tier }}"
+                 data-species="{{ pet.species }}" data-stage="{{ pet.stage }}" role="img"
+                 aria-label="{{ pet.species_label }} stage {{ pet.stage }}">
+                <span class="pet-avatar-emoji" aria-hidden="true">
+                    {% if pet.species == 'hummingbird' %}🐦{% elif pet.species == 'firefly' %}✨{% elif pet.species == 'snake' %}🐍{% else %}🐬{% endif %}
+                </span>
+            </div>
+            <div class="pet-stats">
+                <p class="pet-species-line"><strong>{{ pet.species_label }}</strong></p>
+                <ul class="pet-stat-list">
+                    <li><span>XP</span> <strong>{{ pet.xp_total }}</strong></li>
+                    <li><span>Level</span> <strong>{{ pet.level }}</strong></li>
+                    <li><span>Stage</span> <strong>{{ pet.stage }}</strong> <span class="form-hint">(0–3 visuals)</span></li>
+                    <li><span>Tier</span> <strong class="pet-tier-label">{{ pet.tier | capitalize }}</strong></li>
+                    {% if pet.rank %}
+                    <li><span>Global rank</span> <strong>#{{ pet.rank }}</strong></li>
+                    {% endif %}
+                </ul>
+            </div>
+        </div>
+
+        <section class="pet-section">
+            <h2 class="pet-section-title">Choose species</h2>
+            <p class="form-hint">Pick one companion. You can change it anytime.</p>
+            <div class="pet-species-grid" id="pet-species-grid">
+                {% for s in species_list %}
+                <button type="button" class="pet-species-btn{% if pet.species == s %} is-active{% endif %}" data-species="{{ s }}">
+                    <span class="pet-species-emoji">{% if s == 'hummingbird' %}🐦{% elif s == 'firefly' %}✨{% elif s == 'snake' %}🐍{% else %}🐬{% endif %}</span>
+                    <span class="pet-species-name">{{ s | capitalize }}</span>
+                </button>
+                {% endfor %}
+            </div>
+            <div class="auth-errors" id="pet-species-err" role="alert" style="display:none;margin-top:0.75rem"></div>
+        </section>
+
+        <section class="pet-section">
+            <h2 class="pet-section-title">Tiers &amp; perks (MVP)</h2>
+            <ul class="pet-perk-list">
+                <li><strong>Bronze</strong> (top 50% by XP among active players): profile flair + up to <strong>110</strong> bookmarks on profile.</li>
+                <li><strong>Silver</strong> (top 20%): stronger glow + up to <strong>130</strong> bookmarks shown on profile.</li>
+                <li><strong>Gold / Platinum</strong> (top 5% / 1%): richest visuals + up to <strong>150</strong> bookmarks.</li>
+                <li><strong>Novice</strong>: learning the ropes—keep searching and saving to climb.</li>
+            </ul>
+        </section>
+
+        <p class="pet-footer-actions">
+            <a href="{{ url_for('pet_leaderboard') }}" class="search-btn auth-submit">Global leaderboard</a>
+            <a href="{{ url_for('profile') }}" class="header-auth-btn" style="margin-left:0.75rem">Profile</a>
+        </p>
+    </div>
+</main>
+{% endblock %}
+
+{% block extra_scripts %}
+<script nonce="{{ csp_nonce }}">
+(function () {
+    var grid = document.getElementById('pet-species-grid');
+    var err = document.getElementById('pet-species-err');
+    if (!grid) return;
+    grid.querySelectorAll('.pet-species-btn').forEach(function (btn) {
+        btn.addEventListener('click', async function () {
+            err.style.display = 'none';
+            var sp = btn.getAttribute('data-species');
+            try {
+                var r = await fetch('/api/pet/species', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ species: sp })
+                });
+                var d = await r.json().catch(function () { return null; });
+                if (r.ok && d && d.ok) {
+                    window.location.reload();
+                    return;
+                }
+                err.style.display = 'block';
+                err.textContent = (d && d.error) ? d.error : 'Could not save species.';
+            } catch (e) {
+                err.style.display = 'block';
+                err.textContent = 'Network error. Try again.';
+            }
+        });
+    });
+})();
+</script>
+{% endblock %}

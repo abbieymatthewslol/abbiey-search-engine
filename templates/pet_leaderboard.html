@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Leaderboard · digital animals · abbieysearch{% endblock %}
+
+{% block body_class %}page-pet-leaderboard{% endblock %}
+
+{% block content %}
+<main class="pet-page pet-leaderboard-page">
+    <div class="pet-page-inner">
+        <p class="pet-breadcrumb"><a href="/pet">Digital animal</a> · <span>Leaderboard</span></p>
+        <h1 class="pet-title">Global leaderboard</h1>
+        <p class="pet-lead">Ranked by total XP. Ties break on recent activity, then account age.</p>
+
+        {% if leaderboard %}
+        <div class="pet-lb-table-wrap">
+            <table class="pet-lb-table">
+                <thead>
+                    <tr>
+                        <th scope="col">#</th>
+                        <th scope="col">Player</th>
+                        <th scope="col">Animal</th>
+                        <th scope="col">Stage</th>
+                        <th scope="col">Level</th>
+                        <th scope="col">XP</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in leaderboard %}
+                    <tr class="{% if row.is_you %}pet-lb-you{% endif %}">
+                        <td>{{ row.rank }}</td>
+                        <td>@{{ row.username }}{% if row.is_you %} <span class="pet-lb-you-badge">you</span>{% endif %}</td>
+                        <td>{{ row.species | capitalize }}</td>
+                        <td>{{ row.stage }}</td>
+                        <td>{{ row.level }}</td>
+                        <td>{{ row.xp_total }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="pet-lead">No XP on the board yet. Be the first—run a search while signed in.</p>
+        {% endif %}
+
+        <p class="pet-footer-actions">
+            <a href="{{ url_for('pet_home') }}" class="header-auth-btn">Back to your animal</a>
+        </p>
+    </div>
+</main>
+{% endblock %}
