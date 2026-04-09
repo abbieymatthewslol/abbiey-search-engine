@@ -1,0 +1,27 @@
+.gitignore
+  3adc2fc985b227aa 9-11
+.github/workflows/deploy.yml
+  3adc2fc985b227aa 16-17
+.vercel/project.json
+  3adc2fc985b227aa 4
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.6",
+  "base_commit_sha": "2a3d8c72bd69bd5403203341b5f6d08c0d22a57c",
+  "prompts": {
+    "3adc2fc985b227aa": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "ac5dcb2e-8805-43b0-aa08-0cddda870df2",
+        "model": "default"
+      },
+      "human_author": "Abbiey",
+      "messages": [],
+      "total_additions": 282,
+      "total_deletions": 274,
+      "accepted_lines": 268,
+      "overriden_lines": 0
+    }
+  }
+}
