@@ -124,6 +124,9 @@
             googleBtn.disabled = true;
             googleBtn.innerHTML = 'Redirecting to Google\u2026';
             try {
+                try {
+                    sessionStorage.setItem('abbiey_oauth_next', nextUrl || '');
+                } catch (_nx) { /* ignore */ }
                 var res = await sb.auth.signInWithOAuth({
                     provider: 'google',
                     options: {

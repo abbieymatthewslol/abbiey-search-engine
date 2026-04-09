@@ -75,6 +75,9 @@
 
     function showErr(msg) {
         finished = true;
+        try {
+            sessionStorage.removeItem('abbiey_oauth_next');
+        } catch (_sn) { /* ignore */ }
         errEl.style.display = 'block';
         errEl.innerHTML = '<p>' + msg + '</p>';
     }
@@ -130,7 +133,16 @@
                 try {
                     sessionStorage.removeItem('abbiey_onboarding_phone');
                 } catch (_p1) { /* ignore */ }
-                window.location.replace('/search');
+                var nextPath = '';
+                try {
+                    nextPath = (sessionStorage.getItem('abbiey_oauth_next') || '').trim();
+                    sessionStorage.removeItem('abbiey_oauth_next');
+                } catch (_n0) { nextPath = ''; }
+                if (nextPath && nextPath.charAt(0) === '/' && nextPath.indexOf('//') !== 0) {
+                    window.location.replace(nextPath);
+                } else {
+                    window.location.replace('/search');
+                }
                 return;
             }
             showErr('Session sync failed. <a href="/login">Try again</a>.');
@@ -160,7 +172,8 @@
 
             var code = params.get('code');
             if (code) {
-                var ex = await sb.auth.exchangeCodeForSession(window.location.href);
+                // PKCE: pass the auth code only (not the full URL) — see supabase-js auth reference.
+                var ex = await sb.auth.exchangeCodeForSession(code);
                 if (ex.error) {
                     showErr(escapeHtml(ex.error.message || 'Could not complete sign-in') + ' <a href="/login">Try again</a>.');
                     return;
