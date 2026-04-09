@@ -1,0 +1,16 @@
+---
+description: Commits and pushes only go to the canonical abbiey-search-engine GitHub repo
+alwaysApply: true
+---
+
+# Canonical Git remote
+
+- **Only** commit and push work to this repository:
+  - `https://github.com/abbieymatthewslol/abbiey-search-engine.git`
+  - SSH equivalent: `git@github.com:abbieymatthewslol/abbiey-search-engine.git`
+- Do **not** add alternate `origin` URLs, push to other remotes, or suggest deploying from a fork unless the user explicitly asks to change remotes.
+- Default branch for releases/CI in this repo is **`master`** (see `.github/workflows/`). Keep `main` in sync when the user cares about Vercel Git integration; do not invent a different upstream.
+- When running `git push`, use `origin` (no ad-hoc remotes). If `origin` is wrong, fix it with:
+  `git remote set-url origin https://github.com/abbieymatthewslol/abbiey-search-engine.git`
+
+Optional local guard (if enabled): `core.hooksPath` → `.githooks` runs `pre-push` to block pushes when `origin` is not this repo.

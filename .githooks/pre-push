@@ -1,0 +1,9 @@
+#!/bin/sh
+# Block push when origin is not the canonical abbiey-search-engine repo.
+# Enable: git config core.hooksPath .githooks
+url=$(git remote get-url origin 2>/dev/null) || exit 0
+case "$url" in
+*abbieymatthewslol/abbiey-search-engine*) exit 0 ;;
+esac
+printf '%s\n' "pre-push: origin must be abbieymatthewslol/abbiey-search-engine (got: $url)" >&2
+exit 1
