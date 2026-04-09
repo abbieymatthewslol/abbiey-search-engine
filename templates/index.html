@@ -638,6 +638,33 @@
         </div>
         {% endif %}
 
+        {# ===== ANSWER LAYER (structured synthesis; same gate family as AI summary) ===== #}
+        {% if search_type == 'text' and show_answer_layer_block %}
+        <div class="answer-layer-card" id="answer-layer-card" role="region" aria-label="Synthesized answer from sources">
+            <div class="answer-layer-header">
+                <div class="answer-layer-header-left">
+                    <svg class="ai-sparkle" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.09 6.26L20 10l-5.91 1.74L12 18l-2.09-6.26L4 10l5.91-1.74L12 2z"/></svg>
+                    <span class="answer-layer-label" id="answer-layer-label">Synthesized answer</span>
+                </div>
+                <button type="button" class="ai-summary-dismiss answer-layer-dismiss" id="answer-layer-dismiss" aria-label="Hide synthesized answer for this visit" title="Hide for this visit">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 15l-6-6-6 6"/></svg>
+                </button>
+            </div>
+            <div class="answer-layer-body" id="answer-layer-body">
+                <div class="ai-skeleton">
+                    <div class="ai-skeleton-line" style="width:92%"></div>
+                    <div class="ai-skeleton-line" style="width:88%"></div>
+                    <div class="ai-skeleton-line" style="width:72%"></div>
+                    <div class="ai-skeleton-line" style="width:55%"></div>
+                </div>
+            </div>
+            <div class="answer-layer-sources" id="answer-layer-sources" hidden></div>
+        </div>
+        <div class="ai-summary-restore-wrap" id="answer-layer-restore-wrap" hidden>
+            <button type="button" class="ai-summary-restore-btn" id="answer-layer-restore-tab">Show synthesized answer</button>
+        </div>
+        {% endif %}
+
         {# ===== AI SUMMARY SKELETON (text tab, page 1 only; gated by query type) ===== #}
         {% if search_type == 'text' and show_ai_summary_block %}
         <div class="ai-summary-card{% if query_ui.answer_mode == 'single' %} answer-single{% endif %}" id="ai-summary-card" data-answer-mode="{{ query_ui.answer_mode or 'standard' }}">
@@ -1277,6 +1304,7 @@
         window.__searchQuery = {{ query|tojson }};
         window.__searchType = {{ search_type|tojson }};
         window.__queryUi = {{ query_ui|tojson }};
+        window.__showAnswerLayer = {{ show_answer_layer_block|tojson }};
     </script>
 
     {% if query and search_type == 'code' %}

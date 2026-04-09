@@ -237,11 +237,12 @@ OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 _VALID_GATE_VALUES = frozenset(("all", "paid", "none"))
 
 _FEATURE_GATES: dict[str, str] = {
-    "deep_web":    os.environ.get("FEATURE_DEEP_WEB",    "all"),
-    "ai_summary":  os.environ.get("FEATURE_AI_SUMMARY",  "all"),
-    "ai_chat":     os.environ.get("FEATURE_AI_CHAT",     "all"),
-    "code_search": os.environ.get("FEATURE_CODE_SEARCH", "all"),
-    "voice_search":os.environ.get("FEATURE_VOICE_SEARCH","all"),
+    "deep_web":     os.environ.get("FEATURE_DEEP_WEB",     "all"),
+    "ai_summary":   os.environ.get("FEATURE_AI_SUMMARY",   "all"),
+    "answer_layer": os.environ.get("FEATURE_ANSWER_LAYER", "all"),
+    "ai_chat":      os.environ.get("FEATURE_AI_CHAT",      "all"),
+    "code_search":  os.environ.get("FEATURE_CODE_SEARCH",  "all"),
+    "voice_search": os.environ.get("FEATURE_VOICE_SEARCH", "all"),
 }
 
 
@@ -2456,6 +2457,7 @@ _TEMPLATE_DEFAULTS = dict(
     search_lat=None,
     search_lon=None,
     show_ai_summary_block=False,
+    show_answer_layer_block=False,
     search_notice=None,
     current_user_has_paid_access=False,
     stripe_search_checkout_url=STRIPE_SEARCH_CHECKOUT_URL,
@@ -3056,6 +3058,7 @@ def search():
             search_lat=None,
             search_lon=None,
             show_ai_summary_block=False,
+            show_answer_layer_block=False,
             search_notice=None,
             current_user_has_paid_access=current_user_has_paid_access,
             cleanweb=False,
@@ -3237,6 +3240,10 @@ def search():
     )
     query_ui = {**query_ui, "show_ai_summary": _ai_summary_ok}
     show_ai_summary_block = search_type == "text" and _ai_summary_ok
+    show_answer_layer_block = (
+        show_ai_summary_block
+        and _feature_allowed("answer_layer", unlocked=current_user_has_paid_access)
+    )
     safeguard = (
         search_safeguard_meta(query)
         if (query and page == 1)
@@ -3244,6 +3251,7 @@ def search():
     )
     if safeguard.get("show_crisis_strip"):
         show_ai_summary_block = False
+        show_answer_layer_block = False
         query_ui = {**query_ui, "show_ai_summary": False}
     return render_template(
         "index.html",
@@ -3280,6 +3288,7 @@ def search():
         search_lat=user_lat,
         search_lon=user_lon,
         show_ai_summary_block=show_ai_summary_block,
+        show_answer_layer_block=show_answer_layer_block,
         search_notice=results.get("notice"),
         current_user_has_paid_access=current_user_has_paid_access,
         cleanweb=cleanweb,
@@ -3662,19 +3671,124 @@ def api_preview():
 # AI Research Assistant Chat
 # ---------------------------------------------------------------------------
 
-def _ollama_chat(messages, model=None):
+def _ollama_chat(messages, model=None, timeout=30.0):
     """AI chat using local Ollama instance."""
     _model = model or OLLAMA_MODEL
     try:
         resp = _get_http().post(
             f"{OLLAMA_BASE_URL}/api/chat",
             json={"model": _model, "messages": messages, "stream": False},
-            timeout=30.0,
+            timeout=float(timeout),
         )
         resp.raise_for_status()
         return resp.json()["message"]["content"]
     except Exception as e:
         raise RuntimeError(f"Ollama unavailable: {e}") from e
+
+
+# ---- Answer Layer: structured multi-source synthesis (JSON from LLM) ----
+ANSWER_LAYER_MAX_SOURCES = 10
+ANSWER_LAYER_SNIPPET_LEN = 300
+
+
+def _parse_llm_json_object(raw: str) -> dict | None:
+    """Extract a JSON object from model output (handles ```json fences)."""
+    if not raw or not isinstance(raw, str):
+        return None
+    s = raw.strip()
+    if s.startswith("```"):
+        s = re.sub(r"^```(?:json)?\s*", "", s, flags=re.I)
+        s = re.sub(r"\s*```\s*$", "", s)
+    try:
+        obj = json.loads(s)
+        return obj if isinstance(obj, dict) else None
+    except json.JSONDecodeError:
+        pass
+    m = re.search(r"\{[\s\S]*\}\s*$", s)
+    if m:
+        try:
+            obj = json.loads(m.group(0))
+            return obj if isinstance(obj, dict) else None
+        except json.JSONDecodeError:
+            return None
+    return None
+
+
+def _normalize_answer_layer_payload(data: dict, num_sources: int) -> dict:
+    """Clamp and validate Answer Layer fields for safe JSON → UI."""
+    out = {
+        "headline": (data.get("headline") or data.get("title") or "").strip()[:200],
+        "synthesis": (data.get("synthesis") or data.get("answer") or data.get("body") or "").strip()[:4000],
+        "claims": [],
+        "contradictions": [],
+        "reasoning_steps": [],
+    }
+
+    def _clean_indices(xs, cap=8):
+        if not isinstance(xs, list):
+            return []
+        o = []
+        for x in xs[:cap]:
+            try:
+                xi = int(x)
+                if 1 <= xi <= num_sources:
+                    o.append(xi)
+            except (TypeError, ValueError):
+                continue
+        return o
+
+    for c in data.get("claims") or []:
+        if not isinstance(c, dict):
+            continue
+        stmt = (c.get("statement") or c.get("claim") or "").strip()
+        if not stmt:
+            continue
+        try:
+            conf = float(c.get("confidence", 0.65))
+        except (TypeError, ValueError):
+            conf = 0.65
+        conf = max(0.0, min(1.0, conf))
+        out["claims"].append(
+            {
+                "statement": stmt[:800],
+                "confidence": conf,
+                "source_indices": _clean_indices(c.get("source_indices") or c.get("citations") or [], 6),
+            }
+        )
+
+    for z in data.get("contradictions") or []:
+        if not isinstance(z, dict):
+            continue
+        summ = (z.get("summary") or z.get("topic") or "").strip()
+        a = (z.get("position_a") or z.get("view_a") or "").strip()
+        b = (z.get("position_b") or z.get("view_b") or "").strip()
+        if not summ and not (a and b):
+            continue
+        sa = z.get("sources_a") or z.get("source_indices_a") or []
+        sb = z.get("sources_b") or z.get("source_indices_b") or []
+        out["contradictions"].append(
+            {
+                "summary": (summ or "Sources disagree on this point.")[:400],
+                "position_a": a[:600],
+                "position_b": b[:600],
+                "sources_a": _clean_indices(sa, 4),
+                "sources_b": _clean_indices(sb, 4),
+            }
+        )
+
+    for r in data.get("reasoning_steps") or data.get("reasoning") or []:
+        if isinstance(r, str):
+            r = {"step": r, "source_indices": []}
+        if not isinstance(r, dict):
+            continue
+        step = (r.get("step") or r.get("text") or "").strip()
+        if not step:
+            continue
+        out["reasoning_steps"].append(
+            {"step": step[:500], "source_indices": _clean_indices(r.get("source_indices") or [], 8)}
+        )
+
+    return out
 
 
 def _extractive_research(question, results):
@@ -3812,6 +3926,150 @@ def api_chat():
     except Exception:
         logger.exception("chat_fallback_failed")
         return jsonify({"error": _CHAT_MSG_UNAVAILABLE}), 503
+
+
+@app.route("/api/answer-layer")
+@limiter.limit("40 per minute")
+def api_answer_layer():
+    """Structured multi-source answer: synthesis, claims with confidence, contradictions, reasoning."""
+    query = (request.args.get("q") or "").strip()
+    region = (request.args.get("region") or "").strip()
+    lang = (request.args.get("lang") or "").strip()
+    cleanweb = request.args.get("cleanweb", "").strip().lower() in ("1", "true", "yes", "on")
+    anti_template = bool(cleanweb)
+
+    if not query or len(query) > MAX_QUERY_LENGTH:
+        return jsonify({"error": "Invalid query"}), 400
+
+    current_uid = _session_user_id_int(session.get("user_id"))
+    unlocked = _search_access_granted(uid=current_uid, token=_search_unlock_cookie_token())
+    prep = preprocess_query(query)
+    if not should_enable_ai_summary(prep):
+        return jsonify({"enabled": False, "layer": False, "clarify": detect_query_clarification(prep)}), 200
+    if not should_show_ai_summary(query, prep.intent):
+        return jsonify({"enabled": False, "layer": False, "clarify": detect_query_clarification(prep)}), 200
+
+    safeguard = search_safeguard_meta(query)
+    if safeguard.get("show_crisis_strip"):
+        return jsonify({"enabled": False, "message": "AI summary is not available for this query."}), 200
+
+    if not _feature_allowed("answer_layer", unlocked=unlocked):
+        return jsonify({"enabled": True, "layer": False}), 200
+
+    user_lat = _parse_request_coord("lat")
+    user_lon = _parse_request_coord("lon")
+    if user_lat is not None and not (-90 <= user_lat <= 90):
+        user_lat = None
+    if user_lon is not None and not (-180 <= user_lon <= 180):
+        user_lon = None
+    anchor_geo = None
+    if user_lat is not None and user_lon is not None and has_local_intent_signals(prep):
+        anchor_geo = _reverse_geocode_label(user_lat, user_lon)
+    loc_ctx = resolve_location_for_search(prep, user_lat, user_lon, anchor_geo)
+    backend_q = build_backend_search_query(query, prep, loc_ctx)
+
+    try:
+        payload = _fetch_results(
+            backend_q,
+            1,
+            "text",
+            region or None,
+            lang or None,
+            anti_template=anti_template,
+            local_rank_context=loc_ctx if loc_ctx.get("has_local_intent") else None,
+            source_query_for_fallback=query,
+        )
+    except Exception as e:
+        logger.exception("answer_layer_fetch_failed")
+        return jsonify({"enabled": True, "layer": False, "error": str(e)}), 200
+
+    organic = payload.get("results") or []
+    if not organic:
+        return jsonify(
+            {
+                "enabled": True,
+                "layer": False,
+                "error": "unavailable",
+                "message": _AI_SUMMARY_MSG_NO_CONTEXT,
+                "clarify": detect_query_clarification(prep),
+            }
+        ), 404
+
+    top = organic[:ANSWER_LAYER_MAX_SOURCES]
+    lines = []
+    for i, r in enumerate(top, start=1):
+        title = (r.get("title") or "")[:200]
+        url = (r.get("url") or "")[:500]
+        body = (r.get("body") or "")[:ANSWER_LAYER_SNIPPET_LEN]
+        lines.append(f"[{i}] {title}\nURL: {url}\nSnippet: {body}")
+
+    bundle = "\n\n".join(lines)
+    sys_prompt = (
+        "You are a careful research synthesizer. Output ONLY valid JSON, no markdown, no prose outside JSON.\n"
+        "Schema:\n"
+        "{\n"
+        '  "headline": "short neutral title (max 12 words)",\n'
+        '  "synthesis": "2-4 paragraphs merging what sources agree on; plain text; no URLs in body",\n'
+        '  "claims": [\n'
+        '    {"statement": "one factual claim", "confidence": 0.0-1.0, "source_indices": [1,2]}\n'
+        "  ],\n"
+        '  "contradictions": [\n'
+        '    {"summary": "what conflicts", "position_a": "...", "position_b": "...", '
+        '"sources_a": [1], "sources_b": [2]}\n'
+        "  ],\n"
+        '  "reasoning_steps": [\n'
+        '    {"step": "how you combined sources", "source_indices": [1,3]}\n'
+        "  ]\n"
+        "}\n"
+        "Rules: Use source_indices 1–N matching [N] in the bundle. If sources agree, contradictions can be []. "
+        "Include 3–8 claims when possible. Confidence reflects agreement and snippet strength."
+    )
+    user_prompt = f"User question: {query}\n\nSources (numbered):\n{bundle}"
+
+    try:
+        raw = _ollama_chat(
+            [
+                {"role": "system", "content": sys_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            timeout=55.0,
+        )
+    except Exception as e:
+        logger.warning("answer_layer_ollama_failed: %s", e)
+        return jsonify({"enabled": True, "layer": False}), 200
+
+    parsed = _parse_llm_json_object(raw)
+    if not parsed:
+        return jsonify({"enabled": True, "layer": False}), 200
+
+    layer = _normalize_answer_layer_payload(parsed, len(top))
+    if not layer.get("synthesis") and not layer.get("claims"):
+        return jsonify({"enabled": True, "layer": False}), 200
+
+    sources_out = []
+    for i, r in enumerate(top, start=1):
+        sources_out.append(
+            {
+                "index": i,
+                "title": (r.get("title") or "")[:300],
+                "url": r.get("url") or "",
+                "hostname": r.get("hostname") or "",
+            }
+        )
+
+    return jsonify(
+        {
+            "enabled": True,
+            "layer": True,
+            "query": query,
+            "headline": layer["headline"],
+            "synthesis": layer["synthesis"],
+            "claims": layer["claims"],
+            "contradictions": layer["contradictions"],
+            "reasoning_steps": layer["reasoning_steps"],
+            "sources": sources_out,
+        }
+    )
 
 
 @app.route("/api/ai-summary")

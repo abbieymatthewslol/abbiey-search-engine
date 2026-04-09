@@ -38,6 +38,18 @@ document.addEventListener("DOMContentLoaded", () => {
     return "";
   }
 
+  /** Region, language, Original web — keep AI APIs aligned with the current SERP. */
+  function searchContextQuerySuffix() {
+    let s = geoQuerySuffix();
+    const reg = document.getElementById("region-input");
+    const lng = document.getElementById("lang-input");
+    const cw = document.getElementById("cleanweb-input");
+    if (reg && reg.value.trim()) s += `&region=${encodeURIComponent(reg.value.trim())}`;
+    if (lng && lng.value.trim()) s += `&lang=${encodeURIComponent(lng.value.trim())}`;
+    if (cw && cw.value === "1") s += "&cleanweb=1";
+    return s;
+  }
+
   /** Server should send stable copy; this trims and blocks obvious junk from ever showing in the UI. */
   function userFacingPreviewError(msg) {
     const s = msg != null ? String(msg).trim() : "";
@@ -584,9 +596,11 @@ document.addEventListener("DOMContentLoaded", () => {
       document.querySelectorAll("a.result-title[target='_blank']").forEach(a => a.removeAttribute("target"));
     }
 
-    // AI summary
+    // AI summary + answer layer
     const aiCard = document.getElementById("ai-summary-card");
     if (aiCard && gs("aiSummary") === "false") aiCard.style.display = "none";
+    const answerLayerCard = document.getElementById("answer-layer-card");
+    if (answerLayerCard && gs("aiSummary") === "false") answerLayerCard.style.display = "none";
 
     // Answer cards
     if (gs("showCards") === "false") {
@@ -665,6 +679,14 @@ document.addEventListener("DOMContentLoaded", () => {
         _aic.style.display = "none";
         const _air = document.getElementById("ai-summary-restore-wrap");
         if (_air) _air.hidden = false;
+      }
+    }
+    if (sessionStorage.getItem("abbiey_answer_layer_session_hide") === "1") {
+      const _alc = document.getElementById("answer-layer-card");
+      if (_alc && gs("aiSummary") === "true") {
+        _alc.style.display = "none";
+        const _alr = document.getElementById("answer-layer-restore-wrap");
+        if (_alr) _alr.hidden = false;
       }
     }
   }
@@ -879,7 +901,14 @@ document.addEventListener("DOMContentLoaded", () => {
     if (c) c.style.display = checked ? "" : "none";
     const w = document.getElementById("ai-summary-restore-wrap");
     if (w) w.hidden = true;
-    if (checked) sessionStorage.removeItem("abbiey_ai_summary_session_hide");
+    const alc = document.getElementById("answer-layer-card");
+    if (alc) alc.style.display = checked ? "" : "none";
+    const alw = document.getElementById("answer-layer-restore-wrap");
+    if (alw) alw.hidden = true;
+    if (checked) {
+      sessionStorage.removeItem("abbiey_ai_summary_session_hide");
+      sessionStorage.removeItem("abbiey_answer_layer_session_hide");
+    }
   });
   wireToggle("autocomplete-toggle", "autocomplete", null);
   wireToggle("persist-region-toggle", "persistRegion", null);
@@ -1205,67 +1234,209 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // ===== AI Summary async fetch (text tab, page 1 only) =====
+  // ===== Answer layer + AI Summary async fetch (text tab, page 1 only) =====
   const aiCard = document.getElementById("ai-summary-card");
   const aiBody = document.getElementById("ai-summary-body");
   const aiSources = document.getElementById("ai-summary-sources");
+  const layerCard = document.getElementById("answer-layer-card");
+  const layerBody = document.getElementById("answer-layer-body");
+  const layerSources = document.getElementById("answer-layer-sources");
+  const layerRestoreWrap = document.getElementById("answer-layer-restore-wrap");
+  const layerRestoreBtn = document.getElementById("answer-layer-restore-tab");
+
+  function formatSynthesisParagraphs(text) {
+    const raw = (text || "").trim();
+    if (!raw) return "";
+    return raw
+      .split(/\n\n+/)
+      .map((p) => p.trim())
+      .filter(Boolean)
+      .map((p) => `<p>${esc(p).replace(/\n/g, "<br>")}</p>`)
+      .join("");
+  }
+
+  function sourceRefLink(sources, idx1) {
+    const s = sources && sources[idx1 - 1];
+    if (!s || !s.url || !/^https?:\/\//i.test(s.url)) {
+      return `<span class="answer-layer-src-num">[${idx1}]</span>`;
+    }
+    return `<a class="answer-layer-src-num ai-citation" href="${esc(s.url)}" target="_blank" rel="noopener">[${idx1}]</a>`;
+  }
+
+  function sourceIndicesHtml(sources, indices) {
+    if (!indices || !indices.length) return "";
+    return indices.map((i) => sourceRefLink(sources, i)).join(" ");
+  }
+
+  function renderAnswerLayer(data) {
+    if (!layerBody || !layerSources) return;
+    const src = data.sources || [];
+    const headline = (data.headline || "").trim();
+    const headHtml = headline ? `<h3 class="answer-layer-headline">${esc(headline)}</h3>` : "";
+    const synthHtml = formatSynthesisParagraphs(data.synthesis || "");
+    let claimsHtml = "";
+    (data.claims || []).forEach((c) => {
+      let cnum = Number(c.confidence);
+      if (!Number.isFinite(cnum)) cnum = 0.65;
+      const pct = Math.round(Math.max(0, Math.min(1, cnum)) * 100);
+      const w = Math.max(0, Math.min(100, pct));
+      const idxs = c.source_indices || [];
+      claimsHtml +=
+        `<div class="answer-layer-claim">` +
+        `<div class="answer-layer-claim-row">` +
+        `<span class="answer-layer-claim-text">${esc(c.statement || "")}</span>` +
+        `<span class="answer-layer-confidence-num">${w}%</span></div>` +
+        `<div class="answer-layer-confidence-track" role="presentation"><span class="answer-layer-confidence-fill" style="width:${w}%"></span></div>` +
+        (idxs.length ? `<div class="answer-layer-mini-src">Sources ${sourceIndicesHtml(src, idxs)}</div>` : "") +
+        `</div>`;
+    });
+    let contraHtml = "";
+    (data.contradictions || []).forEach((z) => {
+      contraHtml +=
+        `<div class="answer-layer-contra">` +
+        `<div class="answer-layer-contra-title">${esc(z.summary || "Sources disagree on this point.")}</div>` +
+        `<div class="answer-layer-contra-grid">` +
+        `<div><span class="answer-layer-contra-tag">View A</span><p>${esc(z.position_a || "")}</p>` +
+        `<div class="answer-layer-mini-src">${sourceIndicesHtml(src, z.sources_a || [])}</div></div>` +
+        `<div><span class="answer-layer-contra-tag">View B</span><p>${esc(z.position_b || "")}</p>` +
+        `<div class="answer-layer-mini-src">${sourceIndicesHtml(src, z.sources_b || [])}</div></div>` +
+        `</div></div>`;
+    });
+    const steps = data.reasoning_steps || [];
+    let whyHtml = "";
+    if (steps.length) {
+      const lis = steps
+        .map((r) => {
+          const step = esc((r.step || "").trim());
+          const links = sourceIndicesHtml(src, r.source_indices || []);
+          return `<li><span class="answer-layer-step-text">${step}</span>${
+            links ? ` <span class="answer-layer-step-srcs">${links}</span>` : ""
+          }</li>`;
+        })
+        .join("");
+      whyHtml = `<details class="answer-layer-why"><summary class="answer-layer-why-summary">Why this answer</summary><ol class="answer-layer-why-list">${lis}</ol></details>`;
+    }
+    layerBody.innerHTML =
+      `<div class="answer-layer-inner">${headHtml}<div class="answer-layer-synthesis">${synthHtml}</div>` +
+      (claimsHtml
+        ? `<section class="answer-layer-section" aria-label="Claims"><h4 class="answer-layer-section-title">Claims &amp; confidence</h4>${claimsHtml}</section>`
+        : "") +
+      (contraHtml
+        ? `<section class="answer-layer-section" aria-label="Contradictions"><h4 class="answer-layer-section-title">Where sources disagree</h4>${contraHtml}</section>`
+        : "") +
+      `${whyHtml}</div>`;
+    layerSources.hidden = false;
+    layerSources.innerHTML = src
+      .filter((s) => s.url && /^https?:\/\//i.test(s.url))
+      .map((s, i) => {
+        const t = (s.title || displayNetloc(s.url) || "").slice(0, 44);
+        return `<a class="ai-source-pill" href="${esc(s.url)}" target="_blank" rel="noopener">[${i + 1}] ${esc(t)}</a>`;
+      })
+      .join("");
+  }
+
+  function applyAiSummaryPayload(data, ok) {
+    if (!aiCard || !aiBody || !aiSources) return;
+    if (!data) {
+      throw new Error("No summary payload");
+    }
+    if (data.enabled === false) {
+      aiCard.classList.add("ai-hidden");
+      return;
+    }
+    if (!ok || data.error) {
+      const msg = userFacingApiError(
+        data.message || data.error,
+        "Summary temporarily unavailable. Results are shown below."
+      );
+      aiBody.innerHTML = `<div class="ai-summary-text ai-unavailable">${esc(msg)}</div>`;
+      aiSources.innerHTML = "";
+      return;
+    }
+    const lbl = document.getElementById("ai-summary-label");
+    if (lbl && data.answer_mode === "single") {
+      lbl.textContent = "Answer";
+      aiCard.classList.add("answer-single");
+      aiCard.setAttribute("data-answer-mode", "single");
+    } else if (lbl && data.answer_mode === "standard") {
+      lbl.textContent = "Summary";
+      aiCard.classList.remove("answer-single");
+      aiCard.setAttribute("data-answer-mode", "standard");
+    }
+    let summary = esc(data.summary);
+    summary = summary.replace(/\[(\d+)\]/g, (match, num) => {
+      const idx = parseInt(num, 10) - 1;
+      if (data.sources && data.sources[idx]) {
+        const url = data.sources[idx].url;
+        if (url && /^https?:\/\//i.test(url)) {
+          return `<a class="ai-citation" href="${esc(url)}" target="_blank" rel="noopener">${num}</a>`;
+        }
+      }
+      return match;
+    });
+    aiBody.innerHTML = `<div class="ai-summary-text">${summary}</div>`;
+    if (data.sources && data.sources.length) {
+      aiSources.innerHTML = data.sources
+        .filter((s) => s.url && /^https?:\/\//i.test(s.url))
+        .map((s, i) =>
+          `<a class="ai-source-pill" href="${esc(s.url)}" target="_blank" rel="noopener">[${i + 1}] ${esc(s.title).slice(0, 40)}</a>`
+        )
+        .join("");
+    }
+  }
+
+  function fetchAiSummaryOnly() {
+    if (!aiCard || !aiBody || !aiSources || !window.__searchQuery || window.__searchType !== "text") return Promise.resolve();
+    if (window.__queryUi && window.__queryUi.show_ai_summary === false) {
+      aiCard.classList.add("ai-hidden");
+      return Promise.resolve();
+    }
+    const aiQ = `/api/ai-summary?q=${encodeURIComponent(window.__searchQuery)}${searchContextQuerySuffix()}`;
+    return fetchJson(aiQ)
+      .then(({ ok, data }) => {
+        applyAiSummaryPayload(data, ok);
+      })
+      .catch(() => {
+        aiBody.innerHTML =
+          '<div class="ai-summary-text ai-unavailable">Summary temporarily unavailable. Results are shown below.</div>';
+        aiSources.innerHTML = "";
+      });
+  }
+
   if (aiCard && aiBody && window.__searchQuery && window.__searchType === "text") {
     if (window.__queryUi && window.__queryUi.show_ai_summary === false) {
       aiCard.classList.add("ai-hidden");
-    } else {
-      const aiQ = `/api/ai-summary?q=${encodeURIComponent(window.__searchQuery)}${geoQuerySuffix()}`;
-      fetchJson(aiQ)
-        .then(({ ok, data }) => {
-          if (!data) {
-            throw new Error("No summary payload");
-          }
-          if (data.enabled === false) {
-            aiCard.classList.add("ai-hidden");
-            return;
-          }
-          if (!ok || data.error) {
-            const msg = userFacingApiError(
-              data.message || data.error,
-              "Summary temporarily unavailable. Results are shown below."
-            );
-            aiBody.innerHTML = `<div class="ai-summary-text ai-unavailable">${esc(msg)}</div>`;
-            aiSources.innerHTML = "";
-            return;
-          }
-          const lbl = document.getElementById("ai-summary-label");
-          if (lbl && data.answer_mode === "single") {
-            lbl.textContent = "Answer";
-            aiCard.classList.add("answer-single");
-            aiCard.setAttribute("data-answer-mode", "single");
-          } else if (lbl && data.answer_mode === "standard") {
-            lbl.textContent = "Summary";
-            aiCard.classList.remove("answer-single");
-            aiCard.setAttribute("data-answer-mode", "standard");
-          }
-          let summary = esc(data.summary);
-          summary = summary.replace(/\[(\d+)\]/g, (match, num) => {
-            const idx = parseInt(num) - 1;
-            if (data.sources && data.sources[idx]) {
-              const url = data.sources[idx].url;
-              if (url && /^https?:\/\//i.test(url)) {
-                return `<a class="ai-citation" href="${esc(url)}" target="_blank" rel="noopener">${num}</a>`;
-              }
+      if (layerCard) layerCard.classList.add("ai-hidden");
+    } else if (window.__showAnswerLayer && layerCard && layerBody && layerSources) {
+      const layerHidden = sessionStorage.getItem("abbiey_answer_layer_session_hide") === "1";
+      if (layerHidden) {
+        fetchAiSummaryOnly();
+      } else {
+        const layerQ = `/api/answer-layer?q=${encodeURIComponent(window.__searchQuery)}${searchContextQuerySuffix()}`;
+        fetchJson(layerQ)
+          .then(({ ok, data }) => {
+            if (!data) {
+              throw new Error("No answer-layer payload");
             }
-            return match;
+            if (data.enabled === false) {
+              layerCard.classList.add("ai-hidden");
+              return fetchAiSummaryOnly();
+            }
+            if (data.layer === true && data.enabled === true) {
+              renderAnswerLayer(data);
+              aiCard.style.display = "none";
+              return;
+            }
+            layerCard.classList.add("ai-hidden");
+            return fetchAiSummaryOnly();
+          })
+          .catch(() => {
+            layerCard.classList.add("ai-hidden");
+            return fetchAiSummaryOnly();
           });
-          aiBody.innerHTML = `<div class="ai-summary-text">${summary}</div>`;
-          if (data.sources && data.sources.length) {
-            aiSources.innerHTML = data.sources
-              .filter(s => s.url && /^https?:\/\//i.test(s.url))
-              .map((s, i) =>
-                `<a class="ai-source-pill" href="${esc(s.url)}" target="_blank" rel="noopener">[${i+1}] ${esc(s.title).slice(0, 40)}</a>`
-              ).join("");
-          }
-        })
-        .catch(() => {
-          aiBody.innerHTML = '<div class="ai-summary-text ai-unavailable">Summary temporarily unavailable. Results are shown below.</div>';
-          aiSources.innerHTML = "";
-        });
+      }
+    } else {
+      fetchAiSummaryOnly();
     }
   }
 
@@ -1282,6 +1453,27 @@ document.addEventListener("DOMContentLoaded", () => {
       sessionStorage.removeItem("abbiey_ai_summary_session_hide");
       aiCard.style.display = "";
       aiRestoreWrap.hidden = true;
+    });
+  }
+
+  const layerDismiss = document.getElementById("answer-layer-dismiss");
+  if (layerDismiss && layerCard && layerRestoreWrap) {
+    layerDismiss.addEventListener("click", () => {
+      sessionStorage.setItem("abbiey_answer_layer_session_hide", "1");
+      layerCard.style.display = "none";
+      layerRestoreWrap.hidden = false;
+      if (aiCard) {
+        aiCard.style.display = "";
+        fetchAiSummaryOnly();
+      }
+    });
+  }
+  if (layerRestoreBtn && layerCard && layerRestoreWrap && aiCard) {
+    layerRestoreBtn.addEventListener("click", () => {
+      sessionStorage.removeItem("abbiey_answer_layer_session_hide");
+      layerCard.style.display = "";
+      layerRestoreWrap.hidden = true;
+      aiCard.style.display = "none";
     });
   }
 

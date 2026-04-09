@@ -3,6 +3,7 @@
 import json
 from unittest.mock import patch, MagicMock
 
+import app
 import pytest
 
 from app import (
@@ -937,6 +938,74 @@ class TestAISummary:
 
 
 # =====================================================================
+# ANSWER LAYER API
+# =====================================================================
+class TestAnswerLayer:
+    """Structured /api/answer-layer synthesis."""
+
+    def test_answer_layer_success(self, client, mock_ddg, mock_chat):
+        mock_chat.return_value = json.dumps(
+            {
+                "headline": "Test topic",
+                "synthesis": "First paragraph.\n\nSecond paragraph.",
+                "claims": [
+                    {"statement": "Claim one", "confidence": 0.8, "source_indices": [1]},
+                    {"statement": "Claim two", "confidence": 0.5, "source_indices": [1, 2]},
+                ],
+                "contradictions": [
+                    {
+                        "summary": "Conflict",
+                        "position_a": "A says X",
+                        "position_b": "B says Y",
+                        "sources_a": [1],
+                        "sources_b": [2],
+                    }
+                ],
+                "reasoning_steps": [
+                    {"step": "Read snippets", "source_indices": [1, 2]},
+                ],
+            }
+        )
+        resp = client.get("/api/answer-layer?q=what+is+python")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data.get("enabled") is True
+        assert data.get("layer") is True
+        assert data.get("headline") == "Test topic"
+        assert "First paragraph" in data.get("synthesis", "")
+        assert len(data.get("claims") or []) == 2
+        assert len(data.get("sources") or []) >= 1
+
+    def test_answer_layer_bad_json_falls_back_shape(self, client, mock_ddg, mock_chat):
+        mock_chat.return_value = "not json at all"
+        resp = client.get("/api/answer-layer?q=explain+gravity")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data.get("enabled") is True
+        assert data.get("layer") is False
+
+    def test_answer_layer_no_results_404(self, client):
+        with patch("app._fetch_results", return_value={"results": [], "has_more": False, "page": 1}):
+            resp = client.get("/api/answer-layer?q=why+does+water+freeze")
+        assert resp.status_code == 404
+        data = resp.get_json()
+        assert data.get("layer") is False
+
+    def test_answer_layer_gated_local(self, client, mock_ddg):
+        resp = client.get("/api/answer-layer?q=coffee+near+me")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data.get("enabled") is False
+
+    def test_answer_layer_feature_none(self, client, mock_ddg, mock_chat):
+        with patch.dict(app._FEATURE_GATES, {"answer_layer": "none"}, clear=False):
+            resp = client.get("/api/answer-layer?q=what+is+python")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data.get("layer") is False
+
+
+# =====================================================================
 # PRIVACY BADGE
 # =====================================================================
 class TestPrivacyBadge:
@@ -992,10 +1061,12 @@ class TestFeatureCardLogic:
     def test_ai_summary_only_on_text_tab(self, client, mock_ddg):
         resp = client.get("/search?q=test&type=images")
         assert b"ai-summary-card" not in resp.data
+        assert b"answer-layer-card" not in resp.data
 
     def test_ai_summary_on_text_tab(self, client, mock_ddg):
         resp = client.get("/search?q=what+is+a+test&type=text")
         assert b"ai-summary-card" in resp.data
+        assert b"answer-layer-card" in resp.data
 
     def test_clarify_chips_on_polysemous_query(self, client, mock_ddg):
         resp = client.get("/search?q=what+is+python&type=text")
