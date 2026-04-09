@@ -1,0 +1,25 @@
+query_understanding.py
+  fed32cf9d15728bc 393-407,410-424,427-439,442-457,467-469,476-478
+tests/test_query_understanding.py
+  fed32cf9d15728bc 16-17,121-122,125-130,133-137,140-144,147-148
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.6",
+  "base_commit_sha": "9cecd9c9ad8921debb74303886379b1f030cb267",
+  "prompts": {
+    "fed32cf9d15728bc": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "ef2f8bc9-a73a-45e2-9976-d150a8104973",
+        "model": "default"
+      },
+      "human_author": "Abbiey",
+      "messages": [],
+      "total_additions": 690,
+      "total_deletions": 588,
+      "accepted_lines": 574,
+      "overriden_lines": 6
+    }
+  }
+}

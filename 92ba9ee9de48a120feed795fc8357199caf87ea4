@@ -1,0 +1,21 @@
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.3",
+  "base_commit_sha": "92ba9ee9de48a120feed795fc8357199caf87ea4",
+  "prompts": {
+    "fb864f0daf6d8a95": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "96dd2785-364f-4942-abec-ed7c3e76d04d",
+        "model": "default"
+      },
+      "human_author": "Abbiey",
+      "messages": [],
+      "total_additions": 192,
+      "total_deletions": 32,
+      "accepted_lines": 185,
+      "overriden_lines": 2
+    }
+  }
+}

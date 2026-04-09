@@ -1,0 +1,23 @@
+tests/test_app.py
+  8f1cc0a8dbc514a8 1240-1368
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "7ae9a26bbdc7e799a68b4bca1b2bd9681af09688",
+  "prompts": {
+    "8f1cc0a8dbc514a8": {
+      "agent_id": {
+        "tool": "github-copilot",
+        "id": "a0eeb3b3-dbd0-48e6-a15f-2210b57f30d6",
+        "model": "copilot/auto"
+      },
+      "human_author": "Abbiey",
+      "messages": [],
+      "total_additions": 129,
+      "total_deletions": 0,
+      "accepted_lines": 129,
+      "overriden_lines": 0
+    }
+  }
+}

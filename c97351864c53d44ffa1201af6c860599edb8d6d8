@@ -1,0 +1,23 @@
+templates/auth_confirm.html
+  468b05e1a806d96b 19-25,40-43,48,61,63,74-76,78-80,83-85,89-90,92,95,97-98
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "c97351864c53d44ffa1201af6c860599edb8d6d8",
+  "prompts": {
+    "468b05e1a806d96b": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "947cd012-a2d7-4bac-88b7-e16affde850c",
+        "model": "default"
+      },
+      "human_author": "Abbiey",
+      "messages": [],
+      "total_additions": 102,
+      "total_deletions": 65,
+      "accepted_lines": 35,
+      "overriden_lines": 0
+    }
+  }
+}

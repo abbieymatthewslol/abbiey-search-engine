@@ -1,0 +1,23 @@
+.env.example
+  fed32cf9d15728bc 68
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.6",
+  "base_commit_sha": "9f6ba7c3e0a3f3566c88b2b3e75a888ee0e84cc6",
+  "prompts": {
+    "fed32cf9d15728bc": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "ef2f8bc9-a73a-45e2-9976-d150a8104973",
+        "model": "default"
+      },
+      "human_author": "Abbiey",
+      "messages": [],
+      "total_additions": 135,
+      "total_deletions": 134,
+      "accepted_lines": 119,
+      "overriden_lines": 0
+    }
+  }
+}
