@@ -1,0 +1,33 @@
+templates/profile.html
+  3adc2fc985b227aa 49-52
+templates/pet_leaderboard.html
+  3adc2fc985b227aa 1-2,4,6-11,13-42,44-49
+tests/test_digital_pet.py
+  3adc2fc985b227aa 1,3,5-6,8,11-12,14-23,26-32,35-40,43-46,49-54,56-60,62-65,68-76,78-84,87-90
+digital_pet.py
+  3adc2fc985b227aa 3-5,7,9-10,12,14-19,21-23,26-35,38-44,47-58,61-69
+templates/pet.html
+  3adc2fc985b227aa 1-2,4,6-11,13-33,35-47,49-57,59-65,67-99
+vercel.json
+  3adc2fc985b227aa 15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.6",
+  "base_commit_sha": "e9d507db3227e65b1818de1dadb9c358c9d3b368",
+  "prompts": {
+    "3adc2fc985b227aa": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "ac5dcb2e-8805-43b0-aa08-0cddda870df2",
+        "model": "default"
+      },
+      "human_author": "Abbiey",
+      "messages": [],
+      "total_additions": 513,
+      "total_deletions": 199,
+      "accepted_lines": 447,
+      "overriden_lines": 1
+    }
+  }
+}
