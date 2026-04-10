@@ -508,28 +508,36 @@ def _pg_execute(sql: str, args: list = None) -> list:
     """Execute SQL against PostgreSQL (Supabase). Returns list of row dicts."""
     import psycopg2
     import psycopg2.extras
+    import socket
     pg_sql = _adapt_sql_pg(sql)
     # Use %s placeholders for psycopg2 (SQLite uses ?)
     pg_sql = pg_sql.replace("?", "%s")
-    conn = psycopg2.connect(_SUPABASE_DB_URL, connect_timeout=8,
-                            options="-c statement_timeout=10000")
+
+    _orig_getaddrinfo = socket.getaddrinfo
+    if sys.platform == "win32":
+        def _ipv4_only(host, port, family=0, socktype=0, proto=0, flags=0):
+            return _orig_getaddrinfo(host, port, socket.AF_INET, socktype, proto, flags)
+        socket.getaddrinfo = _ipv4_only
+
     try:
-        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute(pg_sql, args or [])
-            # Fetch before commit — committing first can discard RETURNING / result rows (breaks signup INSERT … RETURNING id).
-            rows_out = []
-            if cur.description is not None:
-                rows_out = [dict(row) for row in cur.fetchall()]
-            conn.commit()
-            return rows_out
-    except Exception:
+        conn = psycopg2.connect(_SUPABASE_DB_URL, connect_timeout=8,
+                                options="-c statement_timeout=10000")
         try:
-            conn.rollback()
-        except Exception:
-            pass
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute(pg_sql, args or [])
+                # Fetch before commit — committing first can discard RETURNING / result rows (breaks signup INSERT … RETURNING id).
+                rows_out = []
+                if cur.description is not None:
+                    rows_out = [dict(row) for row in cur.fetchall()]
+                conn.commit()
+                return rows_out
+        finally:
+            conn.close()
+    except Exception:
+        socket.getaddrinfo = _orig_getaddrinfo
         raise
     finally:
-        conn.close()
+        socket.getaddrinfo = _orig_getaddrinfo
 
 
 def _init_pg_tables():
