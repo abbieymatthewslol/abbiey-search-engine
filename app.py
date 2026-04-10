@@ -513,31 +513,34 @@ def _pg_execute(sql: str, args: list = None) -> list:
     # Use %s placeholders for psycopg2 (SQLite uses ?)
     pg_sql = pg_sql.replace("?", "%s")
 
-    _orig_getaddrinfo = socket.getaddrinfo
-    if sys.platform == "win32":
-        def _ipv4_only(host, port, family=0, socktype=0, proto=0, flags=0):
-            return _orig_getaddrinfo(host, port, socket.AF_INET, socktype, proto, flags)
-        socket.getaddrinfo = _ipv4_only
+    # On Windows psycopg2 may try IPv6 for Supabase poolers which only accept
+    # IPv4.  We temporarily patch socket.getaddrinfo to force AF_INET, but that
+    # patch is global, so we hold _pg_conn_lock to prevent concurrent threads
+    # from interfering with each other's save/patch/restore cycle.
+    with _pg_conn_lock:
+        if sys.platform == "win32":
+            _real_getaddrinfo = socket.getaddrinfo
+            def _ipv4_only(host, port, family=0, socktype=0, proto=0, flags=0):
+                return _real_getaddrinfo(host, port, socket.AF_INET, socktype, proto, flags)
+            socket.getaddrinfo = _ipv4_only
+        try:
+            conn = psycopg2.connect(_SUPABASE_DB_URL, connect_timeout=8,
+                                    options="-c statement_timeout=10000")
+        finally:
+            if sys.platform == "win32":
+                socket.getaddrinfo = _real_getaddrinfo
 
     try:
-        conn = psycopg2.connect(_SUPABASE_DB_URL, connect_timeout=8,
-                                options="-c statement_timeout=10000")
-        try:
-            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-                cur.execute(pg_sql, args or [])
-                # Fetch before commit — committing first can discard RETURNING / result rows (breaks signup INSERT … RETURNING id).
-                rows_out = []
-                if cur.description is not None:
-                    rows_out = [dict(row) for row in cur.fetchall()]
-                conn.commit()
-                return rows_out
-        finally:
-            conn.close()
-    except Exception:
-        socket.getaddrinfo = _orig_getaddrinfo
-        raise
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(pg_sql, args or [])
+            # Fetch before commit — committing first can discard RETURNING / result rows (breaks signup INSERT … RETURNING id).
+            rows_out = []
+            if cur.description is not None:
+                rows_out = [dict(row) for row in cur.fetchall()]
+            conn.commit()
+            return rows_out
     finally:
-        socket.getaddrinfo = _orig_getaddrinfo
+        conn.close()
 
 
 def _init_pg_tables():
