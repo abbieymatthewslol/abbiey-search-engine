@@ -30,6 +30,7 @@ class TestRoutes:
         resp = client.get("/", follow_redirects=True)
         assert resp.status_code == 200
         assert b'id="search-input"' in resp.data
+        assert b'aria-label="Search query"' in resp.data
         assert b"abbiey.search" in resp.data
 
     def test_root_is_search_ui_not_marketing_about_page(self, client):
@@ -1058,6 +1059,22 @@ class TestPrivacyBadge:
     def test_image_tools_disclosure_on_search_page(self, client):
         resp = client.get("/search?q=")
         assert b"ImgOps may fetch the remote image URL directly" in resp.data
+
+    def test_close_controls_use_svg_icons_not_literal_times(self, client):
+        resp = client.get("/search?q=")
+        html = resp.data.decode("utf-8")
+        assert "&times;" not in html
+        assert "✕" not in html
+        assert 'class="close-icon"' in html
+
+    def test_search_page_has_accessible_close_controls_and_chat_input(self, client, mock_ddg):
+        resp = client.get("/search?q=test")
+        html = resp.data.decode("utf-8")
+        assert 'id="history-panel-close" aria-label="Close recent searches"' in html
+        assert 'id="privacy-popover-close" aria-label="Close"' in html
+        assert 'id="lightbox-close" aria-label="Close"' in html
+        assert 'id="chat-input"' in html
+        assert 'aria-label="Ask a follow-up question about these results"' in html
 
 
 # =====================================================================

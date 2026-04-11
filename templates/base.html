@@ -133,7 +133,7 @@
         <div class="settings-modal" id="settings-modal" role="dialog" aria-label="Settings">
             <div class="settings-modal-header">
                 <h2 class="settings-modal-title">Settings</h2>
-                <button type="button" class="settings-modal-close" id="settings-close" aria-label="Close">&times;</button>
+                <button type="button" class="settings-modal-close" id="settings-close" aria-label="Close">{% include 'includes/close_icon.html' %}</button>
             </div>
             <div class="settings-modal-body">
                 <section class="settings-section">
@@ -280,7 +280,7 @@
                     <div class="history-panel" id="history-panel" hidden>
                         <div class="history-panel-header">
                             <span class="history-panel-title">Recent searches</span>
-                            <button type="button" class="history-panel-close" id="history-panel-close">&times;</button>
+                            <button type="button" class="history-panel-close" id="history-panel-close" aria-label="Close recent searches">{% include 'includes/close_icon.html' %}</button>
                         </div>
                         <div id="history-panel-list" class="history-panel-list"></div>
                     </div>
@@ -306,7 +306,7 @@
     <div class="privacy-popover" id="privacy-popover">
         <div class="privacy-popover-header">
             <span>Unfiltered answers</span>
-            <button type="button" class="privacy-popover-close" id="privacy-popover-close" aria-label="Close">&times;</button>
+            <button type="button" class="privacy-popover-close" id="privacy-popover-close" aria-label="Close">{% include 'includes/close_icon.html' %}</button>
         </div>
         <p class="positioning-popover-lead">
             Unfiltered means direct, detailed, and honest &mdash; without marketing fluff. We try to separate evidence from interpretation, show tradeoffs, and keep the strongest counterpoint in view.

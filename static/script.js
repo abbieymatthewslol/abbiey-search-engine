@@ -16,6 +16,12 @@ document.addEventListener("DOMContentLoaded", () => {
     '<path d="M9.05 9.4A3.15 3.15 0 0 1 10.95 7.72" stroke-width="1.35"/>' +
     '<line x1="16.2" y1="15.05" x2="20.95" y2="20.4" stroke-width="2.2"/>' +
     "</g></svg>";
+  const CLOSE_ICON_SVG =
+    '<svg class="close-icon" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">' +
+    '<path d="M5 5L15 15" stroke="currentColor" stroke-width="1.85" stroke-linecap="round"/>' +
+    '<path d="M15 5L5 15" stroke="currentColor" stroke-width="1.85" stroke-linecap="round"/>' +
+    "</svg>";
+  const reducedMotionQuery = window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
 
   /** Append &lat=&lon= for local ranking when browser or prior search shared coordinates. */
   function geoQuerySuffix() {
@@ -98,6 +104,26 @@ document.addEventListener("DOMContentLoaded", () => {
       showToast("You're sending requests too quickly. Please wait a moment and try again.");
     }
     return { ok: resp.ok, status: resp.status, data, response: resp };
+  }
+  function motionDelay(ms) {
+    return reducedMotionQuery && reducedMotionQuery.matches ? 0 : ms;
+  }
+  function afterMotion(ms, cb) {
+    window.setTimeout(cb, motionDelay(ms));
+  }
+  function rememberFocus(fallback = null) {
+    const active = document.activeElement;
+    if (active instanceof HTMLElement) return active;
+    if (fallback instanceof HTMLElement) return fallback;
+    return null;
+  }
+  function restoreFocus(target) {
+    if (!(target instanceof HTMLElement)) return;
+    try {
+      target.focus({ preventScroll: true });
+    } catch (_) {
+      target.focus();
+    }
   }
 
   if (navigator.geolocation) {
@@ -287,6 +313,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const subEl = document.getElementById("paywall-subtitle");
     const closeBtn = document.getElementById("paywall-close");
     const waitBtn = document.getElementById("paywall-wait-24h");
+    let paywallReturnFocus = null;
     if (!overlay || !titleEl || !subEl) return;
 
     function formatWait() {
@@ -296,7 +323,8 @@ document.addEventListener("DOMContentLoaded", () => {
       return h < 1 ? "less than an hour" : `about ${h} hour${h === 1 ? "" : "s"}`;
     }
 
-    function showPaywall(cooldownOnly) {
+    function showPaywall(cooldownOnly, trigger = null) {
+      paywallReturnFocus = rememberFocus(trigger);
       overlay.hidden = false;
       overlay.setAttribute("aria-hidden", "false");
       document.body.style.overflow = "hidden";
@@ -307,12 +335,15 @@ document.addEventListener("DOMContentLoaded", () => {
         titleEl.textContent = "You've reached your free search limit.";
         subEl.textContent = "You can unlock unlimited searches with a one-time payment, or wait 24 hours for your free quota to reset.";
       }
+      afterMotion(0, () => restoreFocus(closeBtn));
     }
 
-    function hidePaywall() {
+    function hidePaywall({ restore = true } = {}) {
       overlay.hidden = true;
       overlay.setAttribute("aria-hidden", "true");
       document.body.style.overflow = "";
+      if (restore) restoreFocus(paywallReturnFocus);
+      paywallReturnFocus = null;
     }
 
     /** Same logical search across pagination should count once (infinite scroll uses ?page=). */
@@ -421,7 +452,7 @@ document.addEventListener("DOMContentLoaded", () => {
           if (!mustBlockNavigation()) return;
           e.preventDefault();
           e.stopPropagation();
-          showPaywall(isCooldownOnly());
+          showPaywall(isCooldownOnly(), e.submitter || input || form);
         },
         true
       );
@@ -437,7 +468,7 @@ document.addEventListener("DOMContentLoaded", () => {
           if (!mustBlockNavigation()) return;
           e.preventDefault();
           e.stopPropagation();
-          showPaywall(isCooldownOnly());
+          showPaywall(isCooldownOnly(), a);
         },
         true
       );
@@ -759,21 +790,28 @@ document.addEventListener("DOMContentLoaded", () => {
   const settingsBtn = document.getElementById("theme-settings-btn");
   const settingsOverlay = document.getElementById("settings-overlay");
   const settingsClose = document.getElementById("settings-close");
+  let settingsReturnFocus = null;
 
-  function openSettings() {
+  function openSettings(trigger = settingsBtn) {
+    settingsReturnFocus = rememberFocus(trigger);
+    document.body.style.overflow = "hidden";
     settingsOverlay.removeAttribute("hidden");
     syncSettingsUI();
+    afterMotion(0, () => restoreFocus(settingsClose));
   }
-  function closeSettings() {
+  function closeSettings({ restore = true } = {}) {
     if (!settingsOverlay || settingsOverlay.hasAttribute("hidden")) return;
     settingsOverlay.classList.add("closing");
-    setTimeout(() => {
+    afterMotion(140, () => {
       settingsOverlay.setAttribute("hidden", "");
       settingsOverlay.classList.remove("closing");
-    }, 140);
+      document.body.style.overflow = "";
+      if (restore) restoreFocus(settingsReturnFocus);
+      settingsReturnFocus = null;
+    });
   }
 
-  if (settingsBtn) settingsBtn.addEventListener("click", (e) => { e.stopPropagation(); openSettings(); });
+  if (settingsBtn) settingsBtn.addEventListener("click", (e) => { e.stopPropagation(); openSettings(e.currentTarget); });
   if (settingsClose) settingsClose.addEventListener("click", closeSettings);
   if (settingsOverlay) {
     settingsOverlay.addEventListener("click", (e) => { if (e.target === settingsOverlay) closeSettings(); });
@@ -1060,7 +1098,7 @@ document.addEventListener("DOMContentLoaded", () => {
         `<div class="history-panel-item" data-idx="${i}">` +
         `<span class="history-panel-item-icon">${CLOCK_SVG}</span>` +
         `<span class="history-panel-item-text" data-term="${esc(text)}">${esc(text)}</span>` +
-        `<button class="history-panel-item-del" data-del="${esc(text)}" title="Remove" type="button">&times;</button>` +
+        `<button class="history-panel-item-del" data-del="${esc(text)}" title="Remove" aria-label="Remove ${esc(text)}" type="button">${CLOSE_ICON_SVG}</button>` +
         `</div>`
       ).join("");
 
@@ -1086,32 +1124,44 @@ document.addEventListener("DOMContentLoaded", () => {
     const viewHistBtn = document.getElementById("view-history-btn");
     const histPanel = document.getElementById("history-panel");
     const histPanelClose = document.getElementById("history-panel-close");
+    let historyReturnFocus = null;
+
+    function closeHistoryPanel({ restore = true } = {}) {
+      if (!histPanel) return;
+      histPanel.hidden = true;
+      if (viewHistBtn) viewHistBtn.textContent = "View";
+      if (restore) restoreFocus(historyReturnFocus || viewHistBtn);
+      historyReturnFocus = null;
+    }
 
     if (viewHistBtn && histPanel) {
       viewHistBtn.addEventListener("click", () => {
         const isHidden = histPanel.hidden;
-        histPanel.hidden = !isHidden;
-        if (!isHidden) { viewHistBtn.textContent = "View"; return; }
+        if (!isHidden) { closeHistoryPanel({ restore: false }); return; }
+        historyReturnFocus = rememberFocus(viewHistBtn);
+        histPanel.hidden = false;
         viewHistBtn.textContent = "Hide";
         void renderPanel();
+        afterMotion(0, () => restoreFocus(histPanelClose));
       });
     }
     if (histPanelClose && histPanel) {
-      histPanelClose.addEventListener("click", () => {
-        histPanel.hidden = true;
-        if (viewHistBtn) viewHistBtn.textContent = "View";
-      });
+      histPanelClose.addEventListener("click", () => closeHistoryPanel());
     }
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && histPanel && !histPanel.hidden) {
+        closeHistoryPanel();
+      }
+    });
 
     // ===== Clear buttons =====
     const clearHistBtn = document.getElementById("clear-history-btn");
     if (clearHistBtn) {
       clearHistBtn.addEventListener("click", () => {
         panelClearAll();
-        if (histPanel) { histPanel.hidden = true; }
-        if (viewHistBtn) viewHistBtn.textContent = "View";
+        closeHistoryPanel({ restore: false });
         clearHistBtn.textContent = "Cleared!";
-        setTimeout(() => { clearHistBtn.textContent = "Clear all"; }, 1500);
+        afterMotion(1500, () => { clearHistBtn.textContent = "Clear all"; });
       });
     }
   }());
@@ -1239,14 +1289,19 @@ document.addEventListener("DOMContentLoaded", () => {
   const privacyBadge = document.getElementById("privacy-badge");
   const privacyPopover = document.getElementById("privacy-popover");
   const privacyPopoverClose = document.getElementById("privacy-popover-close");
+  let hidePrivacyPopoverFn = null;
   if (privacyBadge && privacyPopover) {
-    const hidePrivacyPopover = () => {
+    let privacyPopoverReturnFocus = null;
+    const hidePrivacyPopover = ({ restore = true } = {}) => {
       privacyBadge.setAttribute("aria-expanded", "false");
       privacyPopover.classList.add("closing");
-      setTimeout(() => {
+      afterMotion(150, () => {
         privacyPopover.classList.remove("open", "closing");
-      }, 150);
+        if (restore) restoreFocus(privacyPopoverReturnFocus || privacyBadge);
+        privacyPopoverReturnFocus = null;
+      });
     };
+    hidePrivacyPopoverFn = hidePrivacyPopover;
     privacyBadge.addEventListener("click", (e) => {
       e.stopPropagation();
       const overflowMenu = document.getElementById("header-overflow-menu");
@@ -1254,10 +1309,12 @@ document.addEventListener("DOMContentLoaded", () => {
         overflowMenu.setAttribute("hidden", "");
       }
       if (privacyPopover.classList.contains("open")) {
-        hidePrivacyPopover();
+        hidePrivacyPopover({ restore: false });
       } else {
+        privacyPopoverReturnFocus = rememberFocus(e.currentTarget);
         privacyBadge.setAttribute("aria-expanded", "true");
         privacyPopover.classList.add("open");
+        afterMotion(0, () => restoreFocus(privacyPopoverClose));
       }
     });
     if (privacyPopoverClose) {
@@ -1530,7 +1587,7 @@ document.addEventListener("DOMContentLoaded", () => {
       phIdx = (phIdx + 1) % placeholders.length;
       rotatingInput.setAttribute("placeholder", placeholders[phIdx]);
     }
-    const phInterval = setInterval(rotatePlaceholder, 3500);
+    const phInterval = window.setInterval(rotatePlaceholder, 3500);
     rotatingInput.addEventListener("focus", () => clearInterval(phInterval));
   }
 
@@ -1627,14 +1684,12 @@ document.addEventListener("DOMContentLoaded", () => {
       if (items.length) {
         h += `<div class="ac-header"><span class="ac-header-label">Recent</span><button class="ac-clear-btn" id="ac-clear-all" type="button">Clear</button></div>`;
         h += items.slice(0, 5).map((text, i) =>
-          `<div class="ac-item" data-idx="${i}" data-history="1"><span class="ac-item-icon ac-item-icon-clock"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span><span class="ac-item-text">${esc(text)}</span><button class="ac-delete-btn" data-del-idx="${i}" type="button" title="Remove">&times;</button></div>`
+          `<div class="ac-item" data-idx="${i}" data-history="1"><span class="ac-item-icon ac-item-icon-clock"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span><span class="ac-item-text">${esc(text)}</span><button class="ac-delete-btn" data-del-idx="${i}" type="button" title="Remove" aria-label="Remove ${esc(text)}">${CLOSE_ICON_SVG}</button></div>`
         ).join("");
       }
       dropdown.innerHTML = h;
       activeIdx = -1;
       showDropdown();
-      const clearBtn = document.getElementById("ac-clear-all");
-      if (clearBtn) clearBtn.addEventListener("click", (e) => { e.stopPropagation(); clearHistory(); hideDropdown(); });
     }
 
     function getItems() { return dropdown.querySelectorAll(".ac-item"); }
@@ -1663,7 +1718,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!val) { renderHistory(); return; }
       if (gs("autocomplete") === "false") { hideDropdown(); return; }
       hideDropdown();
-      acTimer = setTimeout(() => fetchSuggestions(val), 120);
+      acTimer = window.setTimeout(() => fetchSuggestions(val), motionDelay(120));
     });
     input.addEventListener("focus", () => { if (!input.value.trim()) renderHistory(); });
     input.addEventListener("keydown", (e) => {
@@ -1675,6 +1730,19 @@ document.addEventListener("DOMContentLoaded", () => {
       else if (e.key === "Escape") hideDropdown();
     });
     dropdown.addEventListener("mousedown", (e) => {
+      if (e.target.closest(".ac-item, .ac-delete-btn, .ac-clear-btn")) {
+        e.preventDefault();
+      }
+    });
+    dropdown.addEventListener("click", (e) => {
+      const clearBtn = e.target.closest(".ac-clear-btn");
+      if (clearBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        clearHistory();
+        hideDropdown();
+        return;
+      }
       const delBtn = e.target.closest(".ac-delete-btn");
       if (delBtn) { e.preventDefault(); e.stopPropagation(); const idx = parseInt(delBtn.getAttribute("data-del-idx")); const items = getHistory(); if (idx >= 0 && idx < items.length) removeHistory(items[idx]); renderHistory(); return; }
       const item = e.target.closest(".ac-item");
@@ -1893,9 +1961,11 @@ document.addEventListener("DOMContentLoaded", () => {
   const lightboxClose = document.getElementById("lightbox-close");
 
   let openLightbox = null;
+  let lightboxReturnFocus = null;
   if (lightbox) {
     lightbox.removeAttribute("hidden");
     openLightbox = function(card) {
+      lightboxReturnFocus = rememberFocus(card);
       lightboxImg.src = card.dataset.full;
       lightboxImg.alt = card.dataset.title;
       lightboxTitle.textContent = card.dataset.title;
@@ -1909,16 +1979,31 @@ document.addEventListener("DOMContentLoaded", () => {
           lightboxTools.hidden = true;
         }
       }
-      requestAnimationFrame(() => { lightbox.classList.add("active"); document.body.style.overflow = "hidden"; });
+      requestAnimationFrame(() => {
+        lightbox.classList.add("active");
+        document.body.style.overflow = "hidden";
+        restoreFocus(lightboxClose);
+      });
     };
-    function closeLightbox() {
+    function closeLightbox({ restore = true } = {}) {
       lightbox.classList.remove("active");
       document.body.style.overflow = "";
-      setTimeout(() => { if (!lightbox.classList.contains("active")) lightboxImg.src = ""; }, 250);
+      afterMotion(250, () => {
+        if (!lightbox.classList.contains("active")) lightboxImg.src = "";
+      });
+      if (restore) restoreFocus(lightboxReturnFocus);
+      lightboxReturnFocus = null;
     }
     lightboxClose.addEventListener("click", closeLightbox);
     lightbox.addEventListener("click", (e) => { if (e.target === lightbox) closeLightbox(); });
     document.addEventListener("keydown", (e) => { if (e.key === "Escape" && lightbox.classList.contains("active")) closeLightbox(); });
+    document.addEventListener("keydown", (e) => {
+      if ((e.key !== "Enter" && e.key !== " ") || !openLightbox) return;
+      const imageCard = e.target.closest ? e.target.closest(".image-card") : null;
+      if (!imageCard) return;
+      e.preventDefault();
+      openLightbox(imageCard);
+    });
     document.addEventListener("mouseover", (e) => { const card = e.target.closest(".image-card"); if (card && !card._preloaded) { card._preloaded = true; new Image().src = card.dataset.full; } }, { passive: true });
   }
 
@@ -2066,9 +2151,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Privacy popover close
     if (privacyPopover && privacyPopover.classList.contains("open") && !privacyPopover.classList.contains("closing")) {
       if (!target.closest(".privacy-popover") && !target.closest("#privacy-badge")) {
-        privacyBadge?.setAttribute("aria-expanded", "false");
-        privacyPopover.classList.add("closing");
-        setTimeout(() => { privacyPopover.classList.remove("open", "closing"); }, 150);
+        hidePrivacyPopoverFn?.({ restore: false });
       }
     }
 
@@ -2084,7 +2167,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (copyBtn && copyBtn.dataset.copy) {
       navigator.clipboard.writeText(copyBtn.dataset.copy).then(() => {
         copyBtn.classList.add("copied");
-        setTimeout(() => copyBtn.classList.remove("copied"), 1500);
+        afterMotion(1500, () => copyBtn.classList.remove("copied"));
       }).catch(() => {});
       return;
     }
@@ -2380,7 +2463,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!result || !result.dataset.url) return;
       previewFocusFromKeyboard = false;
       clearTimeout(hoverTimer);
-      hoverTimer = setTimeout(() => loadPreview(result.dataset.url), 300);
+      hoverTimer = window.setTimeout(() => loadPreview(result.dataset.url), motionDelay(300));
     }, { passive: true });
     document.addEventListener("mouseout", (e) => {
       if (e.target.closest(PREVIEW_CARD_SEL)) clearTimeout(hoverTimer);
