@@ -1007,22 +1007,23 @@ class TestAnswerLayer:
 
 
 # =====================================================================
-# PRIVACY BADGE
+# POSITIONING BADGE
 # =====================================================================
 class TestPrivacyBadge:
-    """Test privacy badge rendering in HTML."""
+    """Test header positioning badge rendering in HTML."""
 
     def test_privacy_badge_on_homepage(self, client):
         resp = client.get("/search?q=")
         assert b"privacy-badge" in resp.data
-        assert b"0 trackers" in resp.data
+        assert b"Depth + receipts" in resp.data
 
     def test_privacy_popover_on_homepage(self, client):
         resp = client.get("/search?q=")
         assert b"privacy-popover" in resp.data
-        assert b"cookies set" in resp.data
-        assert b"searches logged" in resp.data
-        assert b"data shared" in resp.data
+        assert b"Unfiltered answers" in resp.data
+        assert b"Depth by default" in resp.data
+        assert b"Receipts and traceability" in resp.data
+        assert b"Power-user controls" in resp.data
 
     def test_privacy_badge_on_search_page(self, client, mock_ddg):
         resp = client.get("/search?q=test")
@@ -1030,11 +1031,12 @@ class TestPrivacyBadge:
 
     def test_privacy_google_comparison(self, client):
         resp = client.get("/search?q=")
-        assert b"Google collects" in resp.data
+        assert b"Links only" in resp.data
+        assert b"Full excerpts" in resp.data
 
     def test_privacy_tagline(self, client):
         resp = client.get("/search?q=")
-        assert b"Your privacy is our priority" in resp.data
+        assert b"Built for people who want the <em>why</em>" in resp.data
 
 
 # =====================================================================

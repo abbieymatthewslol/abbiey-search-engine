@@ -66,10 +66,10 @@
                 </button>
                 <div class="header-overflow-menu" id="header-overflow-menu" hidden>
                     <div class="overflow-menu-row">
-                        <span class="overflow-menu-label">Privacy</span>
-                        <button type="button" class="privacy-badge" id="privacy-badge" aria-label="Privacy stats" title="Privacy stats">
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                            <span>0 trackers</span>
+                        <span class="overflow-menu-label">Answer mode</span>
+                        <button type="button" class="privacy-badge" id="privacy-badge" aria-label="How abbieysearch answers" aria-haspopup="dialog" aria-expanded="false" title="How abbieysearch answers">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+                            <span>Depth + receipts</span>
                         </button>
                     </div>
                     <div class="overflow-menu-row">
@@ -305,35 +305,61 @@
 
     <div class="privacy-popover" id="privacy-popover">
         <div class="privacy-popover-header">
-            <span>Your Privacy</span>
-            <button type="button" class="privacy-popover-close" id="privacy-popover-close">&times;</button>
+            <span>Unfiltered answers</span>
+            <button type="button" class="privacy-popover-close" id="privacy-popover-close" aria-label="Close">&times;</button>
         </div>
-        <div class="privacy-stats" id="privacy-stats">
-            <div class="privacy-stat">
-                <span class="privacy-stat-number" id="pstat-trackers">0</span>
-                <span class="privacy-stat-label">third-party trackers</span>
+        <p class="positioning-popover-lead">
+            Unfiltered means direct, detailed, and honest &mdash; without marketing fluff. We try to separate evidence from interpretation, show tradeoffs, and keep the strongest counterpoint in view.
+        </p>
+        <div class="positioning-points">
+            <div class="positioning-point">
+                <span class="positioning-point-title">Depth by default</span>
+                <p class="positioning-point-copy">Explain the why, show the steps, and keep the context that typical search results flatten away.</p>
             </div>
-            <div class="privacy-stat">
-                <span class="privacy-stat-number" id="pstat-personal">0</span>
-                <span class="privacy-stat-label">personal data stored</span>
+            <div class="positioning-point">
+                <span class="positioning-point-title">Receipts and traceability</span>
+                <p class="positioning-point-copy">Call out what is evidence, what is interpretation, and link you back to the source material.</p>
             </div>
-            <div class="privacy-stat">
-                <span class="privacy-stat-number" id="pstat-shared">0</span>
-                <span class="privacy-stat-label">data sold or shared</span>
+            <div class="positioning-point">
+                <span class="positioning-point-title">Power-user controls</span>
+                <p class="positioning-point-copy">Depth, evidence, and answer style controls are being surfaced so you can tune how much raw material you want.</p>
             </div>
         </div>
-        <div class="privacy-comparison">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
-            Google collects ~39 data points per search
+        <div class="positioning-mode-groups" aria-label="Communicated answer controls">
+            <div class="positioning-mode-group">
+                <span class="positioning-mode-label">Depth</span>
+                <div class="positioning-mode-chips">
+                    <span class="positioning-mode-chip">Quick</span>
+                    <span class="positioning-mode-chip">Standard</span>
+                    <span class="positioning-mode-chip">Deep</span>
+                    <span class="positioning-mode-chip">Research</span>
+                </div>
+            </div>
+            <div class="positioning-mode-group">
+                <span class="positioning-mode-label">Evidence</span>
+                <div class="positioning-mode-chips">
+                    <span class="positioning-mode-chip">Links only</span>
+                    <span class="positioning-mode-chip">Key quotes</span>
+                    <span class="positioning-mode-chip">Full excerpts</span>
+                </div>
+            </div>
+            <div class="positioning-mode-group">
+                <span class="positioning-mode-label">Answer style</span>
+                <div class="positioning-mode-chips">
+                    <span class="positioning-mode-chip">Direct</span>
+                    <span class="positioning-mode-chip">Balanced</span>
+                    <span class="positioning-mode-chip">Adversarial</span>
+                </div>
+            </div>
         </div>
-        <div class="privacy-tagline">Your privacy is our priority.</div>
+        <p class="positioning-popover-note">Built for people who want the <em>why</em> &mdash; not just a link list.</p>
     </div>
 
     {% block content %}{% endblock %}
 
     <footer>
-        <p><strong>abbieysearch</strong> &mdash; No tracking. No profiling. No judgment.</p>
-        <p class="footer-sub">We don't log your searches. Your data stays yours.</p>
+        <p><strong>abbieysearch</strong> &mdash; Real answers. Full context. No fluff.</p>
+        <p class="footer-sub">Direct takes, source-backed evidence, and space to go deeper when the question deserves it.</p>
         <p class="footer-links">
             <a href="/privacy">Privacy Policy</a>
             &nbsp;&middot;&nbsp;

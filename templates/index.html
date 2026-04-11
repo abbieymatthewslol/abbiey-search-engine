@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>{% if query %}{{ query }} — abbieysearch{% else %}abbieysearch — private web search{% endif %}</title>
+    <title>{% if query %}{{ query }} — abbieysearch{% else %}abbieysearch — unfiltered answers with receipts{% endif %}</title>
     <script nonce="{{ csp_nonce }}">
         (function() {
             var t = localStorage.getItem('theme') || 'dark';
@@ -29,17 +29,17 @@
     <script defer src="/_vercel/speed-insights/script.js"></script>
     <!-- SEO meta tags -->
     {% if query %}
-    <meta name="description" content="Private search results for {{ query }} — no tracking, no profiling.">
+    <meta name="description" content="Direct, sourced search results for {{ query }} — deeper context, stronger receipts, fewer dead ends.">
     <meta property="og:title" content="{{ query }} — abbieysearch">
-    <meta property="og:description" content="Private search results for: {{ query }}">
+    <meta property="og:description" content="Direct, sourced search results for: {{ query }}">
     <meta property="og:url" content="{{ site_base_url }}/search?q={{ query|urlencode }}">
     {% else %}
-    <meta name="description" content="abbieysearch is a privacy-first web search engine. Search the web without query logging or tracking. No account required.">
-    <meta property="og:title" content="abbieysearch — private web search">
-    <meta property="og:description" content="Privacy-first web search: no query logging, no profiling. Sign in is optional for bookmarks and history.">
+    <meta name="description" content="abbieysearch goes deeper than the first page with direct answers, source-backed context, and configurable depth.">
+    <meta property="og:title" content="abbieysearch — unfiltered answers with receipts">
+    <meta property="og:description" content="Direct answers, deeper context, and source-backed receipts for people who want the why, not just the link list.">
     <meta property="og:url" content="{{ site_base_url }}/search">
     {% endif %}
-    <meta name="keywords" content="private search engine, no tracking search, privacy search, anonymous search">
+    <meta name="keywords" content="deep search engine, sourced answers, research search, direct answers, full-context search">
     <meta name="author" content="abbieysearch">
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="abbieysearch">
@@ -47,10 +47,10 @@
     <meta name="twitter:card" content="summary_large_image">
     {% if query %}
     <meta name="twitter:title" content="{{ query }} — abbieysearch">
-    <meta name="twitter:description" content="Private search results for: {{ query }}">
+    <meta name="twitter:description" content="Direct, sourced search results for: {{ query }}">
     {% else %}
-    <meta name="twitter:title" content="abbieysearch — private web search">
-    <meta name="twitter:description" content="Privacy-first web search. No account required; sign in only for optional account features.">
+    <meta name="twitter:title" content="abbieysearch — unfiltered answers with receipts">
+    <meta name="twitter:description" content="Direct answers, deeper context, and sources you can inspect. Built for people who want the why.">
     {% endif %}
     <meta name="twitter:image" content="{{ site_base_url }}/static/og-image.png">
     {% if not query %}<link rel="canonical" href="{{ site_base_url }}/search">{% endif %}
@@ -73,7 +73,7 @@
       "@type": "WebSite",
       "name": "abbieysearch",
       "url": {{ (site_base_url + '/search')|tojson }},
-      "description": "abbieysearch is a privacy-first web search engine. No query logging on our servers; sign in is optional.",
+      "description": "abbieysearch delivers direct answers, deeper context, and source-backed receipts for people who want the why.",
       "potentialAction": {
         "@type": "SearchAction",
         "target": {
@@ -88,7 +88,7 @@
 <body class="{% if query %}has-results{% endif %}">
     <noscript>
         <div class="noscript-banner" role="note">
-            <strong>abbieysearch</strong> &mdash; privacy-first web search. No account required.
+            <strong>abbieysearch</strong> &mdash; direct, detailed search with receipts.
             <a href="/privacy">Privacy Policy</a> &middot; <a href="/terms">Terms</a> &middot; <a href="/search">Search</a>
         </div>
     </noscript>
@@ -98,9 +98,9 @@
             <a href="/" class="logo">abbiey<span>search</span></a>
             {% if not query %}
             <ul class="home-support" role="list" aria-label="Principles">
-                <li class="home-support-item">answers over obstacles</li>
-                <li class="home-support-item">context over constraints</li>
-                <li class="home-support-item">clarity over confusion</li>
+                <li class="home-support-item">unfiltered answers</li>
+                <li class="home-support-item">depth by default</li>
+                <li class="home-support-item">receipts over fluff</li>
             </ul>
             {% endif %}
         </div>
@@ -112,10 +112,10 @@
                 </button>
                 <div class="header-overflow-menu" id="header-overflow-menu" hidden>
                     <div class="overflow-menu-row">
-                        <span class="overflow-menu-label">Privacy</span>
-                        <button type="button" class="privacy-badge" id="privacy-badge" aria-label="Privacy stats" title="Privacy stats">
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                            <span>0 trackers</span>
+                        <span class="overflow-menu-label">Answer mode</span>
+                        <button type="button" class="privacy-badge" id="privacy-badge" aria-label="How abbieysearch answers" aria-haspopup="dialog" aria-expanded="false" title="How abbieysearch answers">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+                            <span>Depth + receipts</span>
                         </button>
                     </div>
                     <div class="overflow-menu-row">
@@ -378,32 +378,57 @@
         </div>
     </div>
 
-    {# ===== PRIVACY POPOVER ===== #}
+    {# ===== POSITIONING POPOVER ===== #}
     <div class="privacy-popover" id="privacy-popover">
         <div class="privacy-popover-header">
-            <span>Your Privacy</span>
-            <button type="button" class="privacy-popover-close" id="privacy-popover-close">&times;</button>
+            <span>Unfiltered answers</span>
+            <button type="button" class="privacy-popover-close" id="privacy-popover-close" aria-label="Close">&times;</button>
         </div>
-        <div class="privacy-stats" id="privacy-stats">
-            <div class="privacy-stat">
-                <span class="privacy-stat-number" id="pstat-trackers">0</span>
-                <span class="privacy-stat-label">searches logged</span>
+        <p class="positioning-popover-lead">
+            Unfiltered means direct, detailed, and honest &mdash; without marketing fluff. We try to separate evidence from interpretation, show tradeoffs, and keep the strongest counterpoint in view.
+        </p>
+        <div class="positioning-points">
+            <div class="positioning-point">
+                <span class="positioning-point-title">Depth by default</span>
+                <p class="positioning-point-copy">Explain the why, show the steps, and keep the context that typical search results flatten away.</p>
             </div>
-            <div class="privacy-stat">
-                <span class="privacy-stat-number" id="pstat-personal">0</span>
-                <span class="privacy-stat-label">cookies set</span>
+            <div class="positioning-point">
+                <span class="positioning-point-title">Receipts and traceability</span>
+                <p class="positioning-point-copy">Call out what is evidence, what is interpretation, and link you back to the source material.</p>
             </div>
-            <div class="privacy-stat">
-                <span class="privacy-stat-number" id="pstat-shared">0</span>
-                <span class="privacy-stat-label">data shared</span>
+            <div class="positioning-point">
+                <span class="positioning-point-title">Power-user controls</span>
+                <p class="positioning-point-copy">Depth, evidence, and answer style controls are being surfaced so you can tune how much raw material you want.</p>
             </div>
         </div>
-        <div class="privacy-comparison">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
-            Google collects ~39 data points per search
+        <div class="positioning-mode-groups" aria-label="Communicated answer controls">
+            <div class="positioning-mode-group">
+                <span class="positioning-mode-label">Depth</span>
+                <div class="positioning-mode-chips">
+                    <span class="positioning-mode-chip">Quick</span>
+                    <span class="positioning-mode-chip">Standard</span>
+                    <span class="positioning-mode-chip">Deep</span>
+                    <span class="positioning-mode-chip">Research</span>
+                </div>
+            </div>
+            <div class="positioning-mode-group">
+                <span class="positioning-mode-label">Evidence</span>
+                <div class="positioning-mode-chips">
+                    <span class="positioning-mode-chip">Links only</span>
+                    <span class="positioning-mode-chip">Key quotes</span>
+                    <span class="positioning-mode-chip">Full excerpts</span>
+                </div>
+            </div>
+            <div class="positioning-mode-group">
+                <span class="positioning-mode-label">Answer style</span>
+                <div class="positioning-mode-chips">
+                    <span class="positioning-mode-chip">Direct</span>
+                    <span class="positioning-mode-chip">Balanced</span>
+                    <span class="positioning-mode-chip">Adversarial</span>
+                </div>
+            </div>
         </div>
-        <div class="privacy-tagline">Your privacy is our priority.</div>
-        <p class="privacy-popover-policy"><a href="/privacy">Privacy Policy</a></p>
+        <p class="positioning-popover-note">Built for people who want the <em>why</em> &mdash; not just a link list.</p>
     </div>
 
     <div class="app-layout {% if query %}has-chat{% endif %}"{% if query %} data-query-intent="{{ query_ui.intent }}" data-query-local="{% if query_ui.local_intent %}1{% else %}0{% endif %}"{% endif %}>
@@ -448,6 +473,56 @@
             </form>
 
             {% if not query %}
+            <div class="home-message" aria-label="Search positioning">
+                <p class="home-message-title">Unfiltered answers, with receipts.</p>
+                <p class="home-message-subtitle">Get direct, detailed explanations with sources, tradeoffs, and next steps.</p>
+            </div>
+            <section class="home-depth-advantage" aria-label="Depth advantage">
+                <article class="home-depth-card">
+                    <h2 class="home-depth-card-title">Structured deep dives</h2>
+                    <p class="home-depth-card-copy">Summarize the consensus, then surface the strongest opposing view and where the evidence is thin.</p>
+                </article>
+                <article class="home-depth-card">
+                    <h2 class="home-depth-card-title">Actionable outputs</h2>
+                    <p class="home-depth-card-copy">Turn search into checklists, troubleshooting steps, templates, and concrete next moves.</p>
+                </article>
+                <article class="home-depth-card">
+                    <h2 class="home-depth-card-title">More context, fewer dead ends</h2>
+                    <p class="home-depth-card-copy">Explain assumptions, decode jargon, and call out the edge cases before they waste your time.</p>
+                </article>
+                <article class="home-depth-card">
+                    <h2 class="home-depth-card-title">User-controlled verbosity</h2>
+                    <p class="home-depth-card-copy">Move between quick takeaways and research mode depending on how much raw material you want to inspect.</p>
+                </article>
+            </section>
+            <div class="positioning-mode-groups home-mode-groups" aria-label="Upcoming answer controls">
+                <div class="positioning-mode-group">
+                    <span class="positioning-mode-label">Depth</span>
+                    <div class="positioning-mode-chips">
+                        <span class="positioning-mode-chip">Quick</span>
+                        <span class="positioning-mode-chip">Standard</span>
+                        <span class="positioning-mode-chip">Deep</span>
+                        <span class="positioning-mode-chip">Research</span>
+                    </div>
+                </div>
+                <div class="positioning-mode-group">
+                    <span class="positioning-mode-label">Evidence</span>
+                    <div class="positioning-mode-chips">
+                        <span class="positioning-mode-chip">Links only</span>
+                        <span class="positioning-mode-chip">Key quotes</span>
+                        <span class="positioning-mode-chip">Full excerpts</span>
+                    </div>
+                </div>
+                <div class="positioning-mode-group">
+                    <span class="positioning-mode-label">Answer style</span>
+                    <div class="positioning-mode-chips">
+                        <span class="positioning-mode-chip">Direct</span>
+                        <span class="positioning-mode-chip">Balanced</span>
+                        <span class="positioning-mode-chip">Adversarial</span>
+                    </div>
+                </div>
+            </div>
+            <p class="home-safety-note">Unfiltered = direct, detailed, and honest &mdash; without marketing fluff.</p>
             <div class="home-recent-wrap">
                 <div id="recent-searches-home" class="recent-searches-home"></div>
             </div>
@@ -548,6 +623,21 @@
                 </div>
                 {% endif %}
             </div>
+            {% if query and search_type == 'text' %}
+            <section class="results-positioning-strip" aria-label="Answering approach">
+                <div class="results-positioning-copy">
+                    <span class="results-positioning-title">Real answers. Full context. No fluff.</span>
+                    <p class="results-positioning-subtitle">Direct takes, source-backed evidence, and the strongest counterpoint when the answer is messy.</p>
+                </div>
+                <div class="positioning-mode-chips results-mode-chips" aria-hidden="true">
+                    <span class="positioning-mode-chip">Quick</span>
+                    <span class="positioning-mode-chip">Deep</span>
+                    <span class="positioning-mode-chip">Research</span>
+                    <span class="positioning-mode-chip">Key quotes</span>
+                    <span class="positioning-mode-chip">Balanced</span>
+                </div>
+            </section>
+            {% endif %}
 
             {% if search_type == 'images' %}
             <section class="img-adv-section" aria-label="Advanced image search">
@@ -1302,7 +1392,7 @@
     </div>
 
     <footer>
-        <p><strong>abbieysearch</strong> (abbiey.search) &mdash; Search with clarity.</p>
+        <p><strong>abbieysearch</strong> (abbiey.search) &mdash; Real answers. Full context. No fluff.</p>
         <p class="footer-links">
             <a href="/privacy">Privacy Policy</a>
             &nbsp;&middot;&nbsp;
@@ -1312,8 +1402,8 @@
         </p>
         {% if not query %}
         <p class="home-about-blurb" id="what-is-abbieysearch">
-            <strong>abbieysearch</strong> is a privacy-first web search engine: we help you find information on the web
-            without selling your searches or building a marketing profile. Searching here works immediately
+            <strong>abbieysearch</strong> is built for people who want the why: direct answers, evidence you can inspect,
+            tradeoffs that are spelled out, and room to go deeper than a link list. Searching works immediately
             &mdash; <strong>no account or sign-in is required</strong>. An account is optional for bookmarks, synced history, or developer tools.
         </p>
         {% endif %}

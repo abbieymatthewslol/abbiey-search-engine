@@ -1193,12 +1193,18 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // ===== Privacy badge popover =====
+  // ===== Header positioning popover =====
   const privacyBadge = document.getElementById("privacy-badge");
   const privacyPopover = document.getElementById("privacy-popover");
   const privacyPopoverClose = document.getElementById("privacy-popover-close");
   if (privacyBadge && privacyPopover) {
-    let privacyStatsFetched = false;
+    const hidePrivacyPopover = () => {
+      privacyBadge.setAttribute("aria-expanded", "false");
+      privacyPopover.classList.add("closing");
+      setTimeout(() => {
+        privacyPopover.classList.remove("open", "closing");
+      }, 150);
+    };
     privacyBadge.addEventListener("click", (e) => {
       e.stopPropagation();
       const overflowMenu = document.getElementById("header-overflow-menu");
@@ -1206,32 +1212,20 @@ document.addEventListener("DOMContentLoaded", () => {
         overflowMenu.setAttribute("hidden", "");
       }
       if (privacyPopover.classList.contains("open")) {
-        privacyPopover.classList.add("closing");
-        setTimeout(() => { privacyPopover.classList.remove("open", "closing"); }, 150);
+        hidePrivacyPopover();
       } else {
+        privacyBadge.setAttribute("aria-expanded", "true");
         privacyPopover.classList.add("open");
-        if (!privacyStatsFetched && privacyPopover.classList.contains("open")) {
-          privacyStatsFetched = true;
-          fetch("/api/privacy-stats")
-            .then(r => r.json())
-            .then(data => {
-              const t = document.getElementById("pstat-trackers");
-              const p = document.getElementById("pstat-personal");
-              const s = document.getElementById("pstat-shared");
-              if (t) t.textContent = data.trackers ?? 0;
-              if (p) p.textContent = data.personal_data ?? 0;
-              if (s) s.textContent = data.third_party_shared ?? 0;
-            })
-            .catch(() => { /* keep default 0s on error */ });
-        }
       }
     });
     if (privacyPopoverClose) {
-      privacyPopoverClose.addEventListener("click", () => {
-        privacyPopover.classList.add("closing");
-        setTimeout(() => { privacyPopover.classList.remove("open", "closing"); }, 150);
-      });
+      privacyPopoverClose.addEventListener("click", hidePrivacyPopover);
     }
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && privacyPopover.classList.contains("open")) {
+        hidePrivacyPopover();
+      }
+    });
   }
 
   // ===== Answer layer + AI Summary async fetch (text tab, page 1 only) =====
@@ -2027,6 +2021,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Privacy popover close
     if (privacyPopover && privacyPopover.classList.contains("open") && !privacyPopover.classList.contains("closing")) {
       if (!target.closest(".privacy-popover") && !target.closest("#privacy-badge")) {
+        privacyBadge?.setAttribute("aria-expanded", "false");
         privacyPopover.classList.add("closing");
         setTimeout(() => { privacyPopover.classList.remove("open", "closing"); }, 150);
       }
