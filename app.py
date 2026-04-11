@@ -319,6 +319,7 @@ _WELCOME_COOKIE = "abbiey_welcome_seen"
 _WELCOME_COOKIE_MAX_AGE = 60 * 60 * 24 * 400  # ~13 months — first-visit onboarding
 _SB_ACCESS_TOKEN_COOKIE = "sb_access_token"
 _SB_ACCESS_TOKEN_COOKIE_MAX_AGE = 60 * 60 * 24 * 7  # 7 days
+_JWT_SEGMENT_RE = re.compile(r"^[A-Za-z0-9_-]{1,4096}$")
 _SEARCH_CHECKOUT_PENDING_SESSION_KEY = "abbiey_search_checkout_started_at"
 _SEARCH_CHECKOUT_PENDING_WINDOW_SECONDS = 4 * 60 * 60
 _SEARCH_CHECKOUT_PENDING_COOKIE = "abbiey_search_checkout_pending"
@@ -1117,7 +1118,7 @@ def _set_welcome_seen_cookie(resp: Response) -> None:
 def _decode_supabase_jwt(token: str) -> dict | None:
     """Validate JWT format, optionally verify HS256 signature, and return claims.
 
-    Each segment must contain only base64url characters and be at most 8 KB.
+    Each segment must contain only base64url characters and be at most 4 KB.
     When ``SUPABASE_JWT_SECRET`` is set the HS256 signature is verified so that
     a tampered or foreign token is rejected.  Without the secret the function
     still enforces the structural constraints, relying on the HTTP-only cookie
@@ -1130,8 +1131,7 @@ def _decode_supabase_jwt(token: str) -> dict | None:
     parts = token.split(".")
     if len(parts) != 3:
         return None
-    _seg_re = re.compile(r"^[A-Za-z0-9_-]{1,4096}$")
-    if not all(_seg_re.match(p) for p in parts):
+    if not all(_JWT_SEGMENT_RE.match(p) for p in parts):
         return None
     if _SUPABASE_JWT_SECRET:
         message = f"{parts[0]}.{parts[1]}".encode()
@@ -1147,7 +1147,7 @@ def _decode_supabase_jwt(token: str) -> dict | None:
     try:
         padding = (4 - len(parts[1]) % 4) % 4
         return json.loads(base64.urlsafe_b64decode(parts[1] + "=" * padding))
-    except Exception:
+    except (ValueError, KeyError):
         return None
 
 
@@ -1158,9 +1158,10 @@ def _set_sb_access_token_cookie(resp: Response, token: str) -> None:
     The value written to the cookie is reassembled from the three validated
     segments to ensure no injected characters survive into the Set-Cookie header.
     """
-    if _decode_supabase_jwt(token) is None:
-        return
     parts = token.split(".")
+    if len(parts) != 3 or _decode_supabase_jwt(token) is None:
+        return
+    # Reconstruct from the pre-validated segments: all chars are [A-Za-z0-9_-].
     safe_token = ".".join(parts[:3])
     secure = request.is_secure or _site_base_url().startswith("https://")
     resp.set_cookie(
