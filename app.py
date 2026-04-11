@@ -1114,19 +1114,58 @@ def _set_welcome_seen_cookie(resp: Response) -> None:
     )
 
 
+def _decode_supabase_jwt(token: str) -> dict | None:
+    """Validate JWT format, optionally verify HS256 signature, and return claims.
+
+    Each segment must contain only base64url characters and be at most 8 KB.
+    When ``SUPABASE_JWT_SECRET`` is set the HS256 signature is verified so that
+    a tampered or foreign token is rejected.  Without the secret the function
+    still enforces the structural constraints, relying on the HTTP-only cookie
+    to prevent client-side tampering.
+
+    Returns the decoded payload dict, or ``None`` if the token is invalid.
+    """
+    if not token or len(token) > 8192:
+        return None
+    parts = token.split(".")
+    if len(parts) != 3:
+        return None
+    _seg_re = re.compile(r"^[A-Za-z0-9_-]{1,4096}$")
+    if not all(_seg_re.match(p) for p in parts):
+        return None
+    if _SUPABASE_JWT_SECRET:
+        message = f"{parts[0]}.{parts[1]}".encode()
+        expected_sig = (
+            base64.urlsafe_b64encode(
+                hmac.new(_SUPABASE_JWT_SECRET.encode(), message, hashlib.sha256).digest()
+            )
+            .rstrip(b"=")
+            .decode()
+        )
+        if not hmac.compare_digest(expected_sig, parts[2]):
+            return None
+    try:
+        padding = (4 - len(parts[1]) % 4) % 4
+        return json.loads(base64.urlsafe_b64decode(parts[1] + "=" * padding))
+    except Exception:
+        return None
+
+
 def _set_sb_access_token_cookie(resp: Response, token: str) -> None:
     """Store the Supabase access token as a secure HTTP-only cookie.
 
-    Only tokens that match the JWT format (three base64url segments separated
-    by dots, containing only URL-safe characters) are accepted to prevent
-    cookie-injection via a crafted access_token value.
+    Only structurally valid JWTs (passing ``_decode_supabase_jwt``) are stored.
+    The value written to the cookie is reassembled from the three validated
+    segments to ensure no injected characters survive into the Set-Cookie header.
     """
-    if not re.fullmatch(r"[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]*", token):
+    if _decode_supabase_jwt(token) is None:
         return
+    parts = token.split(".")
+    safe_token = ".".join(parts[:3])
     secure = request.is_secure or _site_base_url().startswith("https://")
     resp.set_cookie(
         _SB_ACCESS_TOKEN_COOKIE,
-        token,
+        safe_token,
         max_age=_SB_ACCESS_TOKEN_COOKIE_MAX_AGE,
         secure=secure,
         httponly=True,
@@ -1138,20 +1177,16 @@ def _set_sb_access_token_cookie(resp: Response, token: str) -> None:
 def _uid_from_sb_access_token_cookie() -> int | None:
     """Resolve Flask user id from the Supabase access token HTTP-only cookie.
 
-    Decodes the JWT payload (base64url middle segment) to extract the ``email``
-    claim, then looks up the matching user in our database.  No signature
-    verification is performed here — the cookie is HTTP-only and was set
-    server-side only after a successful Supabase auth exchange.
+    The token is validated (and signature-checked when ``SUPABASE_JWT_SECRET``
+    is set) before the email claim is used for the DB lookup.
     """
     raw = (request.cookies.get(_SB_ACCESS_TOKEN_COOKIE) or "").strip()
     if not raw:
         return None
     try:
-        parts = raw.split(".")
-        if len(parts) != 3:
+        payload = _decode_supabase_jwt(raw)
+        if payload is None:
             return None
-        padding = (4 - len(parts[1]) % 4) % 4
-        payload = json.loads(base64.urlsafe_b64decode(parts[1] + "=" * padding))
         email = (payload.get("email") or "").strip().lower()
         if not email or "@" not in email:
             return None
