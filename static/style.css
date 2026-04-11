@@ -1526,14 +1526,6 @@ article.result.code-result { font-size: .9rem; }
   line-height: 1.6;
   color: var(--text-dim);
 }
-.home-depth-advantage {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.75rem;
-  width: 100%;
-  max-width: 760px;
-  margin: 1.2rem auto 0;
-}
 .home-depth-card,
 .positioning-point,
 .results-positioning-strip {
@@ -1541,10 +1533,6 @@ article.result.code-result { font-size: .9rem; }
   border-radius: var(--radius);
   background: var(--bg-surface);
   box-shadow: var(--shadow-sm);
-}
-.home-depth-card {
-  padding: 0.95rem 1rem;
-  text-align: left;
 }
 .home-depth-card-title,
 .positioning-point-title {
@@ -1565,11 +1553,6 @@ article.result.code-result { font-size: .9rem; }
   display: flex;
   flex-direction: column;
   gap: 0.65rem;
-}
-.home-mode-groups {
-  width: 100%;
-  max-width: 760px;
-  margin: 1rem auto 0;
 }
 .positioning-mode-group {
   display: flex;
@@ -3281,6 +3264,13 @@ a.clarify-chip:hover {
   text-underline-offset: 2px;
 }
 .lightbox-tools:hover { color: rgba(255,255,255,.85); }
+.lightbox-disclosure {
+  margin: .5rem auto 0;
+  max-width: 32rem;
+  font-size: .75rem;
+  line-height: 1.45;
+  color: rgba(255,255,255,.58);
+}
 .lightbox-osint-btn {
   display: block;
   margin: .5rem auto 0;
@@ -4242,14 +4232,14 @@ footer {
     display: none;
   }
   .home-hero { margin-bottom: 1.1rem; }
-  .home-depth-advantage {
-    grid-template-columns: 1fr;
-  }
   .results-positioning-strip {
     flex-direction: column;
   }
   .results-mode-chips {
     justify-content: flex-start;
+  }
+  .about-principles {
+    grid-template-columns: 1fr;
   }
   body.page-auth .auth-main {
     padding: 1.25rem 1rem 3rem;
@@ -4615,7 +4605,7 @@ footer {
   text-decoration: underline;
 }
 
-/* ===== Marketing /landing ===== */
+/* ===== Marketing /about ===== */
 .landing-header {
   display: flex;
   align-items: center;
@@ -4657,6 +4647,35 @@ footer {
   margin: 0 auto 2.5rem;
   padding: 0 1.5rem;
   text-align: center;
+}
+.about-main {
+  max-width: 46rem;
+}
+.about-principles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.1rem 1.5rem;
+  margin: 2rem 0 1.75rem;
+}
+.about-principle h2,
+.about-controls h2 {
+  margin: 0 0 0.35rem;
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.about-principle p,
+.about-controls p {
+  margin: 0;
+  color: var(--text-dim);
+  line-height: 1.6;
+}
+.about-controls {
+  margin: 0 0 1.75rem;
+}
+.about-points {
+  margin-top: 0.85rem;
 }
 .landing-points {
   margin: 0 0 1.5rem;

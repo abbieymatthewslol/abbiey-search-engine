@@ -19,6 +19,7 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+from pathlib import Path
 
 
 def _truthy(val: str | None) -> bool:
@@ -26,12 +27,30 @@ def _truthy(val: str | None) -> bool:
 
 
 def _load_dotenv() -> None:
+    repo_root = Path(__file__).resolve().parent.parent
+
+    def _load_simple_env(path: Path, *, override: bool) -> None:
+        if not path.exists():
+            return
+        for raw_line in path.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            key = key.strip()
+            value = value.strip().strip('"').strip("'")
+            if not override and key in os.environ:
+                continue
+            os.environ[key] = value
+
     try:
         from dotenv import load_dotenv
 
-        load_dotenv()
+        load_dotenv(repo_root / ".env", override=False)
+        load_dotenv(repo_root / ".env.local", override=True)
     except ImportError:
-        pass
+        _load_simple_env(repo_root / ".env", override=False)
+        _load_simple_env(repo_root / ".env.local", override=True)
 
 
 def _abbiey_canonical_supabase_url() -> str:
@@ -59,6 +78,11 @@ def _sk_ok() -> bool:
         "change-me-to-something-secret",
     )
     return len(sk) >= 16 and low not in placeholders
+
+
+def _looks_like_supabase_api_key(name: str, prefixes: tuple[str, ...]) -> bool:
+    value = (os.environ.get(name) or "").strip()
+    return bool(value) and value.startswith(prefixes)
 
 
 def main() -> int:
@@ -94,6 +118,12 @@ def main() -> int:
 
     _canon = _abbiey_canonical_supabase_url()
     add(
+        "SUPABASE_ANON_KEY",
+        "auth",
+        _looks_like_supabase_api_key("SUPABASE_ANON_KEY", ("eyJ",)),
+        "Anon/public JWT from Supabase API settings",
+    )
+    add(
         "SUPABASE_URL (canonical)",
         "auth",
         _canonical_supabase_url_ok("SUPABASE_URL"),
@@ -103,7 +133,32 @@ def main() -> int:
         "NEXT_PUBLIC_SUPABASE_URL (canonical)",
         "auth",
         _canonical_supabase_url_ok("NEXT_PUBLIC_SUPABASE_URL"),
-        f"Empty or exactly {_canon}",
+        f"Recommended for browser clients; when set, must be {_canon}",
+    )
+    add(
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY or SUPABASE_ANON_KEY",
+        "auth",
+        _looks_like_supabase_api_key("NEXT_PUBLIC_SUPABASE_ANON_KEY", ("eyJ",))
+        or _looks_like_supabase_api_key("SUPABASE_ANON_KEY", ("eyJ",)),
+        "Set the browser-safe anon key directly or mirror SUPABASE_ANON_KEY",
+    )
+    add(
+        "SUPABASE_SERVICE_ROLE_KEY",
+        "auth",
+        _looks_like_supabase_api_key("SUPABASE_SERVICE_ROLE_KEY", ("eyJ",)),
+        "Server-only JWT for privileged Supabase operations",
+    )
+    add(
+        "SUPABASE_PUBLISHABLE_KEY",
+        "auth",
+        _looks_like_supabase_api_key("SUPABASE_PUBLISHABLE_KEY", ("sb_publishable_",)),
+        "Recommended new-style publishable API key from Supabase",
+    )
+    add(
+        "SUPABASE_SECRET_KEY",
+        "auth",
+        _looks_like_supabase_api_key("SUPABASE_SECRET_KEY", ("sb_secret_",)),
+        "Recommended new-style secret API key for server-side integrations",
     )
 
     resend = _truthy(os.environ.get("RESEND_API_KEY"))

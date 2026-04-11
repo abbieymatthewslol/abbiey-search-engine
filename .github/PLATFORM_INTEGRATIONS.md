@@ -1,13 +1,13 @@
 # GitHub, Vercel, and Supabase (one production stack)
 
-Production for **abbiey.search** is meant to be a **single Vercel project** serving **[https://abbieysearch.com](https://abbieysearch.com)** (and **[https://www.abbieysearch.com](https://www.abbieysearch.com)**), with the **same GitHub repo** as source and **one Supabase project** for PostgreSQL.
+Production for **abbiey.search** is meant to be a **single Vercel project** serving **[https://abbieysearch.com](https://abbieysearch.com)**, with the **same GitHub repo** as source and **one Supabase project** for PostgreSQL. If you attach `www.abbieysearch.com`, use it only as a redirect to the apex host.
 
 ## Vercel project (canonical)
 
 
 | Setting                        | Value                                                                                                                                                                          |
 | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Production domain**          | `abbieysearch.com`, `www.abbieysearch.com` (configure both in Vercel → Project → *Settings* → *Domains*; set one as redirect to the other if you want a single canonical host) |
+| **Production domain**          | `abbieysearch.com` (canonical). Add `www.abbieysearch.com` only if it redirects to the apex host. |
 | **Git integration**            | Connect this repository; set **Production Branch** to `**main`** if you rely on Vercel’s Git deploys                                                                           |
 | **Project ID** (CLI / Actions) | `prj_hGdLqDsNtQK2A57hWyZNxdZKMi3b` — already referenced in `[.github/workflows/deploy.yml](workflows/deploy.yml)`                                                              |
 
@@ -35,18 +35,22 @@ Two patterns work; **pick one** for production to avoid duplicate deploys:
   | Variable                            | Notes                                                                              |
   | ----------------------------------- | ---------------------------------------------------------------------------------- |
   | `SUPABASE_URL`                      | `https://xwxscvllmghyogddpmii.supabase.co`                                        |
+  | `NEXT_PUBLIC_SUPABASE_URL`          | Same as `SUPABASE_URL` for browser-safe clients                                   |
   | `SUPABASE_ANON_KEY`                 | From Supabase Dashboard → Project Settings → API → anon/public                    |
+  | `NEXT_PUBLIC_SUPABASE_ANON_KEY`     | Same as `SUPABASE_ANON_KEY` if you want an explicit browser alias                 |
+  | `SUPABASE_PUBLISHABLE_KEY`          | From Supabase Dashboard → Project Settings → API → Publishable key                |
+  | `SUPABASE_SECRET_KEY`               | From Supabase Dashboard → Project Settings → API → Secret key (keep private)      |
   | `SUPABASE_SERVICE_ROLE_KEY`         | From Supabase Dashboard → Project Settings → API → service_role                   |
   | `SUPABASE_JWT_SECRET`               | From Supabase Dashboard → Project Settings → API → JWT Secret                     |
   | `SUPABASE_DB_URL`                   | Full `postgresql://postgres.xwxscvllmghyogddpmii:PASSWORD@aws-1-ap-southeast-1.pooler.supabase.com:6543/postgres?sslmode=require` |
   | `SECRET_KEY`                        | `python -c "import secrets; print(secrets.token_hex(32))"`                        |
   | `ADMIN_TOKEN`                       | Protects `/admin/*`                                                                |
-  | `SITE_URL`                          | `https://www.abbieysearch.com`                                                     |
-  | `CORS_ALLOWED_ORIGINS`              | `https://www.abbieysearch.com,https://abbieysearch.com`                            |
+  | `SITE_URL`                          | `https://abbieysearch.com`                                                         |
+  | `CORS_ALLOWED_ORIGINS`              | `https://abbieysearch.com,https://www.abbieysearch.com`                            |
 
   **Shortcut:** `python scripts/restore_vercel_env.py --apply` pushes everything from `.env` to Vercel.
 
-4. Verify after deploy: `https://www.abbieysearch.com/admin/api/health?token=YOUR_ADMIN_TOKEN` → `"storage": "supabase"`, `"analytics_db": "ok"`.
+4. Verify after deploy: `https://abbieysearch.com/admin/api/health?token=YOUR_ADMIN_TOKEN` → `"storage": "supabase"`, `"analytics_db": "ok"`.
 
 ## Supabase Auth (Google OAuth)
 
@@ -54,10 +58,10 @@ Google OAuth requires configuration in **three places**:
 
 ### 1. Supabase Dashboard → Authentication → URL Configuration
 ```
-Site URL:              https://www.abbieysearch.com
+Site URL:              https://abbieysearch.com
 Redirect allow list:   https://abbieysearch.com/auth/callback
-                       https://www.abbieysearch.com/auth/confirm
                        https://abbieysearch.com/auth/confirm
+                       https://www.abbieysearch.com/auth/confirm
                        http://localhost:8000/auth/confirm
                        http://localhost:8000/auth/callback
                        https://search-*-abbieys-projects.vercel.app/**
@@ -72,7 +76,7 @@ Redirect allow list:   https://abbieysearch.com/auth/callback
 URL: https://console.cloud.google.com/apis/credentials
 
 **OAuth 2.0 Client ID** for Web application:
-- **Authorized JavaScript origins:** `https://www.abbieysearch.com`, `https://abbieysearch.com`, `https://xwxscvllmghyogddpmii.supabase.co`
+- **Authorized JavaScript origins:** `https://abbieysearch.com`, `https://www.abbieysearch.com`, `https://xwxscvllmghyogddpmii.supabase.co`
 - **Authorized redirect URIs:** `https://xwxscvllmghyogddpmii.supabase.co/auth/v1/callback`
 
 ⚠️ If the Supabase project ever changes, update the redirect URI here **first** or OAuth will show a `redirect_uri_mismatch` error.
@@ -89,14 +93,14 @@ To audit: `grep -rn "<script" templates/` — every `<script` line should be fol
 ## Quick checklist
 
 - GitHub repo linked to the Vercel project above (or `VERCEL_TOKEN` + IDs for Actions).
-- Domains **abbieysearch.com** / **[www.abbieysearch.com](http://www.abbieysearch.com)** assigned to that project only.
+- Domain **abbieysearch.com** assigned to that project. If `www.abbieysearch.com` is attached, it should redirect there.
 - Production env vars on Vercel include `**SUPABASE_DB_URL`** (or `**DATABASE_URL**`) and secrets above.
 - Either Actions deploy **or** automatic Vercel Git deploy — not both firing on every change unless intentional.
 
 ## Automated checks
 
 - **Workflow:** [.github/workflows/production-readiness.yml](workflows/production-readiness.yml) runs on **every branch** `push` and on **workflow_dispatch**. It always runs `python scripts/verify_production_env.py` (advisory).
-- **Optional GitHub secrets** for a live ping: `SITE_URL` (e.g. `https://www.abbieysearch.com`) and `ADMIN_TOKEN` (same as Vercel). If both are set, the workflow also runs `--ping` against `/admin/api/health`.
+- **Optional GitHub secrets** for a live ping: `SITE_URL` (e.g. `https://abbieysearch.com`) and `ADMIN_TOKEN` (same as Vercel). If both are set, the workflow also runs `--ping` against `/admin/api/health`.
 - **Local:** `python scripts/verify_production_env.py` or `python scripts/verify_production_env.py --strict` before you deploy.
 
 Vercel, Resend, and Supabase still must be configured in their own dashboards (or `vercel env`); nothing in GitHub can create those accounts for you.

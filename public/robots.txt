@@ -6,4 +6,4 @@ Disallow: /profile
 Disallow: /profile/update
 Disallow: /logout
 
-Sitemap: https://www.abbieysearch.com/sitemap.xml
+Sitemap: https://abbieysearch.com/sitemap.xml

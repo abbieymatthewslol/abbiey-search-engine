@@ -316,6 +316,15 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     /** Same logical search across pagination should count once (infinite scroll uses ?page=). */
+    function hashSearchKey(value) {
+      let hash = 2166136261;
+      const input = String(value || "");
+      for (let i = 0; i < input.length; i++) {
+        hash ^= input.charCodeAt(i);
+        hash = Math.imul(hash, 16777619);
+      }
+      return (hash >>> 0).toString(16).padStart(8, "0");
+    }
     function normalizeSearchUrlKey() {
       try {
         const u = new URL(window.location.href);
@@ -323,9 +332,40 @@ document.addEventListener("DOMContentLoaded", () => {
         const p = u.searchParams;
         if (typeof p.sort === "function") p.sort();
         const qs = p.toString();
-        return u.pathname + (qs ? "?" + qs : "");
+        return "search:" + hashSearchKey(u.pathname + (qs ? "?" + qs : ""));
       } catch (_) {
-        return window.location.pathname + window.location.search;
+        return "search:" + hashSearchKey(window.location.pathname + window.location.search);
+      }
+    }
+    function buildPrivateCheckoutReturnPath() {
+      try {
+        const current = new URL(window.location.href);
+        const clean = new URL(current.pathname || "/search", window.location.origin);
+        [
+          "type",
+          "region",
+          "lang",
+          "df",
+          "cleanweb",
+          "safesearch",
+          "img_adv",
+          "img_license",
+          "img_license_type",
+          "img_aspect",
+          "img_size",
+          "img_ext",
+        ].forEach((key) => {
+          current.searchParams.getAll(key).forEach((value) => {
+            if (value) clean.searchParams.append(key, value);
+          });
+        });
+        current.searchParams.getAll("img_src").forEach((value) => {
+          if (value) clean.searchParams.append("img_src", value);
+        });
+        const qs = clean.searchParams.toString();
+        return clean.pathname + (qs ? "?" + qs : "") + (current.hash || "");
+      } catch (_) {
+        return "/search";
       }
     }
 
@@ -422,20 +462,9 @@ document.addEventListener("DOMContentLoaded", () => {
             } catch (_) {}
           }
           try {
-            const u = new URL(window.location.href);
-            const input = document.getElementById("search-input");
-            const val = input && input.value.trim() ? input.value.trim() : "";
-            if (val) {
-              u.searchParams.set("q", val);
-            }
-            u.searchParams.delete("page");
-            const p = u.searchParams;
-            if (typeof p.sort === "function") p.sort();
-            const qs = p.toString();
-            const path = u.pathname + (qs ? "?" + qs : "") + u.hash;
             localStorage.setItem(
               "abbiey_checkout_return",
-              JSON.stringify({ kind: "search", path })
+              JSON.stringify({ kind: "search", path: buildPrivateCheckoutReturnPath() })
             );
           } catch (_) {}
           window.open(stripeUrl, "_blank", "noopener,noreferrer");
@@ -556,13 +585,24 @@ document.addEventListener("DOMContentLoaded", () => {
     aiSummary:     { key: "abbiey_ai_summary",     def: "true"   },
     autocomplete:  { key: "abbiey_autocomplete",   def: "true"   },
     persistRegion: { key: "abbiey_region_persist", def: "false"  },
-    history:       { key: "abbiey_history",        def: "true"   },
+    history:       { key: "abbiey_history",        def: "false"  },
     showCards:     { key: "abbiey_show_cards",     def: "true"   },
     showFavicons:  { key: "abbiey_show_favicons",  def: "true"   },
     showDates:     { key: "abbiey_show_dates",     def: "true"   },
   };
   function gs(name) { return localStorage.getItem(_S[name].key) ?? _S[name].def; }
   function ss(name, val) { localStorage.setItem(_S[name].key, val); }
+  function clearStoredSearchHistory(includeServer = false) {
+    try { localStorage.removeItem("abbiey_search_history"); } catch {}
+    if (includeServer && document.querySelector(".user-avatar-chip")) {
+      fetch("/api/user/history", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ clear_all: true }),
+      }).catch(() => {});
+    }
+  }
 
   // Apply all settings on load
   function applyAllSettings() {
@@ -912,7 +952,12 @@ document.addEventListener("DOMContentLoaded", () => {
   });
   wireToggle("autocomplete-toggle", "autocomplete", null);
   wireToggle("persist-region-toggle", "persistRegion", null);
-  wireToggle("history-toggle", "history", null);
+  wireToggle("history-toggle", "history", (checked) => {
+    if (!checked) {
+      clearStoredSearchHistory(true);
+      document.getElementById("history-panel")?.setAttribute("hidden", "");
+    }
+  });
   wireToggle("cards-toggle", "showCards", (checked) => {
     [".calculator-card",".color-card",".unit-convert-card",".knowledge-panel",
      ".weather-card",".dictionary-card",".qr-card"].forEach(sel => {
@@ -933,6 +978,7 @@ document.addEventListener("DOMContentLoaded", () => {
       st.textContent = ".result-date{display:none!important}";
     } else if (st) { st.textContent = ""; }
   });
+  if (gs("history") !== "true") clearStoredSearchHistory();
 
   // ===== Accent color (in settings modal) =====
   document.querySelectorAll(".color-swatch").forEach(swatch => {
@@ -959,6 +1005,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const CLOCK_SVG = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`;
 
     function panelGetHistory() {
+      if (gs("history") !== "true") return [];
       try { return JSON.parse(localStorage.getItem(HISTORY_KEY_PANEL)) || []; } catch { return []; }
     }
     function isLoggedInUi() {
@@ -966,6 +1013,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     /** Server-first order, then local-only queries (logged-in); else localStorage only. */
     async function panelHistoryQueries() {
+      if (gs("history") !== "true") return [];
       const local = panelGetHistory();
       if (!isLoggedInUi()) return local;
       try {
@@ -996,13 +1044,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
     function panelClearAll() {
-      try { localStorage.removeItem(HISTORY_KEY_PANEL); } catch {}
-      if (isLoggedInUi()) {
-        fetch("/api/user/history", {
-          method: "DELETE", headers: { "Content-Type": "application/json" },
-          credentials: "same-origin", body: JSON.stringify({ clear_all: true }),
-        }).catch(() => {});
-      }
+      clearStoredSearchHistory(true);
     }
 
     async function renderPanel() {
@@ -1526,10 +1568,12 @@ document.addEventListener("DOMContentLoaded", () => {
     const MAX_HISTORY = 20;
 
     function getHistory() {
+      if (gs("history") !== "true") return [];
       try { return JSON.parse(localStorage.getItem(HISTORY_KEY)) || []; }
       catch { return []; }
     }
     function saveHistory(items) {
+      if (gs("history") !== "true") { clearStoredSearchHistory(); return; }
       try { localStorage.setItem(HISTORY_KEY, JSON.stringify(items)); }
       catch {}
     }
@@ -1543,9 +1587,10 @@ document.addEventListener("DOMContentLoaded", () => {
       saveHistory(items);
     }
     function removeHistory(term) { saveHistory(getHistory().filter(i => i !== term)); }
-    function clearHistory() { try { localStorage.removeItem(HISTORY_KEY); } catch {} }
+    function clearHistory() { clearStoredSearchHistory(true); }
 
     function syncServerUserHistory(q) {
+      if (gs("history") !== "true") return;
       if (!document.querySelector(".user-avatar-chip")) return;
       const t = (q || "").trim();
       if (!t) return;

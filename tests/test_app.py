@@ -1,6 +1,7 @@
 """Tests for abbiey.search app routes, caching, fallbacks, chat API, and feature cards."""
 
 import json
+import re
 from unittest.mock import patch, MagicMock
 
 import app
@@ -31,16 +32,26 @@ class TestRoutes:
         assert b'id="search-input"' in resp.data
         assert b"abbiey.search" in resp.data
 
-    def test_root_is_search_ui_not_marketing_landing(self, client):
-        """Root redirects to search UI; marketing page is at /landing."""
+    def test_root_is_search_ui_not_marketing_about_page(self, client):
+        """Root redirects to search UI; long-form product copy lives on /about."""
         resp = client.get("/", follow_redirects=True)
         assert resp.status_code == 200
         assert b"nobody's watching" not in resp.data
 
-    def test_landing_path_renders_marketing(self, client):
-        resp = client.get("/landing")
+    def test_about_path_renders_marketing(self, client):
+        resp = client.get("/about")
         assert resp.status_code == 200
-        assert b"Your searches stay yours." in resp.data
+        assert b"Structured deep dives" in resp.data
+
+    def test_homepage_no_longer_renders_depth_cards(self, client):
+        resp = client.get("/search")
+        assert resp.status_code == 200
+        assert b"Structured deep dives" not in resp.data
+
+    def test_landing_redirects_to_about(self, client):
+        resp = client.get("/landing", follow_redirects=False)
+        assert resp.status_code == 301
+        assert resp.headers.get("Location", "").endswith("/about")
 
     def test_google_site_verification_meta_when_configured(self, client):
         import app as app_module
@@ -360,7 +371,7 @@ class TestSecurityHeaders:
         assert resp.status_code == 200
         assert "content-security-policy" in resp.headers
         assert resp.headers.get("X-Content-Type-Options") == "nosniff"
-        assert "strict-origin-when-cross-origin" in (resp.headers.get("Referrer-Policy") or "")
+        assert "no-referrer" in (resp.headers.get("Referrer-Policy") or "")
 
     def test_supabase_umd_vendor_served_for_auth_pages(self, client):
         resp = client.get("/static/vendor/supabase.min.js")
@@ -1037,6 +1048,16 @@ class TestPrivacyBadge:
     def test_privacy_tagline(self, client):
         resp = client.get("/search?q=")
         assert b"Built for people who want the <em>why</em>" in resp.data
+
+    def test_search_history_defaults_off(self, client):
+        resp = client.get("/search?q=")
+        html = resp.data.decode("utf-8")
+        assert 'id="history-toggle"' in html
+        assert re.search(r'id="history-toggle"[^>]*checked', html) is None
+
+    def test_image_tools_disclosure_on_search_page(self, client):
+        resp = client.get("/search?q=")
+        assert b"ImgOps may fetch the remote image URL directly" in resp.data
 
 
 # =====================================================================

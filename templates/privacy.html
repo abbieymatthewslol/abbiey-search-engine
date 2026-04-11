@@ -7,9 +7,9 @@
     <div class="legal-container">
 
         <h1>Privacy Policy</h1>
-        <p class="legal-meta">Last updated: <time datetime="2026-04-09">9 April 2026</time> &nbsp;·&nbsp; Effective immediately</p>
+        <p class="legal-meta">Last updated: <time datetime="2026-04-11">11 April 2026</time> &nbsp;·&nbsp; Effective immediately</p>
 
-        <p>abbiey.search is a privacy-first search engine. This policy explains what data we collect, why, and how. We keep it short because we genuinely collect very little.</p>
+        <p>abbiey.search aims to minimise what we keep. This policy explains what data we collect, why, and where third parties are involved.</p>
 
         <hr>
 
@@ -18,7 +18,7 @@
 
         <h2>2. What We Do Not Do</h2>
         <ul>
-            <li>We <strong>do not log your search queries</strong> server-side.</li>
+            <li>We do <strong>not</strong> retain raw search query text in our application analytics tables.</li>
             <li>We do not build a profile of your interests, searches, or behaviour.</li>
             <li>We do not sell, rent, or share your personal data with advertisers.</li>
             <li>We do not use third-party advertising networks.</li>
@@ -37,10 +37,10 @@
         <p>You can sign up with Google OAuth instead of email/password. In that case, we receive your Google email and name only; no other Google data is accessed.</p>
 
         <h3>3.2 Usage Data</h3>
-        <p>Registered users may optionally store bookmarks and search history in their account. This data is yours and visible only to you. You can delete it at any time from your profile page.</p>
+        <p>Registered users may optionally store bookmarks and search history in their account. Search history is off by default and only syncs if you enable it. This data is yours and visible only to you. You can delete it at any time from your profile page or by turning history back off.</p>
 
         <h3>3.3 Technical / Server Logs</h3>
-        <p>Our hosting provider (Vercel) automatically records standard web server logs (IP address, HTTP method, URL path, response code, timestamp) for up to 30 days for security and abuse prevention. We do not analyse these logs for marketing purposes. Search query text is <strong>not</strong> present in these logs.</p>
+        <p>Our hosting provider (Vercel) automatically records standard web server logs (IP address, HTTP method, URL path, response code, timestamp) for up to 30 days for security and abuse prevention. We do not analyse these logs for marketing purposes. Our own analytics tables store only a keyed digest of the query for aggregate counting, not the raw query text. Because search uses URL parameters, infrastructure logs outside our application may still temporarily contain the requested URL.</p>
 
         <h3 id="osint">3.4 Public signals (OSINT)</h3>
         <p>Optional <strong>Public signals</strong> lookups run only when you choose them (for example, expanding &ldquo;Public signals (OSINT)&rdquo; on a detected domain, IP, or email, or using the image lightbox action for the page host). They are <strong>not</strong> part of normal web search and are <strong>not written to your search history</strong>.</p>
@@ -59,7 +59,7 @@
         <p>We set the minimum cookies required to operate the service:</p>
         <ul>
             <li><code>session</code> — a signed, server-side session cookie that keeps you logged in. HttpOnly, Secure, SameSite=Lax. Expires when your browser session ends (or 7 days if you tick "remember me").</li>
-            <li><code>search_unlock</code> — remembers whether you have unlocked unlimited search on this device. No personal data inside.</li>
+            <li><code>abbiey_search_unlocked</code> — remembers whether you have unlocked unlimited search on this device. No personal data inside.</li>
         </ul>
         <p>We do not set advertising or analytics cookies. Google Analytics is configured in "Basic" mode and only fires if you have not opted out via browser settings or an ad blocker.</p>
 
@@ -84,6 +84,7 @@
             <li><strong>DuckDuckGo</strong> (duckduckgo.com) — search results are proxied through our servers. Your IP is not sent to DuckDuckGo.</li>
             <li><strong>Cloudflare</strong> (cloudflare.com) — DNS-over-HTTPS resolver when you explicitly use <a href="#osint">Public signals (OSINT)</a>.</li>
             <li><strong>RDAP / registry operators</strong> — when you use OSINT, we follow redirects from <code>rdap.org</code> to the relevant registry or RIR; those operators process the domain or IP being looked up.</li>
+            <li><strong>ImgOps</strong> (imgops.com) — only if you click the optional Image tools link in the image lightbox. We send the remote image URL to ImgOps; we do not upload a local file or strip EXIF in that flow.</li>
         </ul>
 
         <h2>6. Data Retention</h2>

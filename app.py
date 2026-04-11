@@ -285,7 +285,7 @@ def _site_base_url() -> str:
                 return root
     except Exception:
         pass
-    return "https://www.abbieysearch.com"
+    return "https://abbieysearch.com"
 
 
 # Stable user-facing API messages (never put raw exceptions in JSON bodies).
@@ -1618,6 +1618,20 @@ def _insert_search_log_row(vals: list) -> "int | None":
         return None
 
 
+def _analytics_query_digest(query: str) -> str:
+    """Keyed digest for aggregate analytics without retaining raw query text."""
+    q = (query or "").strip()
+    if not q:
+        return ""
+    secret = str(app.config.get("SECRET_KEY") or os.environ.get("SECRET_KEY") or "abbiey-analytics")
+    digest = hmac.new(
+        secret.encode("utf-8", errors="replace"),
+        q.encode("utf-8", errors="replace"),
+        hashlib.sha256,
+    ).hexdigest()
+    return f"digest:{digest[:24]}"
+
+
 # Bounded thread pool for async analytics — prevents thread explosion under load
 _analytics_pool = ThreadPoolExecutor(max_workers=8, thread_name_prefix="analytics")
 
@@ -1636,8 +1650,9 @@ def _log_search_worker(
     ts: str,
 ):
     log = logging.getLogger(__name__)
+    query_digest = _analytics_query_digest(query)
     vals = [
-        query[:500],
+        query_digest,
         search_type,
         region or "",
         result_count,
@@ -1667,7 +1682,7 @@ def _log_search_worker(
     try:
         _sse_broadcast({
             "type": "search",
-            "query": query[:120],
+            "query": query_digest,
             "search_type": search_type,
             "results": result_count,
             "latency_ms": latency_ms,
@@ -1845,7 +1860,7 @@ def _generate_csp_nonce():
 def _security_headers(response):
     try:
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
-        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        response.headers.setdefault("Referrer-Policy", "no-referrer")
         response.headers.setdefault(
             "Permissions-Policy",
             "camera=(), microphone=(), geolocation=(), payment=()",
@@ -2626,10 +2641,16 @@ def welcome_dismiss():
     return resp
 
 
+@app.route("/about")
+def about():
+    """About page for product positioning and search approach."""
+    return render_template("about.html")
+
+
 @app.route("/landing")
 def landing():
-    """Long-form marketing page."""
-    return render_template("landing.html")
+    """Backward-compatible redirect for the old about URL."""
+    return redirect(url_for("about"), code=301)
 
 
 @app.route("/privacy")
@@ -5416,7 +5437,7 @@ def _simplify_query_for_fallback(q: str) -> str:
 def _static_search_portal_links(q: str) -> list:
     """Curated outbound searches so the SERP is never completely empty."""
     enc = quote_plus((q or "information")[:280])
-    base = (os.environ.get("SITE_URL") or "https://www.abbieysearch.com").rstrip("/")
+    base = (os.environ.get("SITE_URL") or "https://abbieysearch.com").rstrip("/")
     return [
         {
             "title": "DuckDuckGo — open full web results",
@@ -8453,16 +8474,17 @@ def api_user_history_delete():
 
 @app.route("/opensearch.xml")
 def opensearch():
-    xml = '''<?xml version="1.0" encoding="UTF-8"?>
+    base = _site_base_url()
+    xml = f'''<?xml version="1.0" encoding="UTF-8"?>
 <OpenSearchDescription xmlns="http://a9.com/-/spec/opensearch/1.1/">
   <ShortName>abbieysearch</ShortName>
   <Description>Private, fast, no-tracking search engine</Description>
   <Tags>privacy search private</Tags>
   <Contact>hello@abbieysearch.com</Contact>
-  <Url type="text/html" template="https://www.abbieysearch.com/search?q={searchTerms}"/>
+  <Url type="text/html" template="{base}/search?q={{searchTerms}}"/>
   <Url type="application/opensearchdescription+xml" rel="self"
-       template="https://www.abbieysearch.com/opensearch.xml"/>
-  <Image height="16" width="16" type="image/x-icon">https://www.abbieysearch.com/static/favicon.ico</Image>
+       template="{base}/opensearch.xml"/>
+  <Image height="16" width="16" type="image/x-icon">{base}/static/favicon.ico</Image>
   <InputEncoding>UTF-8</InputEncoding>
   <OutputEncoding>UTF-8</OutputEncoding>
 </OpenSearchDescription>'''
@@ -8495,7 +8517,8 @@ def manifest():
 
 @app.route("/robots.txt")
 def robots():
-    txt = """User-agent: *
+    base = _site_base_url()
+    txt = f"""User-agent: *
 Allow: /
 Allow: /search
 Disallow: /api/
@@ -8503,52 +8526,53 @@ Disallow: /profile
 Disallow: /profile/update
 Disallow: /logout
 
-Sitemap: https://www.abbieysearch.com/sitemap.xml
+Sitemap: {base}/sitemap.xml
 """
     return Response(txt, mimetype="text/plain")
 
 
 @app.route("/sitemap.xml")
 def sitemap():
-    xml = '''<?xml version="1.0" encoding="UTF-8"?>
+    base = _site_base_url()
+    xml = f'''<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://www.abbieysearch.com/</loc>
+    <loc>{base}/</loc>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://www.abbieysearch.com/search</loc>
+    <loc>{base}/search</loc>
     <changefreq>daily</changefreq>
     <priority>0.95</priority>
   </url>
   <url>
-    <loc>https://www.abbieysearch.com/login</loc>
+    <loc>{base}/login</loc>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.abbieysearch.com/signup</loc>
+    <loc>{base}/signup</loc>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://www.abbieysearch.com/breach-check</loc>
+    <loc>{base}/breach-check</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://www.abbieysearch.com/privacy</loc>
+    <loc>{base}/privacy</loc>
     <changefreq>monthly</changefreq>
     <priority>0.85</priority>
   </url>
   <url>
-    <loc>https://www.abbieysearch.com/terms</loc>
+    <loc>{base}/terms</loc>
     <changefreq>monthly</changefreq>
     <priority>0.85</priority>
   </url>
   <url>
-    <loc>https://www.abbieysearch.com/landing</loc>
+    <loc>{base}/about</loc>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>

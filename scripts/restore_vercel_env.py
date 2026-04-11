@@ -200,7 +200,7 @@ for key, val in new_vars:
 for key, val, old_val in update_vars:
     display_new = val[:30] + "..." if len(val) > 30 else val
     display_old = old_val[:30] + "..." if len(old_val) > 30 else old_val
-    print(f"  {YELLOW}~ {key:<45}{RESET} {display_old!r} → {display_new!r}")
+    print(f"  {YELLOW}~ {key:<45}{RESET} {display_old!r} -> {display_new!r}")
 
 if unchanged_vars:
     print(f"\n  {len(unchanged_vars)} vars unchanged (skipping)")
