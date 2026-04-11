@@ -1115,7 +1115,14 @@ def _set_welcome_seen_cookie(resp: Response) -> None:
 
 
 def _set_sb_access_token_cookie(resp: Response, token: str) -> None:
-    """Store the Supabase access token as a secure HTTP-only cookie."""
+    """Store the Supabase access token as a secure HTTP-only cookie.
+
+    Only tokens that match the JWT format (three base64url segments separated
+    by dots, containing only URL-safe characters) are accepted to prevent
+    cookie-injection via a crafted access_token value.
+    """
+    if not re.fullmatch(r"[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]*", token):
+        return
     secure = request.is_secure or _site_base_url().startswith("https://")
     resp.set_cookie(
         _SB_ACCESS_TOKEN_COOKIE,
@@ -1143,7 +1150,7 @@ def _uid_from_sb_access_token_cookie() -> int | None:
         parts = raw.split(".")
         if len(parts) != 3:
             return None
-        padding = 4 - len(parts[1]) % 4
+        padding = (4 - len(parts[1]) % 4) % 4
         payload = json.loads(base64.urlsafe_b64decode(parts[1] + "=" * padding))
         email = (payload.get("email") or "").strip().lower()
         if not email or "@" not in email:
@@ -1157,6 +1164,9 @@ def _uid_from_sb_access_token_cookie() -> int | None:
     except Exception:
         logger.debug("sb_access_token_cookie_decode_failed", exc_info=True)
         return None
+
+
+def _normalize_e164_phone(raw: str, default_region: str = "US") -> str | None:
     """Return E.164 (e.g. +15551234567) or None if invalid / empty."""
     s = (raw or "").strip()
     if not s:
