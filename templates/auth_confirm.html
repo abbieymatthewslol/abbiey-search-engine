@@ -120,7 +120,8 @@
                 body: JSON.stringify({
                     email: emailAddr,
                     display_name: (user.user_metadata || {}).full_name || '',
-                    phone: phonePayload || undefined
+                    phone: phonePayload || undefined,
+                    access_token: session.access_token || undefined
                 }),
                 signal: ctrl.signal
             });

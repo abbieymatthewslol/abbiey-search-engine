@@ -3,6 +3,7 @@ abbiey.search - A privacy-respecting, non-judgmental search engine.
 No tracking. No filtering. No logs. Just results.
 """
 
+import base64
 import hashlib
 import hmac
 import json
@@ -105,6 +106,7 @@ _ABBIEY_CANONICAL_SUPABASE_URL = f"https://{_ABBIEY_SUPABASE_PROJECT_REF}.supaba
 _RAW_SUPABASE_URL = (os.environ.get("SUPABASE_URL") or "").strip()
 _SUPABASE_URL = _RAW_SUPABASE_URL.rstrip("/")
 _SUPABASE_ANON_KEY = (os.environ.get("SUPABASE_ANON_KEY") or "").strip()
+_SUPABASE_JWT_SECRET = (os.environ.get("SUPABASE_JWT_SECRET") or "").strip()
 _SUPABASE_AUTH_ENABLED = bool(_SUPABASE_URL and _SUPABASE_ANON_KEY)
 _SUPABASE_URL_ENFORCE = os.environ.get("RUNNING_PYTEST") != "1"
 
@@ -315,6 +317,8 @@ _SEARCH_UNLOCK_COOKIE = "abbiey_search_unlock"
 _SEARCH_UNLOCK_COOKIE_MAX_AGE = 315360000
 _WELCOME_COOKIE = "abbiey_welcome_seen"
 _WELCOME_COOKIE_MAX_AGE = 60 * 60 * 24 * 400  # ~13 months — first-visit onboarding
+_SB_ACCESS_TOKEN_COOKIE = "sb_access_token"
+_SB_ACCESS_TOKEN_COOKIE_MAX_AGE = 60 * 60 * 24 * 7  # 7 days
 _SEARCH_CHECKOUT_PENDING_SESSION_KEY = "abbiey_search_checkout_started_at"
 _SEARCH_CHECKOUT_PENDING_WINDOW_SECONDS = 4 * 60 * 60
 _SEARCH_CHECKOUT_PENDING_COOKIE = "abbiey_search_checkout_pending"
@@ -1110,7 +1114,49 @@ def _set_welcome_seen_cookie(resp: Response) -> None:
     )
 
 
-def _normalize_e164_phone(raw: str, default_region: str = "US") -> str | None:
+def _set_sb_access_token_cookie(resp: Response, token: str) -> None:
+    """Store the Supabase access token as a secure HTTP-only cookie."""
+    secure = request.is_secure or _site_base_url().startswith("https://")
+    resp.set_cookie(
+        _SB_ACCESS_TOKEN_COOKIE,
+        token,
+        max_age=_SB_ACCESS_TOKEN_COOKIE_MAX_AGE,
+        secure=secure,
+        httponly=True,
+        samesite="Lax",
+        path="/",
+    )
+
+
+def _uid_from_sb_access_token_cookie() -> int | None:
+    """Resolve Flask user id from the Supabase access token HTTP-only cookie.
+
+    Decodes the JWT payload (base64url middle segment) to extract the ``email``
+    claim, then looks up the matching user in our database.  No signature
+    verification is performed here — the cookie is HTTP-only and was set
+    server-side only after a successful Supabase auth exchange.
+    """
+    raw = (request.cookies.get(_SB_ACCESS_TOKEN_COOKIE) or "").strip()
+    if not raw:
+        return None
+    try:
+        parts = raw.split(".")
+        if len(parts) != 3:
+            return None
+        padding = 4 - len(parts[1]) % 4
+        payload = json.loads(base64.urlsafe_b64decode(parts[1] + "=" * padding))
+        email = (payload.get("email") or "").strip().lower()
+        if not email or "@" not in email:
+            return None
+        rows = _users_execute(
+            "SELECT id FROM users WHERE LOWER(email)=LOWER(?) LIMIT 1", [email]
+        )
+        if not rows:
+            return None
+        return _session_user_id_int(rows[0]["id"])
+    except Exception:
+        logger.debug("sb_access_token_cookie_decode_failed", exc_info=True)
+        return None
     """Return E.164 (e.g. +15551234567) or None if invalid / empty."""
     s = (raw or "").strip()
     if not s:
@@ -1412,6 +1458,8 @@ def _inject_current_user():
     }
     try:
         uid = _session_user_id_int(session.get("user_id"))
+        if not uid:
+            uid = _uid_from_sb_access_token_cookie()
         if not uid:
             return {**ctx, "current_user": None}
         user = _get_user_by_id(uid)
@@ -7661,7 +7709,9 @@ def login():
 @app.route("/logout", methods=["GET", "POST"])
 def logout():
     session.pop("user_id", None)
-    return redirect(url_for("index"))
+    resp = redirect(url_for("index"))
+    resp.delete_cookie(_SB_ACCESS_TOKEN_COOKIE, path="/")
+    return resp
 
 
 @app.route("/auth/callback", methods=["POST"])
@@ -7675,6 +7725,7 @@ def auth_callback():
     email = (data.get("email") or "").strip().lower()
     display_name = (data.get("display_name") or "").strip()
     phone_raw = (data.get("phone") or "").strip()
+    access_token = (data.get("access_token") or "").strip()
     phone_e164 = None
     if phone_raw:
         phone_e164 = _normalize_e164_phone(phone_raw)
@@ -7693,6 +7744,8 @@ def auth_callback():
     session["user_id"] = uid
     resp = jsonify({"ok": True, "user_id": uid})
     _set_welcome_seen_cookie(resp)
+    if access_token:
+        _set_sb_access_token_cookie(resp, access_token)
     return resp
 
 
