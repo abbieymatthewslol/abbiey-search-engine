@@ -1147,7 +1147,7 @@ def _decode_supabase_jwt(token: str) -> dict | None:
     try:
         padding = (4 - len(parts[1]) % 4) % 4
         return json.loads(base64.urlsafe_b64decode(parts[1] + "=" * padding))
-    except (ValueError, KeyError):
+    except ValueError:
         return None
 
 

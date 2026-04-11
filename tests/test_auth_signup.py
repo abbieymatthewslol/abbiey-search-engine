@@ -157,6 +157,7 @@ def test_decode_supabase_jwt_rejects_injection_chars():
 
     # Embedding a newline in the signature segment would break Set-Cookie
     token = _make_fake_jwt("x@x.com")
+    assert _decode_supabase_jwt(token) is not None  # baseline: valid token passes
     header, payload, _sig = token.split(".")
     assert _decode_supabase_jwt(f"{header}.{payload}.bad\nsig") is None
 
@@ -221,7 +222,7 @@ def test_uid_from_sb_access_token_cookie_fallback(client):
         su = (sql or "").upper()
         if "SELECT" in su and "EMAIL" in su and "LIMIT" in su:
             return [{"id": 7}]
-        if "SELECT" in su and "WHERE id" in su.upper():
+        if "SELECT" in su and "WHERE ID" in su:
             return [fake_user]
         if "UPDATE" in su:
             return []
