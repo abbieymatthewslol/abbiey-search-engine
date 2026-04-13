@@ -1,0 +1,31 @@
+name: Auto-approve and merge
+
+# Approves every PR targeting master and queues it for auto-merge once
+# all required checks (tests, linting) pass.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [master]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-approve-merge:
+    runs-on: ubuntu-latest
+    # Skip draft PRs
+    if: github.event.pull_request.draft == false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Approve PR
+        run: gh pr review "${{ github.event.pull_request.number }}" --approve
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Enable auto-merge (queues merge once all checks pass)
+        run: gh pr merge "${{ github.event.pull_request.number }}" --auto --squash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

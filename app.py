@@ -117,9 +117,32 @@ if os.environ.get("SITE_URL", "").startswith("https"):
 # Override for a different Supabase project (e.g. Vercel integration): ABBIEY_SUPABASE_PROJECT_REF + SUPABASE_URL
 _ABBIEY_SUPABASE_PROJECT_REF = (os.environ.get("ABBIEY_SUPABASE_PROJECT_REF") or "xwxscvllmghyogddpmii").strip()
 _ABBIEY_CANONICAL_SUPABASE_URL = f"https://{_ABBIEY_SUPABASE_PROJECT_REF}.supabase.co"
-_RAW_SUPABASE_URL = (os.environ.get("SUPABASE_URL") or "").strip()
+
+
+def _env_first_nonempty(*names: str) -> str:
+    """Read first set env var (Vercel Marketplace often uses abbiey_SUPABASE_* instead of SUPABASE_*)."""
+    for n in names:
+        v = (os.environ.get(n) or "").strip()
+        if v:
+            return v
+    return ""
+
+
+_RAW_SUPABASE_URL = _env_first_nonempty(
+    "SUPABASE_URL",
+    "abbiey_SUPABASE_URL",
+    "NEXT_PUBLIC_SUPABASE_URL",
+    "NEXT_PUBLIC_abbiey_SUPABASE_URL",
+).strip()
 _SUPABASE_URL = _RAW_SUPABASE_URL.rstrip("/")
-_SUPABASE_ANON_KEY = (os.environ.get("SUPABASE_ANON_KEY") or "").strip()
+_SUPABASE_ANON_KEY = _env_first_nonempty(
+    "SUPABASE_ANON_KEY",
+    "abbiey_SUPABASE_ANON_KEY",
+    "abbiey_SUPABASE_PUBLISHABLE_KEY",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+    "NEXT_PUBLIC_abbiey_SUPABASE_ANON_KEY",
+    "NEXT_PUBLIC_abbiey_SUPABASE_PUBLISHABLE_KEY",
+).strip()
 _SUPABASE_AUTH_ENABLED = bool(_SUPABASE_URL and _SUPABASE_ANON_KEY)
 _SUPABASE_URL_ENFORCE = os.environ.get("RUNNING_PYTEST") != "1"
 
@@ -516,28 +539,36 @@ def _pg_execute(sql: str, args: list = None) -> list:
     """Execute SQL against PostgreSQL (Supabase). Returns list of row dicts."""
     import psycopg2
     import psycopg2.extras
+    import socket
     pg_sql = _adapt_sql_pg(sql)
     # Use %s placeholders for psycopg2 (SQLite uses ?)
     pg_sql = pg_sql.replace("?", "%s")
-    conn = psycopg2.connect(_SUPABASE_DB_URL, connect_timeout=8,
-                            options="-c statement_timeout=10000")
+
+    _orig_getaddrinfo = socket.getaddrinfo
+    if sys.platform == "win32":
+        def _ipv4_only(host, port, family=0, socktype=0, proto=0, flags=0):
+            return _orig_getaddrinfo(host, port, socket.AF_INET, socktype, proto, flags)
+        socket.getaddrinfo = _ipv4_only
+
     try:
-        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute(pg_sql, args or [])
-            # Fetch before commit — committing first can discard RETURNING / result rows (breaks signup INSERT … RETURNING id).
-            rows_out = []
-            if cur.description is not None:
-                rows_out = [dict(row) for row in cur.fetchall()]
-            conn.commit()
-            return rows_out
-    except Exception:
+        conn = psycopg2.connect(_SUPABASE_DB_URL, connect_timeout=8,
+                                options="-c statement_timeout=10000")
         try:
-            conn.rollback()
-        except Exception:
-            pass
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute(pg_sql, args or [])
+                # Fetch before commit — committing first can discard RETURNING / result rows (breaks signup INSERT … RETURNING id).
+                rows_out = []
+                if cur.description is not None:
+                    rows_out = [dict(row) for row in cur.fetchall()]
+                conn.commit()
+                return rows_out
+        finally:
+            conn.close()
+    except Exception:
+        socket.getaddrinfo = _orig_getaddrinfo
         raise
     finally:
-        conn.close()
+        socket.getaddrinfo = _orig_getaddrinfo
 
 
 def _init_pg_tables():
@@ -1703,6 +1734,22 @@ def _handle_rate_limit(err):
         ),
         429,
     )
+
+
+_AUTH_PATHS = ("/login", "/signup", "/auth", "/forgot-password", "/reset-password", "/verify-email")
+
+
+@app.before_request
+def _redirect_127_to_localhost():
+    """127.0.0.1 and localhost are different browser origins (separate localStorage).
+    Supabase's OAuth redirect allowlist uses localhost, so PKCE verifier stored at
+    127.0.0.1 is invisible when the callback lands — causing 'invalid flow state'.
+    Redirect auth pages to localhost so the entire OAuth round-trip stays on one origin."""
+    host = request.host  # e.g. "127.0.0.1:8000"
+    if host.startswith("127.0.0.1:") and request.path.startswith(_AUTH_PATHS):
+        port = host.split(":", 1)[1]
+        new_url = request.url.replace(f"http://127.0.0.1:{port}", f"http://localhost:{port}", 1)
+        return redirect(new_url, 302)
 
 
 @app.before_request

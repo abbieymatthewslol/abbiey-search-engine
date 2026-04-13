@@ -145,18 +145,21 @@ else:
         # Force IPv4 — psycopg2 on Windows/Linux prefers IPv6 but pooler only accepts IPv4
         _orig_getaddrinfo = socket.getaddrinfo
         def _ipv4_only(host, port, family=0, socktype=0, proto=0, flags=0):
-            results = _orig_getaddrinfo(host, port, socket.AF_INET, socktype, proto, flags)
-            return results
+            return _orig_getaddrinfo(host, port, socket.AF_INET, socktype, proto, flags)
         socket.getaddrinfo = _ipv4_only
 
-        conn = psycopg2.connect(db_url, connect_timeout=10)
-        cur = conn.cursor()
-        cur.execute("SELECT version(), current_database()")
-        ver, db_name = cur.fetchone()
-        cur.execute("SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public'")
-        (table_count,) = cur.fetchone()
-        conn.close()
-        socket.getaddrinfo = _orig_getaddrinfo
+        try:
+            conn = psycopg2.connect(db_url, connect_timeout=10)
+            cur = conn.cursor()
+            cur.execute("SELECT version(), current_database()")
+            ver, db_name = cur.fetchone()
+            cur.execute("SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public'")
+            (table_count,) = cur.fetchone()
+            conn.close()
+            socket.getaddrinfo = _orig_getaddrinfo
+        except Exception:
+            socket.getaddrinfo = _orig_getaddrinfo
+            raise
 
         ok(f"Connected to '{db_name}' — {ver.split(',')[0]}")
         ok(f"{table_count} public tables found")

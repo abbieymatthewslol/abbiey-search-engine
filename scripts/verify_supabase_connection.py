@@ -21,19 +21,23 @@ def _utf8_stdio() -> None:
                 pass
 
 
-def _prefer_ipv4_pooler() -> None:
+def _prefer_ipv4_pooler():
     """Windows often resolves Supabase pooler to IPv6 first; pooler may only respond on IPv4."""
-    if sys.platform != "win32":
-        return
     import socket
 
     _orig = socket.getaddrinfo
+    if sys.platform != "win32":
+        return _orig
 
     def _ipv4(host, port, family=0, type=0, proto=0, flags=0):
         return _orig(host, port, socket.AF_INET, type, proto, flags)
 
     socket.getaddrinfo = _ipv4  # type: ignore[assignment]
+    return _orig
 
+def _restore_getaddrinfo(orig) -> None:
+    import socket
+    socket.getaddrinfo = orig
 
 try:
     from dotenv import load_dotenv
@@ -124,7 +128,7 @@ def main() -> int:
         print("Install: pip install -r requirements.txt")
         return 1
 
-    _prefer_ipv4_pooler()
+    _orig_getaddrinfo = _prefer_ipv4_pooler()
     try:
         conn = psycopg2.connect(url, connect_timeout=10, client_encoding="UTF8")
         try:
@@ -133,7 +137,9 @@ def main() -> int:
                 cur.fetchone()
         finally:
             conn.close()
+            _restore_getaddrinfo(_orig_getaddrinfo)
     except Exception as e:
+        _restore_getaddrinfo(_orig_getaddrinfo)
         print("Connection failed:", e)
         print("Confirm database password in Supabase Dashboard -> Settings -> Database.")
         return 1
