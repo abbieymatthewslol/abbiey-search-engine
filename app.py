@@ -1679,6 +1679,11 @@ def _response_policy_headers(resp):
 
 @app.errorhandler(429)
 def _handle_rate_limit(err):
+    _log_rate_limit_breach(
+        route=request.path,
+        key_type="ip",
+        budget=str(getattr(err, "description", "")),
+    )
     retry_after = getattr(err, "retry_after", None)
     payload = {"error": "rate_limited", "message": _RATE_LIMIT_MSG}
     if retry_after is not None:
@@ -2110,6 +2115,24 @@ def _security_headers(response):
 # ---------------------------------------------------------------------------
 # Rate limiter
 # ---------------------------------------------------------------------------
+# ABBIEY_RATE_LIMIT_PRESET controls overall aggressiveness.
+#   "normal"  (default) — standard budgets; foreground search is kept tight,
+#                         background UI fetches (preview/suggestions/related/
+#                         entity) get a generous separate budget.
+#   "relaxed" — all limits doubled; use as a rollback knob if users report 429s
+#               without waiting for a deploy.
+# To revert rate-limit changes entirely, set ABBIEY_OPEN_ACCESS=1 or point
+# ABBIEY_RATE_LIMIT_PRESET=relaxed in the Vercel environment.
+_RL_PRESET = os.environ.get("ABBIEY_RATE_LIMIT_PRESET", "normal").strip().lower()
+_RL_MULTIPLIER = 2 if _RL_PRESET == "relaxed" else 1
+
+# Foreground limits (user-initiated: search + AI endpoints)
+_RL_SEARCH      = f"{120 * _RL_MULTIPLIER}/minute"
+_RL_AI_HEAVY    = f"{80  * _RL_MULTIPLIER}/minute"
+_RL_AI_LIGHT    = f"{40  * _RL_MULTIPLIER}/minute"
+# Background / UI-assist limits (previews, autocomplete, related, entity)
+_RL_BACKGROUND  = f"{300 * _RL_MULTIPLIER}/minute"
+
 limiter = Limiter(
     get_remote_address,
     app=app,
@@ -2120,6 +2143,21 @@ if ABBIEY_OPEN_ACCESS:
     limiter.enabled = False
     logging.getLogger(__name__).warning(
         "ABBIEY_OPEN_ACCESS is on: rate limiting disabled (intended for trusted self-hosts only)."
+    )
+elif _RL_PRESET == "relaxed":
+    logging.getLogger(__name__).info(
+        "rate_limit_preset=relaxed multiplier=2 (all limits doubled)"
+    )
+
+
+def _log_rate_limit_breach(route: str, key_type: str, budget: str) -> None:
+    """Structured log for rate-limit events without leaking identifiable data."""
+    _log_event(
+        "rate_limit_breach",
+        route=route,
+        key_type=key_type,
+        budget=budget,
+        decision="blocked",
     )
 # ---------------------------------------------------------------------------
 # TTL cache for search results — fixes pagination instability
@@ -2245,6 +2283,11 @@ def error_404(e):
     )
 @app.errorhandler(429)
 def error_429(e):
+    _log_rate_limit_breach(
+        route=request.path,
+        key_type="ip",
+        budget=str(getattr(e, "description", "")),
+    )
     if _wants_json_error_response():
         try:
             return (
@@ -3423,7 +3466,7 @@ def _rank_anti_template_results(results: list) -> list:
 
 
 @app.route("/search")
-@limiter.limit("120/minute")
+@limiter.limit(_RL_SEARCH)
 def search():
     query = request.args.get("q", "").strip()
     page = max(1, min(request.args.get("page", 1, type=int), MAX_PAGE))
@@ -3816,7 +3859,7 @@ def search():
         mybot_id=mybot_id,
     )
 @app.route("/api/suggestions")
-@limiter.limit("200/minute")
+@limiter.limit(_RL_BACKGROUND)
 def api_suggestions():
     """Proxy DuckDuckGo autocomplete to avoid CORS."""
     query = request.args.get("q", "").strip()
@@ -3839,7 +3882,7 @@ def api_suggestions():
 
 
 @app.route("/api/entity")
-@limiter.limit("120/minute")
+@limiter.limit(_RL_BACKGROUND)
 def api_entity():
     """API endpoint: detect entities in a query."""
     query = request.args.get("q", "").strip()
@@ -3895,7 +3938,7 @@ def api_osint_enrich():
 # ---------------------------------------------------------------------------
 
 @app.route("/api/related")
-@limiter.limit("120/minute")
+@limiter.limit(_RL_BACKGROUND)
 def api_related():
     """Return related search suggestions for a query."""
     query = request.args.get("q", "").strip()
@@ -4169,7 +4212,7 @@ def _is_private_ip(hostname):
 
 
 @app.route("/api/preview")
-@limiter.limit("120/minute")
+@limiter.limit(_RL_BACKGROUND)
 def api_preview():
     """Fetch a page preview (title + description + text excerpt)."""
     url = request.args.get("url", "").strip()
@@ -4461,7 +4504,7 @@ def _extractive_research(question, results):
 
 
 @app.route("/api/chat", methods=["POST"])
-@limiter.limit("80/minute")
+@limiter.limit(_RL_AI_HEAVY)
 def api_chat():
     """AI research assistant that studies search results and answers questions."""
     data = request.get_json() or {}
@@ -4543,7 +4586,7 @@ def api_chat():
 
 
 @app.route("/api/answer-layer")
-@limiter.limit("40 per minute")
+@limiter.limit(_RL_AI_LIGHT)
 def api_answer_layer():
     """Structured multi-source answer: synthesis, claims with confidence, contradictions, reasoning."""
     query = (request.args.get("q") or "").strip()
@@ -4704,7 +4747,7 @@ def api_answer_layer():
 
 
 @app.route("/api/ai-summary")
-@limiter.limit("80/minute")
+@limiter.limit(_RL_AI_HEAVY)
 def api_ai_summary():
     """Generate a 2-3 sentence AI summary with citations for a query."""
     query = request.args.get("q", "").strip()
@@ -4858,7 +4901,7 @@ def api_waitlist():
 # Analytics & Trends API
 # ---------------------------------------------------------------------------
 @app.route("/api/privacy-stats")
-@limiter.limit("200/minute")
+@limiter.limit(_RL_BACKGROUND)
 def api_privacy_stats():
     """Returns real, server-confirmed privacy stats. All zeros reflect genuine policy."""
     total_queries = 0
@@ -4877,7 +4920,7 @@ def api_privacy_stats():
 
 # ---------------------------------------------------------------------------
 @app.route("/api/trends")
-@limiter.limit("120/minute")
+@limiter.limit(_RL_BACKGROUND)
 def api_trends():
     """Public endpoint — returns top 10 trending queries from the last 24 h."""
     try:
