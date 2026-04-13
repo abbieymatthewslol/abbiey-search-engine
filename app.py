@@ -29,7 +29,7 @@ import phonenumbers
 from phonenumbers import NumberParseException
 from cachetools import TTLCache
 from ddgs import DDGS
- from flask import (
+from flask import (
     Flask,
     render_template,
     request,
