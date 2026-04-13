@@ -2468,6 +2468,83 @@ def _try_knowledge_panel(query):
     return None
 
 
+def _wikidata_topic_labels(query, limit=6):
+    """Short entity labels from Wikidata search (public API, no key)."""
+    qs = (query or "").strip()
+    if len(qs) < 2 or len(qs) > 120:
+        return []
+    try:
+        resp = httpx.get(
+            "https://www.wikidata.org/w/api.php",
+            params={
+                "action": "wbsearchentities",
+                "search": qs,
+                "language": "en",
+                "limit": str(max(1, min(limit, 12))),
+                "format": "json",
+            },
+            headers={"User-Agent": "abbiey.search/1.0 (knowledge graph)"},
+            timeout=2.5,
+        )
+        data = resp.json()
+        out = []
+        seen = set()
+        qlow = qs.lower()
+        for hit in data.get("search", []):
+            lab = (hit.get("label") or "").strip()
+            if not lab:
+                continue
+            low = lab.lower()
+            if low == qlow or low in seen:
+                continue
+            seen.add(low)
+            out.append(lab)
+            if len(out) >= limit:
+                break
+        return out
+    except Exception:
+        return []
+
+
+def _wikipedia_category_labels(title, limit=8):
+    """Visible Wikipedia categories for a resolved article title."""
+    t = (title or "").strip()
+    if not t or len(t) > 200:
+        return []
+    try:
+        resp = httpx.get(
+            "https://en.wikipedia.org/w/api.php",
+            params={
+                "action": "query",
+                "titles": t,
+                "prop": "categories",
+                "cllimit": str(max(1, min(limit + 6, 32))),
+                "clshow": "!hidden",
+                "format": "json",
+                "redirects": 1,
+            },
+            headers={"User-Agent": "abbiey.search/1.0 (knowledge graph)"},
+            timeout=2.5,
+        )
+        data = resp.json()
+        pages = data.get("query", {}).get("pages", {})
+        for _pid, page in pages.items():
+            cats = page.get("categories") or []
+            labels = []
+            for c in cats:
+                raw = (c.get("title") or "").strip()
+                if raw.startswith("Category:"):
+                    raw = raw[9:]
+                if raw and raw not in labels:
+                    labels.append(raw)
+                if len(labels) >= limit:
+                    break
+            return labels
+    except Exception:
+        pass
+    return []
+
+
 # ---------------------------------------------------------------------------
 # Weather (Open-Meteo — free, no API key)
 # ---------------------------------------------------------------------------
@@ -3484,8 +3561,8 @@ def api_suggestions():
             "https://duckduckgo.com/ac/",
             params={"q": query, "type": "list"},
             timeout=2.0,
-        data = resp.json()
         )
+        data = resp.json()
         if isinstance(data, list) and len(data) > 1 and isinstance(data[1], list):
             return jsonify(data[1][:8])
         if isinstance(data, list) and data and isinstance(data[0], dict):
@@ -3566,8 +3643,8 @@ def api_related():
             "https://duckduckgo.com/ac/",
             params={"q": query, "type": "list"},
             timeout=2.0,
-        data = resp.json()
         )
+        data = resp.json()
         if isinstance(data, list) and len(data) > 1 and isinstance(data[1], list):
             for s in data[1]:
                 if s.lower() != query.lower():
@@ -3597,8 +3674,8 @@ def api_related():
                         "https://duckduckgo.com/ac/",
                         params={"q": word, "type": "list"},
                         timeout=1.5,
-                    d2 = resp2.json()
                     )
+                    d2 = resp2.json()
                     if isinstance(d2, list) and len(d2) > 1 and isinstance(d2[1], list):
                         for s in d2[1][:3]:
                             if s.lower() != query.lower() and s.lower() != word.lower():
@@ -3609,6 +3686,72 @@ def api_related():
 
     result = list(related)[:12]
     return jsonify(result)
+
+
+@app.route("/api/knowledge-graph")
+@limiter.limit("60/minute")
+def api_knowledge_graph():
+    """
+    Aggregate lightweight knowledge signals: Wikipedia summary (when the query
+    looks like an entity), Wikidata topic suggestions, Wikipedia categories,
+    and related search phrases. This is not a full crawl/index — it composes
+    public APIs the same way the main results page does.
+    """
+    query = request.args.get("q", "").strip()
+    if not query or len(query) > MAX_QUERY_LENGTH:
+        return jsonify(
+            {
+                "wikipedia": None,
+                "related": [],
+                "topics": [],
+                "categories": [],
+            }
+        )
+
+    wiki = _try_knowledge_panel(query)
+    topics = _wikidata_topic_labels(query, limit=6)
+    categories = []
+    if wiki and wiki.get("title"):
+        categories = _wikipedia_category_labels(wiki["title"], limit=8)
+
+    related = []
+    try:
+        resp = httpx.get(
+            "https://duckduckgo.com/ac/",
+            params={"q": query, "type": "list"},
+            timeout=2.0,
+        )
+        data = resp.json()
+        seen = {query.lower()}
+        if isinstance(data, list) and len(data) > 1 and isinstance(data[1], list):
+            for s in data[1]:
+                if isinstance(s, str) and s.strip():
+                    low = s.lower()
+                    if low not in seen:
+                        seen.add(low)
+                        related.append(s)
+        elif isinstance(data, list) and data and isinstance(data[0], dict):
+            for item in data:
+                phrase = (item.get("phrase") or "").strip()
+                if phrase and phrase.lower() not in seen:
+                    seen.add(phrase.lower())
+                    related.append(phrase)
+    except Exception:
+        pass
+    for suffix in ("tutorial", "explained", "vs", "definition"):
+        cand = f"{query} {suffix}".strip()
+        if cand.lower() not in seen and len(related) < 14:
+            seen.add(cand.lower())
+            related.append(cand)
+
+    return jsonify(
+        {
+            "wikipedia": wiki,
+            "related": related[:12],
+            "topics": topics,
+            "categories": categories,
+        }
+    )
 
 
 # ---------------------------------------------------------------------------

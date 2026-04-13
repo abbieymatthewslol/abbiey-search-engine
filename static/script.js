@@ -617,6 +617,7 @@ document.addEventListener("DOMContentLoaded", () => {
     autocomplete:  { key: "abbiey_autocomplete",   def: "true"   },
     persistRegion: { key: "abbiey_region_persist", def: "false"  },
     history:       { key: "abbiey_history",        def: "false"  },
+    incognito:     { key: "abbiey_incognito",      def: "false"  },
     showCards:     { key: "abbiey_show_cards",     def: "true"   },
     showFavicons:  { key: "abbiey_show_favicons",  def: "true"   },
     showDates:     { key: "abbiey_show_dates",     def: "true"   },
@@ -676,10 +677,15 @@ document.addEventListener("DOMContentLoaded", () => {
     // Answer cards
     if (gs("showCards") === "false") {
       [".calculator-card",".color-card",".unit-convert-card",".knowledge-panel",
-       ".weather-card",".dictionary-card",".qr-card"].forEach(sel => {
+       ".weather-card",".dictionary-card",".qr-card",".knowledge-graph-root"].forEach(sel => {
         document.querySelectorAll(sel).forEach(el => { el.style.display = "none"; });
       });
+    } else {
+      document.querySelectorAll(".knowledge-graph-root").forEach(el => { el.style.display = ""; });
     }
+
+    const _incBadge = document.getElementById("incognito-badge");
+    if (_incBadge) _incBadge.hidden = gs("incognito") !== "true";
 
     // Favicons
     if (gs("showFavicons") === "false") {
@@ -906,6 +912,7 @@ document.addEventListener("DOMContentLoaded", () => {
     syncToggle("autocomplete-toggle",  gs("autocomplete")  === "true");
     syncToggle("persist-region-toggle",gs("persistRegion") === "true");
     syncToggle("history-toggle",       gs("history")       === "true");
+    syncToggle("incognito-toggle",   gs("incognito")     === "true");
     syncToggle("cards-toggle",         gs("showCards")     === "true");
     syncToggle("favicons-toggle",      gs("showFavicons")  === "true");
     syncToggle("dates-toggle",         gs("showDates")     === "true");
@@ -996,9 +1003,14 @@ document.addEventListener("DOMContentLoaded", () => {
       document.getElementById("history-panel")?.setAttribute("hidden", "");
     }
   });
+  wireToggle("incognito-toggle", "incognito", (checked) => {
+    const badge = document.getElementById("incognito-badge");
+    if (badge) badge.hidden = !checked;
+    if (checked) clearStoredSearchHistory(false);
+  });
   wireToggle("cards-toggle", "showCards", (checked) => {
     [".calculator-card",".color-card",".unit-convert-card",".knowledge-panel",
-     ".weather-card",".dictionary-card",".qr-card"].forEach(sel => {
+     ".weather-card",".dictionary-card",".qr-card",".knowledge-graph-root"].forEach(sel => {
       document.querySelectorAll(sel).forEach(el => { el.style.display = checked ? "" : "none"; });
     });
   });
@@ -1043,7 +1055,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const CLOCK_SVG = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`;
 
     function panelGetHistory() {
-      if (gs("history") !== "true") return [];
+      if (gs("history") !== "true" || gs("incognito") === "true") return [];
       try { return JSON.parse(localStorage.getItem(HISTORY_KEY_PANEL)) || []; } catch { return []; }
     }
     function isLoggedInUi() {
@@ -1051,7 +1063,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     /** Server-first order, then local-only queries (logged-in); else localStorage only. */
     async function panelHistoryQueries() {
-      if (gs("history") !== "true") return [];
+      if (gs("history") !== "true" || gs("incognito") === "true") return [];
       const local = panelGetHistory();
       if (!isLoggedInUi()) return local;
       try {
@@ -1091,7 +1103,9 @@ document.addEventListener("DOMContentLoaded", () => {
       list.innerHTML = `<div class="history-panel-empty">Loading…</div>`;
       const items = await panelHistoryQueries();
       if (!items.length) {
-        list.innerHTML = `<div class="history-panel-empty">No recent searches</div>`;
+        list.innerHTML = gs("incognito") === "true"
+          ? `<div class="history-panel-empty">Incognito is on — new searches are not saved. Turn it off in Settings to build history again.</div>`
+          : `<div class="history-panel-empty">No recent searches</div>`;
         return;
       }
       list.innerHTML = items.map((text, i) =>
@@ -1625,17 +1639,17 @@ document.addEventListener("DOMContentLoaded", () => {
     const MAX_HISTORY = 20;
 
     function getHistory() {
-      if (gs("history") !== "true") return [];
+      if (gs("history") !== "true" || gs("incognito") === "true") return [];
       try { return JSON.parse(localStorage.getItem(HISTORY_KEY)) || []; }
       catch { return []; }
     }
     function saveHistory(items) {
-      if (gs("history") !== "true") { clearStoredSearchHistory(); return; }
+      if (gs("history") !== "true" || gs("incognito") === "true") { clearStoredSearchHistory(); return; }
       try { localStorage.setItem(HISTORY_KEY, JSON.stringify(items)); }
       catch {}
     }
     function addHistory(term) {
-      if (gs("history") === "false") return;
+      if (gs("history") === "false" || gs("incognito") === "true") return;
       const t = term.trim();
       if (!t) return;
       let items = getHistory().filter(i => i !== t);
@@ -1647,7 +1661,7 @@ document.addEventListener("DOMContentLoaded", () => {
     function clearHistory() { clearStoredSearchHistory(true); }
 
     function syncServerUserHistory(q) {
-      if (gs("history") !== "true") return;
+      if (gs("history") !== "true" || gs("incognito") === "true") return;
       if (!document.querySelector(".user-avatar-chip")) return;
       const t = (q || "").trim();
       if (!t) return;
@@ -3159,6 +3173,59 @@ document.addEventListener("DOMContentLoaded", () => {
       })
       .catch(() => {});
   }
+
+  // ===== Knowledge graph (Wikipedia + Wikidata + categories; client-rendered) =====
+  (function initKnowledgeGraph() {
+    const root = document.getElementById("knowledge-graph-root");
+    const q = window.__searchQuery;
+    if (!root || !q || window.__searchType !== "text") return;
+    if (gs("showCards") === "false") return;
+    fetch(`/api/knowledge-graph?q=${encodeURIComponent(q)}`)
+      .then(r => r.json())
+      .then(data => {
+        if (!data || typeof data !== "object") return;
+        const topics = Array.isArray(data.topics) ? data.topics : [];
+        const cats = Array.isArray(data.categories) ? data.categories : [];
+        const wiki = data.wikipedia;
+        const hasPanel = document.querySelector(".knowledge-panel");
+        const showWikiMini = !hasPanel && wiki && wiki.extract;
+        if (!topics.length && !cats.length && !showWikiMini) return;
+        let html = `<article class="knowledge-graph-card" aria-label="Knowledge graph">`;
+        html += `<div class="kg-header"><span class="kg-title">Knowledge graph</span><span class="kg-sub">Topics and categories from public knowledge bases — not a custom crawl.</span></div>`;
+        if (showWikiMini) {
+          const ex = String(wiki.extract);
+          const short = ex.length > 560 ? `${ex.slice(0, 560)}…` : ex;
+          html += `<div class="kg-wiki-mini">`;
+          if (wiki.image_url) {
+            html += `<img src="${esc(wiki.image_url)}" alt="" class="kg-wiki-thumb" loading="lazy"/>`;
+          }
+          html += `<div class="kg-wiki-mini-text"><h3 class="kg-wiki-title">${esc(wiki.title)}</h3>`;
+          html += `<p class="kg-wiki-extract">${esc(short)}</p>`;
+          if (wiki.page_url) {
+            html += `<a class="kg-wiki-more" href="${esc(wiki.page_url)}" target="_blank" rel="noopener">Read on Wikipedia →</a>`;
+          }
+          html += `</div></div>`;
+        }
+        if (topics.length) {
+          html += `<div class="kg-block"><span class="kg-block-label">Related topics</span><div class="kg-pills">`;
+          topics.forEach(t => {
+            html += `<a class="kg-pill" href="/search?q=${encodeURIComponent(t)}&type=text">${esc(t)}</a>`;
+          });
+          html += `</div></div>`;
+        }
+        if (cats.length) {
+          html += `<div class="kg-block"><span class="kg-block-label">Wikipedia categories</span><div class="kg-pills kg-pills-muted">`;
+          cats.forEach(c => {
+            html += `<a class="kg-pill" href="/search?q=${encodeURIComponent(c)}&type=text">${esc(c)}</a>`;
+          });
+          html += `</div></div>`;
+        }
+        html += `</article>`;
+        root.innerHTML = html;
+        root.hidden = false;
+      })
+      .catch(() => {});
+  })();
 
   // ===== Trending Searches =====
   (function initTrending() {

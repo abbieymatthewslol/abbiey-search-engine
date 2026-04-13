@@ -2375,6 +2375,159 @@ a.clarify-chip:hover {
 }
 .knowledge-link:hover { text-decoration: underline; }
 
+/* Knowledge graph (client-rendered summary of public KB edges) */
+.knowledge-graph-root { margin: 0.75rem 0 0.25rem; }
+.knowledge-graph-root[hidden] { display: none !important; }
+.knowledge-graph-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-sm);
+  padding: 1rem 1.1rem 1.05rem;
+}
+.kg-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin-bottom: 0.75rem;
+}
+.kg-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.kg-sub {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  line-height: 1.45;
+}
+.kg-wiki-mini {
+  display: flex;
+  gap: 0.85rem;
+  align-items: flex-start;
+  margin-bottom: 0.85rem;
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.kg-wiki-thumb {
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: var(--radius);
+  flex-shrink: 0;
+}
+.kg-wiki-title { font-size: 1rem; font-weight: 700; margin: 0 0 0.35rem; }
+.kg-wiki-extract {
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  line-height: 1.55;
+  margin: 0 0 0.4rem;
+}
+.kg-wiki-more {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--accent);
+}
+.kg-block { margin-top: 0.65rem; }
+.kg-block:first-of-type { margin-top: 0; }
+.kg-block-label {
+  display: block;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: 0.4rem;
+}
+.kg-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+.kg-pill {
+  font-size: 0.78rem;
+  padding: 0.28rem 0.55rem;
+  border-radius: 9999px;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  background: var(--bg-hover);
+  text-decoration: none;
+  transition: border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.kg-pill:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+.kg-pills-muted .kg-pill {
+  background: transparent;
+  font-size: 0.74rem;
+}
+
+/* Dedicated image / video search sections */
+.media-search-section {
+  margin: 0.5rem 0 1rem;
+  padding: 0.85rem 1rem 0.95rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-sm);
+}
+.media-search-section--video {
+  border-color: color-mix(in srgb, var(--accent) 22%, var(--border));
+}
+.media-section-title {
+  margin: 0 0 0.35rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.media-section-lead {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.55;
+  color: var(--text-dim);
+}
+.media-source-list {
+  margin: 0.65rem 0 0;
+  padding-left: 1.15rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+.media-source-list li { margin: 0.2rem 0; }
+
+.header-brand-top {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+/* base.html: logo + badge sit in a row before .header-controls */
+header > .header-brand-top {
+  flex: 1 1 auto;
+  margin-right: 0.5rem;
+}
+.incognito-badge {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  padding: 0.2rem 0.45rem;
+  border-radius: 9999px;
+  border: 1px solid var(--border-strong);
+  color: var(--text-dim);
+  background: var(--bg-surface-2);
+}
+.settings-privacy-lead {
+  margin: 0 0 0.65rem;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
 /* Dictionary card */
 .dictionary-header {
   display: flex;

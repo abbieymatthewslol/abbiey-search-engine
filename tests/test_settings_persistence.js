@@ -39,6 +39,7 @@ const _S = {
   autocomplete:  { key: "abbiey_autocomplete",   def: "true"    },
   persistRegion: { key: "abbiey_region_persist", def: "false"   },
   history:       { key: "abbiey_history",        def: "true"    },
+  incognito:     { key: "abbiey_incognito",      def: "false"   },
   showCards:     { key: "abbiey_show_cards",     def: "true"    },
   showFavicons:  { key: "abbiey_show_favicons",  def: "true"    },
   showDates:     { key: "abbiey_show_dates",     def: "true"    },

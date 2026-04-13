@@ -57,7 +57,10 @@
 <body class="{% block body_class %}{% endblock %}">
 
     <header>
+    <div class="header-brand-top">
         <a href="/" class="logo">abbiey.<span>search</span></a>
+        <span class="incognito-badge" id="incognito-badge" hidden>Incognito</span>
+    </div>
         <div class="header-controls">
 
             <div class="header-overflow" id="header-overflow">
@@ -263,15 +266,24 @@
                 </section>
                 <section class="settings-section">
                     <h3 class="settings-section-title">Privacy</h3>
+                    <p class="settings-hint settings-privacy-lead">abbieysearch does not retain raw search query text in application analytics. Optional history is off by default.</p>
                     <div class="settings-row">
-                        <span class="settings-row-label">Save search history</span>
+                        <span class="settings-row-label">Incognito session</span>
+                        <label class="settings-toggle">
+                            <input type="checkbox" id="incognito-toggle">
+                            <span class="settings-toggle-track"></span>
+                        </label>
+                    </div>
+                    <p class="settings-hint">While incognito is on, new searches are not saved locally or to your account.</p>
+                    <div class="settings-row">
+                        <span class="settings-row-label">Remember search history</span>
                         <label class="settings-toggle">
                             <input type="checkbox" id="history-toggle">
                             <span class="settings-toggle-track"></span>
                         </label>
                     </div>
                     <div class="settings-row">
-                        <span class="settings-row-label">Recent searches</span>
+                        <span class="settings-row-label">Manage saved history</span>
                         <div style="display:flex;gap:.375rem;align-items:center;">
                             <button type="button" class="settings-secondary-btn" id="view-history-btn">View</button>
                             <button type="button" class="settings-danger-btn" id="clear-history-btn">Clear all</button>

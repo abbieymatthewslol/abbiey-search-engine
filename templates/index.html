@@ -94,8 +94,11 @@
     </noscript>
 
     <header>
-        <div class="header-brand">
-            <a href="/" class="logo">abbiey<span>search</span></a>
+            <div class="header-brand">
+            <div class="header-brand-top">
+                <a href="/" class="logo">abbiey<span>search</span></a>
+                <span class="incognito-badge" id="incognito-badge" hidden>Incognito</span>
+            </div>
             {% if not query %}
             <ul class="home-support" role="list" aria-label="Principles">
                 <li class="home-support-item">unfiltered answers</li>
@@ -337,15 +340,24 @@
                 {# ===== PRIVACY ===== #}
                 <section class="settings-section">
                     <h3 class="settings-section-title">Privacy</h3>
+                    <p class="settings-hint settings-privacy-lead">abbieysearch does not write your queries to server-side search logs. Optional history lives only where you turn it on (this device and, if you are signed in, your account row).</p>
                     <div class="settings-row">
-                        <span class="settings-row-label">Search history</span>
+                        <span class="settings-row-label">Incognito session</span>
+                        <label class="settings-toggle">
+                            <input type="checkbox" id="incognito-toggle">
+                            <span class="settings-toggle-track"></span>
+                        </label>
+                    </div>
+                    <p class="settings-hint">While incognito is on, recent queries are not saved locally or to your account, even if search history is enabled.</p>
+                    <div class="settings-row">
+                        <span class="settings-row-label">Remember search history</span>
                         <label class="settings-toggle">
                             <input type="checkbox" id="history-toggle">
                             <span class="settings-toggle-track"></span>
                         </label>
                     </div>
                     <div class="settings-row">
-                        <span class="settings-row-label">Search history</span>
+                        <span class="settings-row-label">Manage saved history</span>
                         <div style="display:flex;gap:.375rem;align-items:center;">
                             <button type="button" class="settings-secondary-btn" id="view-history-btn">View</button>
                             <button type="button" class="settings-danger-btn" id="clear-history-btn">Clear all</button>
@@ -475,7 +487,7 @@
             {% if not query %}
             <div class="home-message" aria-label="Search positioning">
                 <p class="home-message-title">Unfiltered answers, with receipts.</p>
-                <p class="home-message-subtitle">Get direct, detailed explanations with sources, tradeoffs, and next steps.</p>
+                <p class="home-message-subtitle">Get direct, detailed explanations with sources, tradeoffs, and next steps. Built privacy-first: no server-side query logging, optional incognito in Settings, and one-tap history clear.</p>
             </div>
             <p class="home-safety-note">Unfiltered = direct, detailed, and honest &mdash; without marketing fluff.</p>
             <div class="home-recent-wrap">
@@ -831,6 +843,10 @@
         </div>
         {% endif %}
 
+        {% if query and search_type == 'text' %}
+        <div id="knowledge-graph-root" class="knowledge-graph-root" hidden></div>
+        {% endif %}
+
         {# ===== DICTIONARY CARD ===== #}
         {% if dictionary %}
         <div class="dictionary-card">
@@ -1102,6 +1118,31 @@
                 <p class="crisis-resources-foot">We are not a crisis service; your search still runs as usual below. If this does not apply to you, you can ignore this box.</p>
             </aside>
             {% endif %}
+
+        {% if query and search_type == 'images' %}
+        <section class="media-search-section" aria-labelledby="media-images-title">
+            <div class="media-search-section-head">
+                <h2 id="media-images-title" class="media-section-title">Image search</h2>
+                <p class="media-section-lead">Visual results are blended from public indexes (DuckDuckGo plus optional open catalogues when you enable advanced image fusion). abbieysearch does not run a private crawl or store a separate image index; freshness and coverage follow those sources.</p>
+            </div>
+            <ul class="media-source-list" role="list" aria-label="Typical sources">
+                <li>Web image index (DuckDuckGo)</li>
+                {% if image_search_advanced %}<li>Openverse, Wikimedia Commons, Internet Archive (when fusion is on)</li>{% else %}<li>Open catalogues available under <strong>Advanced image search</strong></li>{% endif %}
+            </ul>
+        </section>
+        {% endif %}
+        {% if query and search_type == 'videos' %}
+        <section class="media-search-section media-search-section--video" aria-labelledby="media-videos-title">
+            <div class="media-search-section-head">
+                <h2 id="media-videos-title" class="media-section-title">Video search</h2>
+                <p class="media-section-lead">Clips are discovered through a public video index, with fallbacks to open archives (Internet Archive) and the fediverse (PeerTube) when the primary blend is thin. We surface metadata and links; playback stays with the publisher.</p>
+            </div>
+            <ul class="media-source-list" role="list" aria-label="Typical sources">
+                <li>Video index (DuckDuckGo)</li>
+                <li>Internet Archive &amp; PeerTube (fallback when needed)</li>
+            </ul>
+        </section>
+        {% endif %}
 
         {# ===== MAIN RESULTS ===== #}
         <div id="results" class="results-container" data-type="{{ search_type }}">
