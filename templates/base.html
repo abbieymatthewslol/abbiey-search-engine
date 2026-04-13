@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>{% block title %}abbieysearch{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=deploy_hash) }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/input-inner-reset.css', v=deploy_hash) }}">
     <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png">
     <link rel="shortcut icon" href="/favicon.ico">
     <meta name="deploy-hash" content="{{ deploy_hash }}">

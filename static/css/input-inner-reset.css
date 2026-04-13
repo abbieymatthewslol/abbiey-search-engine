@@ -1,0 +1,26 @@
+/* Outer pill/wrapper is the only visible chrome; inner fields stay flat. */
+.auth-input-pill input,
+.auth-input-pill textarea,
+.search-box #search-input {
+  border: none !important;
+  outline: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.auth-input-pill input:focus,
+.auth-input-pill input:focus-visible,
+.auth-input-pill textarea:focus,
+.auth-input-pill textarea:focus-visible,
+.search-box #search-input:focus,
+.search-box #search-input:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.auth-input-pill:focus-within {
+  border-color: #22c55e;
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.3);
+}
