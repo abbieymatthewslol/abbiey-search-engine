@@ -1,0 +1,45 @@
+---
+description: Core project rules and conventions for abbiey.search
+globs: ["**/*.py", "**/*.html", "**/*.js", "**/*.css"]
+alwaysApply: true
+---
+
+# abbiey.search — Core Rules
+
+## Project Overview
+Privacy-first search engine built with Python/Flask on Vercel, backed by Supabase PostgreSQL.
+Full context in `AGENTS.md` (architecture, integration IDs, recovery runbook).
+
+## Stack
+- Python 3.12 / Flask — `app.py` (~6,000 lines)
+- Vanilla JS + Jinja2 — `static/script.js`, `templates/`
+- PostgreSQL 17 via Supabase (project `xwxscvllmghyogddpmii`)
+- Supabase Auth — Google OAuth (PKCE) + email/password
+- Vercel serverless deployment
+
+## CSP Nonce — CRITICAL RULE
+**Every `<script>` tag in every template must have `nonce="{{ csp_nonce }}"`.**
+
+```html
+<!-- CORRECT -->
+<script nonce="{{ csp_nonce }}">...</script>
+
+<!-- WRONG — silently blocked in production -->
+<script>...</script>
+```
+
+The nonce is generated per-request in `app.py` `@before_request` and injected via context processor.
+
+## Python / Flask Rules
+- Use `flask-limiter` decorators for rate-sensitive routes
+- Admin endpoints: protected by `_admin_check()` — accepts `?token=` or `X-Admin-Token`
+- Database: always use Transaction pooler (port 6543), never direct connection (port 5432)
+- HTTP calls: use `_get_http()` helper (wraps `httpx`)
+- No secrets in code — use env vars; reference `.env.example` for the full list
+
+## Testing
+```bash
+pytest tests/ -v          # run full suite
+pytest tests/test_app.py  # single file
+```
+Tests live in `tests/`; fixtures in `tests/conftest.py`.

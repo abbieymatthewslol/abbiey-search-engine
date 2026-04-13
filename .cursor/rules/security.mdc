@@ -1,0 +1,27 @@
+---
+description: Security rules for abbiey.search — CSP, auth, secrets
+globs: ["**/*.py", "**/*.html", "**/*.js"]
+alwaysApply: true
+---
+
+# Security Rules
+
+## Content Security Policy
+- `script-src` has no `unsafe-inline` or `unsafe-eval`
+- All inline `<script>` tags **must** include `nonce="{{ csp_nonce }}"`
+- Never add `unsafe-inline` or `unsafe-eval` to the CSP header in `app.py`
+
+## Secrets & Credentials
+- Never hard-code API keys, DB passwords, or tokens
+- All secrets come from environment variables (see `.env.example`)
+- The following are safe to commit (non-secret IDs): Supabase project ref, Google OAuth Client ID, Vercel project/team IDs
+
+## Authentication
+- Admin routes: `_admin_check()` — requires `ADMIN_TOKEN` via `?token=` or `X-Admin-Token` header
+- User routes: Flask session (`session["user_id"]`)
+- Google OAuth: PKCE flow via Supabase JS — do not change the redirect flow without reading AGENTS.md
+
+## Database
+- Production: Supabase PostgreSQL via Transaction pooler (port **6543**)
+- Never use SQLite in production (Vercel `/tmp` is ephemeral)
+- Always use `sslmode=require` in DB connection strings
