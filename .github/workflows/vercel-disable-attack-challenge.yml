@@ -1,0 +1,21 @@
+# One-click: turn off Vercel Attack Challenge Mode so abbieysearch.com serves the app
+# (not the "Security Checkpoint" / 429 interstitial). Safe to run anytime.
+name: Vercel — disable Attack Challenge Mode
+
+on:
+  workflow_dispatch:
+
+env:
+  VERCEL_PROJECT_ID: prj_hGdLqDsNtQK2A57hWyZNxdZKMi3b
+  VERCEL_ORG_ID: team_YeguIG4NHm4Kp0Jf5AbOwgFN
+
+jobs:
+  disable:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Disable Attack Challenge Mode via Vercel API
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: python3 scripts/disable_vercel_attack_challenge.py
