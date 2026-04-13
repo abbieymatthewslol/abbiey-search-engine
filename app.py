@@ -6,6 +6,7 @@ No tracking. No filtering. No logs. Just results.
 import hashlib
 import hmac
 import json
+import queue
 from collections import Counter
 import logging
 import os
@@ -3050,8 +3051,8 @@ def api_search_access_claim():
             rows = _users_execute(
                 "SELECT 1 AS ok FROM payment_events WHERE checkout_token=? LIMIT 1",
                 [checkout_token],
-            webhook_verified = bool(rows)
             )
+            webhook_verified = bool(rows)
         except Exception:
             pass
     if not webhook_verified and not _search_checkout_pending():
@@ -4103,8 +4104,8 @@ def _check_single_onion(url):
             resp = client.head(
                 url,
                 headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; rv:128.0) Gecko/20100101 Firefox/128.0"},
-        status = "live" if resp.status_code < 400 else "down"
             )
+        status = "live" if resp.status_code < 400 else "down"
     except Exception:
         # Tor not running or site unreachable — can't distinguish, report unknown
         status = "unknown"
@@ -5896,7 +5897,6 @@ def _inclusive_text_recovery_bridge(
     out: list = []
 
     def _take(batch):
-        nonlocal out
         for r in batch or []:
             u = (r.get("url") or "").strip()
             if not u or u in seen:
@@ -7037,8 +7037,8 @@ def _try_prices(query, max_results=40):
     with_price = sorted(
         [r for r in results if r.get("price_val") is not None],
         key=lambda x: x["price_val"],
-    without_price = [r for r in results if r.get("price_val") is None]
     )
+    without_price = [r for r in results if r.get("price_val") is None]
     return (with_price + without_price)[:max_results]
 
 
