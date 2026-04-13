@@ -519,14 +519,15 @@
                 <a href="/search?q={{ query|urlencode }}&type=videos{% if region %}&region={{ region }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab {% if search_type == 'videos' %}active{% endif %}">Videos</a>
                 <a href="/search?q={{ query|urlencode }}&type=code{% if region %}&region={{ region }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab {% if search_type == 'code' %}active{% endif %}">Code</a>
                 </div>
-                <div class="tab-more-wrap {% if search_type in ('onion', 'saved') %}has-active{% endif %}" id="tab-more-wrap">
-                    <button type="button" class="tab tab-more-btn {% if search_type in ('onion', 'saved') %}active{% endif %}" id="tab-more-btn" aria-haspopup="true" aria-expanded="false" aria-controls="tab-more-menu">
-                        {% if search_type == 'onion' %}Deep Web{% elif search_type == 'saved' %}Saved{% else %}More{% endif %}
+                <div class="tab-more-wrap {% if search_type in ('onion', 'saved', 'mybot') %}has-active{% endif %}" id="tab-more-wrap">
+                    <button type="button" class="tab tab-more-btn {% if search_type in ('onion', 'saved', 'mybot') %}active{% endif %}" id="tab-more-btn" aria-haspopup="true" aria-expanded="false" aria-controls="tab-more-menu">
+                        {% if search_type == 'onion' %}Deep Web{% elif search_type == 'saved' %}Saved{% elif search_type == 'mybot' %}Custom bot{% else %}More{% endif %}
                         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
                     </button>
                     <div class="tab-more-menu" id="tab-more-menu" hidden>
                         <a href="/search?q={{ query|urlencode }}&type=onion{% if region %}&region={{ region }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab-more-item {% if search_type == 'onion' %}active{% endif %}">Deep Web</a>
                         <a href="/search?q={{ query|urlencode }}&type=saved{% if cleanweb %}&cleanweb=1{% endif %}" class="tab-more-item {% if search_type == 'saved' %}active{% endif %}">Saved <span class="bookmark-count-badge" id="bookmark-count-badge"></span></a>
+                        <a href="/profile#search-bots" class="tab-more-item">Custom bots</a>
                     </div>
                 </div>
             </nav>
@@ -1226,6 +1227,11 @@
                     <p class="no-results">Deep web search returned no results.</p>
                     <p class="no-results-hint">Ahmia.fi may be temporarily unreachable, or no .onion sites matched your query. Try broader keywords or check back shortly.</p>
                 </div>
+                {% elif search_type == 'mybot' %}
+                <div class="no-results-inclusive">
+                    <p class="no-results">No pages in this bot matched your keywords.</p>
+                    <p class="no-results-hint">Run a crawl from <a href="/profile#search-bots">Profile → Custom search bots</a>, widen your query, or clear filters.</p>
+                </div>
                 {% else %}
                 <div class="no-results-inclusive">
                     <p class="no-results">Nothing matched in our blend yet — that does not mean your question is wrong.</p>
@@ -1251,7 +1257,7 @@
         <div id="trending-searches" class="trending-searches" style="display:none"></div>
 
         {% if has_more %}
-        <div id="scroll-sentinel" data-page="1" data-query="{{ query }}" data-type="{{ search_type }}" data-has-more="true" data-img-extra="{{ img_scroll_extras or '' }}" data-cleanweb="{% if cleanweb %}1{% endif %}" data-lat="{% if search_lat is not none %}{{ search_lat }}{% endif %}" data-lon="{% if search_lon is not none %}{{ search_lon }}{% endif %}">
+        <div id="scroll-sentinel" data-page="1" data-query="{{ query }}" data-type="{{ search_type }}" data-has-more="true" data-img-extra="{{ img_scroll_extras or '' }}" data-cleanweb="{% if cleanweb %}1{% endif %}" data-lat="{% if search_lat is not none %}{{ search_lat }}{% endif %}" data-lon="{% if search_lon is not none %}{{ search_lon }}{% endif %}"{% if search_type == 'mybot' and mybot_id %} data-bot-id="{{ mybot_id }}"{% endif %}>
             <div class="scroll-loader">
                 <div class="spinner"></div>
             </div>
@@ -1267,7 +1273,7 @@
     </main>
 
     {# ===== RESULT PREVIEW PANEL ===== #}
-    {% if query and search_type in ('text', 'news', 'code', 'onion', 'videos', 'images', 'saved', 'prices', 'alts') %}
+    {% if query and search_type in ('text', 'news', 'code', 'onion', 'videos', 'images', 'saved', 'prices', 'alts', 'mybot') %}
     <div class="layout-gutter-preview" id="layout-gutter-preview" role="separator" aria-orientation="vertical" aria-label="Resize preview panel" tabindex="0"></div>
     <aside class="preview-panel" id="preview-panel">
         <div class="preview-header">

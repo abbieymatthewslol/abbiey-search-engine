@@ -29,7 +29,20 @@ import phonenumbers
 from phonenumbers import NumberParseException
 from cachetools import TTLCache
 from ddgs import DDGS
-from flask import Flask, render_template, request, jsonify, redirect, session, url_for, flash, Response, has_request_context, g
+ from flask import (
+    Flask,
+    render_template,
+    request,
+    jsonify,
+    redirect,
+    session,
+    url_for,
+    flash,
+    Response,
+    has_request_context,
+    g,
+    get_flashed_messages,
+)
 from werkzeug.exceptions import HTTPException
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_limiter import Limiter
@@ -47,6 +60,7 @@ from query_understanding import (
     is_simple_answer_query,
 )
 from retrieval.pipeline import run_text_retrieval_pipeline_sync
+from search_bots import crawl_bot_pages, normalize_http_seed, parse_json_list
 import digital_pet as _digital_pet
 from osint.service import enrich as _osint_enrich_run
 from osint.service import enrich_from_query as _osint_enrich_from_query
@@ -315,6 +329,21 @@ _SEARCH_UNLOCK_COOKIE = "abbiey_search_unlock"
 _SEARCH_UNLOCK_COOKIE_MAX_AGE = 315360000
 _WELCOME_COOKIE = "abbiey_welcome_seen"
 _WELCOME_COOKIE_MAX_AGE = 60 * 60 * 24 * 400  # ~13 months — first-visit onboarding
+# Opaque device secret (httpOnly cookie) paired with oauth_user_binding for Google OAuth accounts.
+_AUTH_DEVICE_COOKIE = "abbiey_auth_device"
+_AUTH_DEVICE_COOKIE_MAX_AGE = 60 * 60 * 24 * 730  # ~2 years
+_AUTH_BINDING_SKIP_PATHS = frozenset(
+    {
+        "/auth/callback",
+        "/auth/confirm",
+        "/login",
+        "/signup",
+        "/logout",
+        "/forgot-password",
+        "/verify-email",
+        "/verify-email/resend",
+    }
+)
 _SEARCH_CHECKOUT_PENDING_SESSION_KEY = "abbiey_search_checkout_started_at"
 _SEARCH_CHECKOUT_PENDING_WINDOW_SECONDS = 4 * 60 * 60
 _SEARCH_CHECKOUT_PENDING_COOKIE = "abbiey_search_checkout_pending"
@@ -658,6 +687,39 @@ def _init_pg_tables():
             xp INTEGER NOT NULL DEFAULT 0,
             PRIMARY KEY (user_id, day_utc)
         );
+
+        CREATE TABLE IF NOT EXISTS oauth_user_binding (
+            user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+            supabase_auth_uid TEXT NOT NULL,
+            google_sub TEXT NOT NULL,
+            device_secret_hash TEXT NOT NULL,
+            created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+
+        CREATE TABLE IF NOT EXISTS user_search_bots (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            name TEXT NOT NULL,
+            allow_hosts TEXT NOT NULL,
+            seed_urls TEXT NOT NULL,
+            max_depth INTEGER NOT NULL DEFAULT 1,
+            max_pages INTEGER NOT NULL DEFAULT 15,
+            last_crawled_at TIMESTAMPTZ,
+            last_crawl_status TEXT,
+            created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_usb_user ON user_search_bots(user_id);
+
+        CREATE TABLE IF NOT EXISTS user_search_bot_pages (
+            id SERIAL PRIMARY KEY,
+            bot_id INTEGER NOT NULL REFERENCES user_search_bots(id) ON DELETE CASCADE,
+            url TEXT NOT NULL,
+            title TEXT,
+            snippet TEXT,
+            fetched_at TIMESTAMPTZ DEFAULT NOW(),
+            UNIQUE(bot_id, url)
+        );
+        CREATE INDEX IF NOT EXISTS idx_uspb_bot ON user_search_bot_pages(bot_id);
     """
     try:
         _pg_execute(ddl)
@@ -977,6 +1039,36 @@ def _init_users_db():
                 xp INTEGER NOT NULL DEFAULT 0,
                 PRIMARY KEY (user_id, day_utc)
             );
+            CREATE TABLE IF NOT EXISTS oauth_user_binding (
+                user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+                supabase_auth_uid TEXT NOT NULL,
+                google_sub TEXT NOT NULL,
+                device_secret_hash TEXT NOT NULL,
+                created_at TEXT DEFAULT (datetime('now'))
+            );
+            CREATE TABLE IF NOT EXISTS user_search_bots (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                name TEXT NOT NULL,
+                allow_hosts TEXT NOT NULL,
+                seed_urls TEXT NOT NULL,
+                max_depth INTEGER NOT NULL DEFAULT 1,
+                max_pages INTEGER NOT NULL DEFAULT 15,
+                last_crawled_at TEXT,
+                last_crawl_status TEXT,
+                created_at TEXT DEFAULT (datetime('now'))
+            );
+            CREATE INDEX IF NOT EXISTS idx_usb_user ON user_search_bots(user_id);
+            CREATE TABLE IF NOT EXISTS user_search_bot_pages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                bot_id INTEGER NOT NULL REFERENCES user_search_bots(id) ON DELETE CASCADE,
+                url TEXT NOT NULL,
+                title TEXT,
+                snippet TEXT,
+                fetched_at TEXT DEFAULT (datetime('now')),
+                UNIQUE(bot_id, url)
+            );
+            CREATE INDEX IF NOT EXISTS idx_uspb_bot ON user_search_bot_pages(bot_id);
         """)
 
 
@@ -1108,6 +1200,127 @@ def _set_welcome_seen_cookie(resp: Response) -> None:
         samesite="Lax",
         path="/",
     )
+
+
+def _auth_device_cookie_value_ok(raw: str) -> bool:
+    return bool(raw and re.fullmatch(r"[A-Za-z0-9_-]{32,200}", raw))
+
+
+def _hash_auth_device_secret(raw: str) -> str:
+    return hashlib.sha256((raw or "").encode("utf-8")).hexdigest()
+
+
+def _set_auth_device_cookie(resp: Response, raw_secret: str) -> None:
+    secure = request.is_secure or _site_base_url().startswith("https://")
+    resp.set_cookie(
+        _AUTH_DEVICE_COOKIE,
+        raw_secret,
+        max_age=_AUTH_DEVICE_COOKIE_MAX_AGE,
+        secure=secure,
+        httponly=True,
+        samesite="Lax",
+        path="/",
+    )
+
+
+def _supabase_fetch_user_from_access_token(access_token: str) -> dict | None:
+    """Validate OAuth access token with Supabase GoTrue and return the user JSON."""
+    token = (access_token or "").strip()
+    if not token or not _SUPABASE_URL or not _SUPABASE_ANON_KEY:
+        return None
+    url = _SUPABASE_URL.rstrip("/") + "/auth/v1/user"
+    try:
+        r = httpx.get(
+            url,
+            headers={
+                "Authorization": f"Bearer {token}",
+                "apikey": _SUPABASE_ANON_KEY,
+            },
+            timeout=12.0,
+        )
+    except Exception:
+        logger.exception("supabase_auth_user_fetch_failed")
+        return None
+    if r.status_code != 200:
+        logger.info("supabase_auth_user_fetch_status=%s", r.status_code)
+        return None
+    try:
+        return r.json()
+    except Exception:
+        return None
+
+
+def _google_sub_from_supabase_user(sb_user: dict) -> str | None:
+    """Stable Google account id from Supabase identities (OIDC sub / provider id)."""
+    for ident in sb_user.get("identities") or []:
+        if not isinstance(ident, dict):
+            continue
+        if (ident.get("provider") or "").lower() != "google":
+            continue
+        data = ident.get("identity_data") or {}
+        if not isinstance(data, dict):
+            data = {}
+        sub = (data.get("sub") or data.get("provider_id") or ident.get("id") or "").strip()
+        if sub:
+            return sub
+    return None
+
+
+def _oauth_binding_row_for_user(user_id: int) -> dict | None:
+    rows = _users_execute(
+        "SELECT user_id, supabase_auth_uid, google_sub, device_secret_hash FROM oauth_user_binding WHERE user_id=? LIMIT 1",
+        [user_id],
+    )
+    if not rows:
+        return None
+    return rows[0]
+
+
+def _oauth_device_cookie_matches_binding(user_id: int, binding: dict) -> bool:
+    raw = (request.cookies.get(_AUTH_DEVICE_COOKIE) or "").strip()
+    if not _auth_device_cookie_value_ok(raw):
+        return False
+    expect = (binding.get("device_secret_hash") or "").strip()
+    got = _hash_auth_device_secret(raw)
+    if not expect or len(expect) != len(got):
+        return False
+    return hmac.compare_digest(expect, got)
+
+
+def _enforce_oauth_device_binding_or_clear_session() -> Response | None:
+    """If the logged-in user has a Google/device binding, require a matching device cookie."""
+    if not has_request_context():
+        return None
+    if request.method == "OPTIONS":
+        return None
+    path = request.path or ""
+    if path in _AUTH_BINDING_SKIP_PATHS:
+        return None
+    if path.startswith("/static/") or path.startswith("/public/"):
+        return None
+    uid = _session_user_id_int(session.get("user_id"))
+    if uid is None:
+        return None
+    binding = _oauth_binding_row_for_user(uid)
+    if not binding:
+        return None
+    if _oauth_device_cookie_matches_binding(uid, binding):
+        return None
+    session.pop("user_id", None)
+    logger.info("oauth_device_binding_failed user_id=%s path=%s", uid, path)
+    flash(
+        "This account is locked to the browser profile where you first signed in with Google, "
+        "and to that same Google account. Use that device and Google user, or sign in without that account.",
+        "oauth_device",
+    )
+    if path.startswith("/api/"):
+        return jsonify(
+            {
+                "error": "device_binding",
+                "message": "Session does not match the registered device or Google identity.",
+            }
+        ), 403
+    return redirect(url_for("login"))
 
 
 def _normalize_e164_phone(raw: str, default_region: str = "US") -> str | None:
@@ -1803,7 +2016,10 @@ def domain_filter(url):
 RESULTS_PER_PAGE = 20
 MAX_PAGE = 50
 MAX_QUERY_LENGTH = _max_query_length()
-ALLOWED_TYPES = {"text", "images", "news", "videos", "code", "onion", "saved", "prices", "alts"}
+ALLOWED_TYPES = {"text", "images", "news", "videos", "code", "onion", "saved", "prices", "alts", "mybot"}
+_MAX_USER_SEARCH_BOTS = 8
+_MAX_BOT_HOSTS = 12
+_MAX_BOT_SEEDS = 8
 
 # Price extraction
 PRICE_RE = re.compile(
@@ -1854,6 +2070,11 @@ def _log_event(event: str, **fields: object) -> None:
 @app.before_request
 def _generate_csp_nonce():
     g.csp_nonce = secrets.token_urlsafe(16)
+
+
+@app.before_request
+def _oauth_device_binding_gate():
+    return _enforce_oauth_device_binding_or_clear_session()
 
 
 @app.after_request
@@ -3206,6 +3427,7 @@ def search():
     query = request.args.get("q", "").strip()
     page = max(1, min(request.args.get("page", 1, type=int), MAX_PAGE))
     search_type = request.args.get("type", "text")
+    mybot_id = request.args.get("bot_id", type=int)
     region = request.args.get("region", "").strip() or None
     lang = request.args.get("lang", "").strip() or None
     time_filter = request.args.get("df", "").strip()
@@ -3221,6 +3443,41 @@ def search():
     )
     if search_type not in ALLOWED_TYPES:
         search_type = "text"
+
+    if search_type == "mybot":
+        if not current_uid:
+            return (
+                render_template(
+                    "error.html",
+                    code=401,
+                    title="Sign in required",
+                    message="Custom search bots are available when you are signed in.",
+                    extra_help=True,
+                ),
+                401,
+            )
+        if not mybot_id:
+            return (
+                render_template(
+                    "error.html",
+                    code=400,
+                    title="Choose a bot",
+                    message="Open Profile → Custom search bots and use Search on a bot, or add ?bot_id=… to the URL.",
+                    extra_help=True,
+                ),
+                400,
+            )
+        if not _mybot_owned(mybot_id, current_uid):
+            return (
+                render_template(
+                    "error.html",
+                    code=404,
+                    title="Bot not found",
+                    message="That bot does not exist or is not linked to your account.",
+                    extra_help=False,
+                ),
+                404,
+            )
 
     cleanweb = request.args.get("cleanweb", "").strip().lower() in ("1", "true", "yes", "on")
     anti_template = bool(cleanweb and search_type == "text")
@@ -3242,7 +3499,7 @@ def search():
 
     user_feature_gates = _feature_gates_for_user(current_user_has_paid_access)
 
-    if not query:
+    if not query and search_type != "mybot":
         return render_template(
             "index.html",
             **{
@@ -3365,6 +3622,9 @@ def search():
         except Exception:
             logger.warning("Nominatim geocoding failed for address=%s", primary.normalized)
 
+    _mb_uid = current_uid if search_type == "mybot" else None
+    _mb_id = mybot_id if search_type == "mybot" else None
+
     if request.headers.get("X-Requested-With") == "XMLHttpRequest":
         _t_ajax = time.perf_counter()
         results = _fetch_results(
@@ -3380,6 +3640,8 @@ def search():
             local_rank_context=local_rank_context,
             anti_template=anti_template,
             source_query_for_fallback=query,
+            mybot_id=_mb_id,
+            mybot_user_id=_mb_uid,
         )
         _ajax_ms = int((time.perf_counter() - _t_ajax) * 1000)
         if page == 1:
@@ -3405,6 +3667,8 @@ def search():
         local_rank_context=local_rank_context,
         anti_template=anti_template,
         source_query_for_fallback=query,
+        mybot_id=_mb_id,
+        mybot_user_id=_mb_uid,
     )
     _latency_ms = int((time.perf_counter() - _t0) * 1000)
 
@@ -3548,6 +3812,7 @@ def search():
         cleanweb=cleanweb,
         safeguard=safeguard,
         osint_enabled=_abbiey_osint_enabled(),
+        mybot_id=mybot_id,
     )
 @app.route("/api/suggestions")
 @limiter.limit("200/minute")
@@ -7018,6 +7283,8 @@ def _fetch_results(
     local_rank_context=None,
     anti_template=False,
     source_query_for_fallback=None,
+    mybot_id=None,
+    mybot_user_id=None,
 ):
     """Fetch results with caching. Returns paginated slice."""
     operators = operators or {}
@@ -7027,7 +7294,10 @@ def _fetch_results(
     if image_opts and search_type == "images":
         img_seg = "|img:" + json.dumps(image_opts, sort_keys=True, separators=(",", ":"))
     cw_seg = "|cw=1" if (search_type == "text" and anti_template) else ""
-    cache_key = f"{query}|{search_type}|{region or ''}|{lang or ''}|{ops_str}|{time_filter or ''}|{safesearch or 'off'}{img_seg}{cw_seg}"
+    bot_seg = ""
+    if search_type == "mybot" and mybot_id is not None and mybot_user_id is not None:
+        bot_seg = f"|mb={int(mybot_id)}|u={int(mybot_user_id)}"
+    cache_key = f"{query}|{search_type}|{region or ''}|{lang or ''}|{ops_str}|{time_filter or ''}|{safesearch or 'off'}{img_seg}{cw_seg}{bot_seg}"
 
     # Check cache
     with _cache_lock:
@@ -7128,6 +7398,11 @@ def _fetch_results(
         if not results:
             logger.info("AlternativeTo empty, falling back to DDG alternatives search")
             results = _try_alternatives_ddg(effective_query, max_results)
+    elif search_type == "mybot":
+        if mybot_id is None or mybot_user_id is None:
+            results = []
+        else:
+            results = _mybot_hits_for_cache(int(mybot_user_id), int(mybot_id), query, max_results)
     else:
         results = []
         skip_ddg = False
@@ -7646,7 +7921,7 @@ def verify_email():
         session.permanent = True
         session["user_id"] = uid_ok
         flash("welcome", "welcome")
-        r = redirect(url_for("search") + "?welcome=1")
+        r = redirect(url_for("index") + "?welcome=1")
         _set_welcome_seen_cookie(r)
         return r
 
@@ -7696,7 +7971,7 @@ def verify_email():
         session.permanent = True
         session["user_id"] = uid_ok
         flash("welcome", "welcome")
-        r = redirect(url_for("search") + "?welcome=1")
+        r = redirect(url_for("index") + "?welcome=1")
         _set_welcome_seen_cookie(r)
         return r
 
@@ -7756,7 +8031,16 @@ def login():
     sb_ctx = {"supabase_url": _SUPABASE_URL, "supabase_anon_key": _SUPABASE_ANON_KEY, "supabase_auth": _SUPABASE_AUTH_ENABLED}
 
     if request.method == "GET":
-        return render_template("login.html", next=request.args.get("next", ""), **sb_ctx)
+        oauth_device_msg = None
+        msgs = get_flashed_messages(category_filter=["oauth_device"])
+        if msgs:
+            oauth_device_msg = msgs[0]
+        return render_template(
+            "login.html",
+            next=request.args.get("next", ""),
+            oauth_device_error=oauth_device_msg,
+            **sb_ctx,
+        )
 
     identifier = request.form.get("identifier", "").strip()
     password   = request.form.get("password", "")
@@ -7811,31 +8095,128 @@ def logout():
 @limiter.limit("60/minute")
 def auth_callback():
     """Client-side Supabase Auth sends us the session after sign-in/sign-up.
-    We sync the user into our DB and set a Flask session."""
+
+    Requires a valid Supabase ``access_token`` (server-validated via GoTrue ``/auth/v1/user``).
+    Google OAuth accounts are bound to the first browser profile (httpOnly device cookie) and
+    to the Google OIDC subject stored at signup; other devices or Google accounts are rejected.
+    """
     if not _SUPABASE_AUTH_ENABLED:
         return jsonify({"error": "Supabase Auth not configured"}), 400
     data = request.get_json(silent=True) or {}
-    email = (data.get("email") or "").strip().lower()
-    display_name = (data.get("display_name") or "").strip()
+    access_token = (data.get("access_token") or "").strip()
+    if not access_token:
+        return jsonify({"error": "invalid_token", "message": "Missing access token."}), 401
+
+    sb_user = _supabase_fetch_user_from_access_token(access_token)
+    if not sb_user:
+        return jsonify(
+            {"error": "invalid_token", "message": "Could not validate session with Supabase."}
+        ), 401
+
+    token_email = (sb_user.get("email") or "").strip().lower()
+    if not token_email or "@" not in token_email:
+        return jsonify({"error": "invalid_token", "message": "No email on Supabase account."}), 401
+
+    client_email = (data.get("email") or "").strip().lower()
+    if client_email and client_email != token_email:
+        return jsonify({"error": "email_mismatch"}), 400
+
+    display_name = (data.get("display_name") or "").strip() or (
+        (sb_user.get("user_metadata") or {}).get("full_name") or ""
+    ).strip()
     phone_raw = (data.get("phone") or "").strip()
     phone_e164 = None
     if phone_raw:
         phone_e164 = _normalize_e164_phone(phone_raw)
         if not phone_e164:
             return jsonify({"error": "Invalid phone number. Use international format (e.g. +1 555 123 4567)."}), 400
-    if not email or "@" not in email:
-        return jsonify({"error": "Invalid email"}), 400
+
+    supabase_uid = (sb_user.get("id") or "").strip()
+    google_sub = _google_sub_from_supabase_user(sb_user)
+
     try:
-        uid = _sync_supabase_auth_user(email, display_name, phone_e164)
+        uid = _sync_supabase_auth_user(token_email, display_name, phone_e164)
     except Exception:
         logger.exception("auth_callback_sync_failed")
         return jsonify({"error": "Could not sync account"}), 500
     if not uid:
         return jsonify({"error": "Could not create account"}), 500
+    try:
+        uid = int(uid)
+    except (TypeError, ValueError):
+        return jsonify({"error": "Could not create account"}), 500
+
+    new_device_secret: str | None = None
+    existing = _oauth_binding_row_for_user(uid)
+
+    if existing:
+        if not google_sub:
+            return (
+                jsonify(
+                    {
+                        "error": "google_required",
+                        "message": (
+                            "This account was registered with Google on a specific device. "
+                            "Sign in with Google on that device."
+                        ),
+                    }
+                ),
+                403,
+            )
+        if (existing.get("google_sub") or "").strip() != google_sub:
+            return (
+                jsonify(
+                    {
+                        "error": "wrong_google_account",
+                        "message": (
+                            "Use the same Google account you used when you first signed up for this site."
+                        ),
+                    }
+                ),
+                403,
+            )
+        stored_sid = (existing.get("supabase_auth_uid") or "").strip()
+        if stored_sid and supabase_uid and stored_sid != supabase_uid:
+            return (
+                jsonify(
+                    {
+                        "error": "identity_mismatch",
+                        "message": "Supabase user does not match this profile.",
+                    }
+                ),
+                403,
+            )
+        if not _oauth_device_cookie_matches_binding(uid, existing):
+            return (
+                jsonify(
+                    {
+                        "error": "device_mismatch",
+                        "message": (
+                            "This profile is bound to another device or browser profile "
+                            "(the first place you completed Google sign-in)."
+                        ),
+                    }
+                ),
+                403,
+            )
+    elif google_sub and supabase_uid:
+        new_device_secret = secrets.token_urlsafe(32)
+        try:
+            _users_execute(
+                "INSERT INTO oauth_user_binding (user_id, supabase_auth_uid, google_sub, device_secret_hash) "
+                "VALUES (?,?,?,?)",
+                [uid, supabase_uid, google_sub, _hash_auth_device_secret(new_device_secret)],
+            )
+        except Exception:
+            logger.exception("oauth_user_binding_insert_failed")
+            return jsonify({"error": "Could not finalize device binding"}), 500
+
     session.permanent = True
     session["user_id"] = uid
     resp = jsonify({"ok": True, "user_id": uid})
     _set_welcome_seen_cookie(resp)
+    if new_device_secret:
+        _set_auth_device_cookie(resp, new_device_secret)
     return resp
 
 
@@ -8340,6 +8721,210 @@ def profile_avatar():
         logger.exception("profile_avatar_db_failed")
 
     return redirect(url_for("profile"))
+
+
+# ---- Custom search bots (user-allowlisted crawl) ---------------------------
+
+
+def _mybot_owned(bot_id: int, user_id: int) -> bool:
+    rows = _users_execute(
+        "SELECT 1 FROM user_search_bots WHERE id=? AND user_id=? LIMIT 1",
+        [int(bot_id), int(user_id)],
+    )
+    return bool(rows)
+
+
+def _mybot_hits_for_cache(user_id: int, bot_id: int, query: str, cap: int = 200) -> list[dict]:
+    if not _mybot_owned(bot_id, user_id):
+        return []
+    q = (query or "").strip()[:400]
+    if not q:
+        sql = (
+            "SELECT url, title, snippet FROM user_search_bot_pages WHERE bot_id=? "
+            "ORDER BY fetched_at DESC LIMIT ?"
+        )
+        params = [bot_id, cap]
+    else:
+        like = f"%{q}%"
+        sql = (
+            "SELECT url, title, snippet FROM user_search_bot_pages WHERE bot_id=? AND ("
+            "LOWER(COALESCE(title, '')) LIKE LOWER(?) OR LOWER(COALESCE(snippet, '')) LIKE LOWER(?) "
+            "OR LOWER(COALESCE(url, '')) LIKE LOWER(?)) ORDER BY fetched_at DESC LIMIT ?"
+        )
+        params = [bot_id, like, like, like, cap]
+    rows = _users_execute(sql, params)
+    out: list[dict] = []
+    for r in rows or []:
+        out.append(
+            {
+                "title": ((r.get("title") or r.get("url") or "") or "").strip()[:300],
+                "url": ((r.get("url") or "") or "").strip()[:2000],
+                "body": ((r.get("snippet") or "") or "")[:2000],
+                "source_type": "web",
+                "source": "Custom bot",
+            }
+        )
+    return out
+
+
+@app.route("/api/user/search-bots", methods=["GET"])
+def api_user_search_bots_list():
+    uid, bearer_err = _api_auth_user()
+    if bearer_err:
+        return bearer_err
+    if not uid:
+        return jsonify({"error": "Not authenticated"}), 401
+    try:
+        rows = _users_execute(
+            "SELECT id, name, allow_hosts, seed_urls, max_depth, max_pages, last_crawled_at, last_crawl_status, created_at "
+            "FROM user_search_bots WHERE user_id=? ORDER BY id DESC",
+            [uid],
+        )
+    except Exception:
+        logger.exception("api_user_search_bots_list_failed")
+        return jsonify({"error": "Could not load bots.", "bots": []}), 503
+    bots = []
+    for r in rows or []:
+        bots.append(
+            {
+                "id": r.get("id"),
+                "name": r.get("name"),
+                "allow_hosts": parse_json_list(r.get("allow_hosts"), max_items=_MAX_BOT_HOSTS, max_len_each=120),
+                "seed_urls": parse_json_list(r.get("seed_urls"), max_items=_MAX_BOT_SEEDS, max_len_each=2000),
+                "max_depth": r.get("max_depth"),
+                "max_pages": r.get("max_pages"),
+                "last_crawled_at": r.get("last_crawled_at"),
+                "last_crawl_status": r.get("last_crawl_status"),
+            }
+        )
+    return jsonify({"bots": bots})
+
+
+@app.route("/api/user/search-bots", methods=["POST"])
+@limiter.limit("30/day")
+def api_user_search_bots_create():
+    uid, bearer_err = _api_auth_user()
+    if bearer_err:
+        return bearer_err
+    if not uid:
+        return jsonify({"error": "Not authenticated"}), 401
+    data = request.get_json(silent=True) or {}
+    name = (data.get("name") or "").strip()[:80]
+    allow_hosts = parse_json_list(data.get("allow_hosts"), max_items=_MAX_BOT_HOSTS, max_len_each=120)
+    seed_urls = parse_json_list(data.get("seed_urls"), max_items=_MAX_BOT_SEEDS, max_len_each=2000)
+    try:
+        max_depth = int(data.get("max_depth", 1))
+    except (TypeError, ValueError):
+        max_depth = 1
+    try:
+        max_pages = int(data.get("max_pages", 15))
+    except (TypeError, ValueError):
+        max_pages = 15
+    max_depth = max(0, min(max_depth, 2))
+    max_pages = max(5, min(max_pages, 30))
+    if not name:
+        return jsonify({"error": "Name is required."}), 400
+    if not allow_hosts:
+        return jsonify({"error": "allow_hosts must be a non-empty JSON array of hostnames."}), 400
+    if not seed_urls:
+        return jsonify({"error": "seed_urls must be a non-empty JSON array of http(s) URLs."}), 400
+    for su in seed_urls:
+        if not normalize_http_seed(su, allow_hosts):
+            return jsonify({"error": f"Invalid or disallowed seed URL: {su[:120]}"}), 400
+    try:
+        nrows = _users_execute("SELECT COUNT(*) AS n FROM user_search_bots WHERE user_id=?", [uid])
+        n = int((nrows or [{}])[0].get("n") or 0)
+    except Exception:
+        n = 0
+    if n >= _MAX_USER_SEARCH_BOTS:
+        return jsonify({"error": f"Maximum {_MAX_USER_SEARCH_BOTS} bots per account."}), 400
+    try:
+        ins = _users_execute(
+            "INSERT INTO user_search_bots (user_id, name, allow_hosts, seed_urls, max_depth, max_pages) VALUES (?,?,?,?,?,?)",
+            [uid, name, json.dumps(allow_hosts), json.dumps(seed_urls), max_depth, max_pages],
+            return_id=True,
+        )
+        bid = _row_returning_id(ins)
+    except Exception:
+        logger.exception("api_user_search_bots_create_failed")
+        return jsonify({"error": "Could not create bot."}), 500
+    return jsonify({"ok": True, "id": bid}), 201
+
+
+@app.route("/api/user/search-bots/<int:bid>", methods=["DELETE"])
+def api_user_search_bots_delete(bid: int):
+    uid, bearer_err = _api_auth_user()
+    if bearer_err:
+        return bearer_err
+    if not uid:
+        return jsonify({"error": "Not authenticated"}), 401
+    if not _mybot_owned(bid, uid):
+        return jsonify({"error": "Not found"}), 404
+    try:
+        _users_execute("DELETE FROM user_search_bots WHERE id=? AND user_id=?", [bid, uid])
+    except Exception:
+        logger.exception("api_user_search_bots_delete_failed")
+        return jsonify({"error": "Could not delete bot."}), 500
+    return jsonify({"ok": True})
+
+
+@app.route("/api/user/search-bots/<int:bid>/crawl", methods=["POST"])
+@limiter.limit("20/day")
+def api_user_search_bots_crawl(bid: int):
+    uid, bearer_err = _api_auth_user()
+    if bearer_err:
+        return bearer_err
+    if not uid:
+        return jsonify({"error": "Not authenticated"}), 401
+    rows = _users_execute(
+        "SELECT id, user_id, name, allow_hosts, seed_urls, max_depth, max_pages FROM user_search_bots WHERE id=? AND user_id=? LIMIT 1",
+        [bid, uid],
+    )
+    if not rows:
+        return jsonify({"error": "Not found"}), 404
+    row = rows[0]
+    allow_hosts = parse_json_list(row.get("allow_hosts"), max_items=_MAX_BOT_HOSTS, max_len_each=120)
+    seed_urls = parse_json_list(row.get("seed_urls"), max_items=_MAX_BOT_SEEDS, max_len_each=2000)
+    try:
+        md = int(row.get("max_depth") or 1)
+    except (TypeError, ValueError):
+        md = 1
+    try:
+        mp = int(row.get("max_pages") or 15)
+    except (TypeError, ValueError):
+        mp = 15
+    pages, err = crawl_bot_pages(seed_urls, allow_hosts, md, mp)
+    ts = datetime.now(timezone.utc).isoformat()
+    if err:
+        try:
+            _users_execute(
+                "UPDATE user_search_bots SET last_crawled_at=?, last_crawl_status=? WHERE id=?",
+                [ts, err[:500], bid],
+            )
+        except Exception:
+            logger.exception("api_user_search_bots_crawl_status_failed")
+        return jsonify({"ok": False, "error": err, "pages": 0}), 200
+    try:
+        _users_execute("DELETE FROM user_search_bot_pages WHERE bot_id=?", [bid])
+    except Exception:
+        logger.exception("api_user_search_bots_crawl_clear_failed")
+        return jsonify({"error": "Could not clear old pages."}), 500
+    for p in pages:
+        try:
+            _users_execute(
+                "INSERT OR IGNORE INTO user_search_bot_pages (bot_id, url, title, snippet) VALUES (?,?,?,?)",
+                [bid, p["url"][:2000], p["title"][:400], p["snippet"][:2000]],
+            )
+        except Exception:
+            logger.exception("api_user_search_bots_page_insert_failed url=%s", p.get("url"))
+    try:
+        _users_execute(
+            "UPDATE user_search_bots SET last_crawled_at=?, last_crawl_status=? WHERE id=?",
+            [ts, f"Indexed {len(pages)} page(s).", bid],
+        )
+    except Exception:
+        pass
+    return jsonify({"ok": True, "pages": len(pages)}), 200
 
 
 # ---- Bookmarks API (session or Bearer API key) ------------------------------

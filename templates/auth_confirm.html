@@ -113,11 +113,13 @@
             try {
                 phonePayload = sessionStorage.getItem('abbiey_onboarding_phone') || '';
             } catch (_p0) { phonePayload = ''; }
+            var accessTok = (session && session.access_token) ? session.access_token : '';
             var cb = await fetch('/auth/callback', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'same-origin',
                 body: JSON.stringify({
+                    access_token: accessTok,
                     email: emailAddr,
                     display_name: (user.user_metadata || {}).full_name || '',
                     phone: phonePayload || undefined
@@ -141,8 +143,24 @@
                 if (nextPath && nextPath.charAt(0) === '/' && nextPath.indexOf('//') !== 0) {
                     window.location.replace(nextPath);
                 } else {
-                    window.location.replace('/search');
+                    window.location.replace('/');
                 }
+                return;
+            }
+            if (data && data.error === 'device_mismatch') {
+                showErr(escapeHtml(data.message || 'This account is bound to another device.') + ' <a href="/login">Try again</a>.');
+                return;
+            }
+            if (data && data.error === 'wrong_google_account') {
+                showErr(escapeHtml(data.message || 'Use the same Google account as at signup.') + ' <a href="/login">Try again</a>.');
+                return;
+            }
+            if (data && data.error === 'google_required') {
+                showErr(escapeHtml(data.message || 'Sign in with Google on your registered device.') + ' <a href="/login">Try again</a>.');
+                return;
+            }
+            if (data && data.error === 'invalid_token') {
+                showErr(escapeHtml(data.message || 'Session could not be validated.') + ' <a href="/login">Try again</a>.');
                 return;
             }
             showErr('Session sync failed. <a href="/login">Try again</a>.');

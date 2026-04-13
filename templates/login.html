@@ -16,6 +16,11 @@
             {% endif %}
         </div>
         {% endif %}
+        {% if oauth_device_error %}
+        <div class="auth-errors" role="alert" aria-live="polite">
+            <p>{{ oauth_device_error }}</p>
+        </div>
+        {% endif %}
 
         <div class="auth-errors" id="sb-error" role="alert" aria-live="polite" style="display:none"></div>
 
@@ -164,14 +169,19 @@
         try {
             var res = await sb.auth.signInWithPassword({ email: email, password: password });
             if (res.error) { showErr(res.error.message); submitBtn.disabled = false; return; }
+            var tok = (res.data.session && res.data.session.access_token) ? res.data.session.access_token : '';
             var cb = await fetch('/auth/callback', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'same-origin',
-                body: JSON.stringify({ email: res.data.user.email, display_name: (res.data.user.user_metadata || {}).full_name || '' })
+                body: JSON.stringify({
+                    access_token: tok,
+                    email: res.data.user.email,
+                    display_name: (res.data.user.user_metadata || {}).full_name || ''
+                })
             });
             var cdata = await cb.json().catch(function () { return null; });
-            if (cb.ok && cdata && cdata.ok) { window.location.href = nextUrl || '/search'; return; }
+            if (cb.ok && cdata && cdata.ok) { window.location.href = nextUrl || '/'; return; }
             showErr('Signed in but could not sync session. Please try again.');
         } catch (err) { showErr('Something went wrong. Please try again.'); }
         submitBtn.disabled = false;

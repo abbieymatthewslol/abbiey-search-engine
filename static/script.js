@@ -1899,6 +1899,9 @@ document.addEventListener("DOMContentLoaded", () => {
     const langVal = document.getElementById("lang-input")?.value || "";
     const dfVal = document.getElementById("df-input")?.value || "";
     let scrollUrl = `/search?q=${encodeURIComponent(query)}&page=${page}&type=${type}`;
+    if (type === "mybot" && sentinel.dataset.botId) {
+      scrollUrl += `&bot_id=${encodeURIComponent(sentinel.dataset.botId)}`;
+    }
     if (regionVal) scrollUrl += `&region=${encodeURIComponent(regionVal)}`;
     if (langVal) scrollUrl += `&lang=${encodeURIComponent(langVal)}`;
     if (dfVal) scrollUrl += `&df=${encodeURIComponent(dfVal)}`;

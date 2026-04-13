@@ -264,11 +264,13 @@
                         phonePayload = sessionStorage.getItem('abbiey_onboarding_phone') || '';
                     }
                 } catch (_p2) { phonePayload = ''; }
+                var tok = (res.data.session && res.data.session.access_token) ? res.data.session.access_token : '';
                 var cb = await fetch('/auth/callback', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     credentials: 'same-origin',
                     body: JSON.stringify({
+                        access_token: tok,
                         email: res.data.user.email,
                         display_name: (res.data.user.user_metadata || {}).full_name || '',
                         phone: phonePayload || undefined
@@ -276,7 +278,7 @@
                 });
                 var cdata = await cb.json().catch(function () { return null; });
                 if (cb.ok && cdata && cdata.ok) {
-                    window.location.href = '/search';
+                    window.location.href = '/';
                     return;
                 }
             }
