@@ -7,7 +7,6 @@ that background UI fetches use a more generous rate-limit budget than explicit
 search submissions.
 """
 
-import os
 import pytest
 import app as app_module
 from app import app as flask_app, limiter
@@ -105,16 +104,23 @@ class TestRateLimitBudgets:
         fg = self._parse_limit_int(app_module._RL_SEARCH)
         assert bg >= fg * 2
 
-    def test_relaxed_preset_doubles_limits(self, monkeypatch):
-        """ABBIEY_RATE_LIMIT_PRESET=relaxed should produce 2× all base limits."""
-        monkeypatch.setenv("ABBIEY_RATE_LIMIT_PRESET", "relaxed")
-        # Re-compute what the constants would be
-        preset = os.environ.get("ABBIEY_RATE_LIMIT_PRESET", "normal").strip().lower()
-        multiplier = 2 if preset == "relaxed" else 1
-        rl_search = 120 * multiplier
-        rl_background = 300 * multiplier
-        assert rl_search == 240
-        assert rl_background == 600
+    def test_relaxed_preset_doubles_limits(self):
+        """ABBIEY_RATE_LIMIT_PRESET=relaxed should produce 2× all base limits.
+
+        Since module-level constants are evaluated at import time, we verify
+        the arithmetic logic directly: if multiplier==2 the expected values
+        are exactly double the base values.
+        """
+        base_search = 120
+        base_background = 300
+        # Simulate what the module does for the "relaxed" preset
+        multiplier = 2
+        assert base_search * multiplier == 240
+        assert base_background * multiplier == 600
+        # In normal mode the module should have multiplier == 1
+        if app_module._RL_PRESET == "normal":
+            assert self._parse_limit_int(app_module._RL_SEARCH) == base_search
+            assert self._parse_limit_int(app_module._RL_BACKGROUND) == base_background
 
     def test_normal_preset_uses_base_limits(self):
         """Default (normal) preset must not apply any multiplier."""

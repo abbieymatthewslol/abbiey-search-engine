@@ -1468,7 +1468,7 @@ def _handle_rate_limit(err):
     _log_rate_limit_breach(
         route=request.path,
         key_type="ip",
-        limit=str(getattr(err, "description", "")),
+        budget=str(getattr(err, "description", "")),
     )
     retry_after = getattr(err, "retry_after", None)
     payload = {"error": "rate_limited", "message": _RATE_LIMIT_MSG}
@@ -1928,13 +1928,13 @@ elif _RL_PRESET == "relaxed":
     )
 
 
-def _log_rate_limit_breach(route: str, key_type: str, limit: str) -> None:
+def _log_rate_limit_breach(route: str, key_type: str, budget: str) -> None:
     """Structured log for rate-limit events without leaking identifiable data."""
     _log_event(
         "rate_limit_breach",
         route=route,
         key_type=key_type,
-        budget=limit,
+        budget=budget,
         decision="blocked",
     )
 # ---------------------------------------------------------------------------
@@ -2064,7 +2064,7 @@ def error_429(e):
     _log_rate_limit_breach(
         route=request.path,
         key_type="ip",
-        limit=str(getattr(e, "description", "")),
+        budget=str(getattr(e, "description", "")),
     )
     if _wants_json_error_response():
         try:
