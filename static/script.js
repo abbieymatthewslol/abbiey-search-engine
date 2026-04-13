@@ -3311,9 +3311,14 @@ document.addEventListener("DOMContentLoaded", () => {
     const stopIcon = voiceBtn.querySelector(".voice-icon-stop");
     const input    = document.getElementById("search-input");
     let listening  = false;
+    /** Committed finals for this mic session (see result handler). */
+    let voiceFinalAccum = "";
+
+    if (!input) return;
 
     function startListening() {
       listening = true;
+      voiceFinalAccum = "";
       voiceBtn.classList.add("listening");
       micIcon.style.display  = "none";
       stopIcon.style.display = "";
@@ -3336,14 +3341,31 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     recognition.addEventListener("result", (e) => {
-      const transcript = Array.from(e.results)
-        .map(r => r[0].transcript)
-        .join("");
+      // Build transcript like MDN: only new slices (resultIndex), keep finals across
+      // events, and recompute interim each fire so refinements do not duplicate text.
+      // Joining every result with "" used to glue words ("hello" + "world" → "helloworld").
+      let interimTranscript = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const res = e.results[i];
+        const piece = res[0] ? res[0].transcript : "";
+        if (res.isFinal) {
+          const needsSpace =
+            voiceFinalAccum &&
+            piece &&
+            !/\s$/.test(voiceFinalAccum) &&
+            !/^\s/.test(piece);
+          voiceFinalAccum += (needsSpace ? " " : "") + piece;
+        } else {
+          interimTranscript += piece;
+        }
+      }
+      const transcript = (voiceFinalAccum + interimTranscript).replace(/\s{2,}/g, " ");
       input.value = transcript;
-      // Auto-submit on final result
-      if (e.results[e.results.length - 1].isFinal) {
+      const last = e.results[e.results.length - 1];
+      if (last && last.isFinal) {
         stopListening();
-        if (transcript.trim()) document.getElementById("search-form").submit();
+        const form = document.getElementById("search-form");
+        if (transcript.trim() && form) form.submit();
       }
     });
 

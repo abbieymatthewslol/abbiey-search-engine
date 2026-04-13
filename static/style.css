@@ -3688,9 +3688,7 @@ header > .header-brand-top {
 .auth-submit-btn:active { opacity: 0.92; }
 [data-theme="light"] .auth-submit-btn { color: #fafaf9; }
 
-body.page-auth {
-  /* Same flex column as global body; reinforces font/accent from html + script.js */
-}
+/* body.page-auth: same flex column as global body; font/accent come from html + script.js — no extra rules needed */
 
 body.page-auth .auth-main {
   flex: 1;
