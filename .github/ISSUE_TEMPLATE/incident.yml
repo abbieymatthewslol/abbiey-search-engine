@@ -1,0 +1,91 @@
+name: Incident Report
+description: Document a production incident for auditability and post-mortem
+labels: ["incident"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template to capture the full lifecycle of a production incident.
+        Fill in what you know now; update the issue as the investigation progresses.
+
+  - type: input
+    id: severity
+    attributes:
+      label: Severity
+      placeholder: "SEV1 (total outage) / SEV2 (major degradation) / SEV3 (minor impact)"
+    validations:
+      required: true
+
+  - type: input
+    id: status
+    attributes:
+      label: Current status
+      placeholder: "Investigating / Mitigated / Resolved"
+    validations:
+      required: true
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Incident summary
+      description: One paragraph describing what went wrong and the user-facing impact.
+    validations:
+      required: true
+
+  - type: textarea
+    id: timeline
+    attributes:
+      label: Timeline (UTC)
+      placeholder: |
+        | Time (UTC) | Event |
+        |------------|-------|
+        | HH:MM      | First alert / symptom observed |
+        | HH:MM      | Investigation started |
+        | HH:MM      | Root cause identified |
+        | HH:MM      | Mitigation applied |
+        | HH:MM      | Incident resolved |
+    validations:
+      required: true
+
+  - type: textarea
+    id: detection
+    attributes:
+      label: Detection
+      description: How was this incident detected? (alert, user report, self-discovery)
+    validations:
+      required: true
+
+  - type: textarea
+    id: containment
+    attributes:
+      label: Containment actions
+      description: What immediate steps were taken to stop the bleeding?
+    validations:
+      required: true
+
+  - type: textarea
+    id: rca
+    attributes:
+      label: Root Cause Analysis (RCA)
+      description: What was the underlying cause? Include contributing factors.
+    validations:
+      required: false
+
+  - type: textarea
+    id: corrective_actions
+    attributes:
+      label: Corrective / preventive actions
+      placeholder: |
+        | Action | Owner | Due date | Status |
+        |--------|-------|----------|--------|
+        |        |       |          |        |
+    validations:
+      required: false
+
+  - type: textarea
+    id: lessons
+    attributes:
+      label: Lessons learned
+      description: What did we learn? What went well? What can be improved?
+    validations:
+      required: false
