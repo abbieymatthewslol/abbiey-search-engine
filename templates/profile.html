@@ -91,7 +91,7 @@
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
                 Custom search bots
             </h2>
-            <p class="form-hint" style="margin:-0.25rem 0 1rem">Define allowed hostnames and seed URLs. We only GET pages on those hosts (size-limited, no scripts) and index plain text — HTML pages, text, and JSON or NDJSON feeds that list <code>https://…</code> links (research APIs, catalog datasets). Use <strong>More → Custom bots</strong> on the search page to open a bot with your current query.</p>
+            <p class="form-hint" style="margin:-0.25rem 0 1rem">Define allowed hostnames and seed URLs. We only GET pages on those hosts (size-limited, no scripts) and index plain text — HTML pages, text, plus dataset-style URLs like JSON/JSONL/NDJSON and CSV/TSV feeds (research APIs, catalog datasets). Use <strong>More → Custom bots</strong> on the search page to open a bot with your current query.</p>
             <div class="auth-errors" id="sbots-err" role="alert" style="display:none;margin-bottom:0.75rem"></div>
             <form id="sbots-form" class="profile-edit-form" style="margin-bottom:1.25rem;border:1px solid var(--border);border-radius:var(--radius);padding:1rem">
                 <div class="auth-field">
@@ -106,7 +106,7 @@
                 <div class="auth-field">
                     <label for="sbot-seeds">Seed URLs (JSON array of https links)</label>
                     <div class="auth-input-pill"><textarea id="sbot-seeds" rows="2" required placeholder='["https://docs.example.com/start","https://api.example.com/v1/items.json"]'></textarea></div>
-                    <span class="form-hint">Include HTML entry points and, if useful, JSON index URLs on the same allowed hosts.</span>
+                    <span class="form-hint">Include HTML entry points and, if useful, dataset feeds like JSONL/NDJSON/CSV on the same allowed hosts.</span>
                 </div>
                 <div class="auth-field" style="display:flex;gap:1rem;flex-wrap:wrap">
                     <div><label for="sbot-depth">Max link depth</label><div class="auth-input-pill"><input id="sbot-depth" type="number" min="0" max="2" value="1" style="width:5rem"></div></div>

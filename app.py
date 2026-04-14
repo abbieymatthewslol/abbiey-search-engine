@@ -65,6 +65,15 @@ import digital_pet as _digital_pet
 from osint.service import enrich as _osint_enrich_run
 from osint.service import enrich_from_query as _osint_enrich_from_query
 from osint.service import is_osint_enabled as _abbiey_osint_enabled
+from search_protocol import (
+    ProtocolDepth,
+    build_protocol_markdown,
+    build_protocol_methodology_line,
+    protocol_detect_harmful_query,
+    protocol_render_superscript_citations,
+    protocol_sources_from_hits,
+    sanitize_harmful_instructions,
+)
 
 try:
     from dotenv import load_dotenv
@@ -560,6 +569,41 @@ def _init_pg_tables():
         CREATE INDEX IF NOT EXISTS idx_sl_created ON search_logs(created_at);
         CREATE INDEX IF NOT EXISTS idx_sl_query   ON search_logs(query);
 
+        CREATE TABLE IF NOT EXISTS result_feedback (
+            id            SERIAL PRIMARY KEY,
+            user_id       INTEGER,
+            query         TEXT NOT NULL,
+            query_norm    TEXT NOT NULL,
+            search_type   TEXT DEFAULT 'text',
+            url           TEXT NOT NULL,
+            domain        TEXT DEFAULT '',
+            title         TEXT DEFAULT '',
+            rank          INTEGER DEFAULT 0,
+            rating        INTEGER NOT NULL,
+            reason        TEXT DEFAULT '',
+            created_at_ms BIGINT NOT NULL,
+            created_at    TIMESTAMPTZ DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_rf_query_domain ON result_feedback(query_norm, domain);
+        CREATE INDEX IF NOT EXISTS idx_rf_created ON result_feedback(created_at_ms);
+        CREATE INDEX IF NOT EXISTS idx_rf_user ON result_feedback(user_id, created_at_ms);
+
+        CREATE TABLE IF NOT EXISTS suggestion_feedback (
+            id               SERIAL PRIMARY KEY,
+            user_id          INTEGER,
+            query_prefix     TEXT NOT NULL,
+            query_prefix_norm TEXT NOT NULL,
+            suggestion       TEXT NOT NULL,
+            suggestion_norm  TEXT NOT NULL,
+            action           TEXT NOT NULL,
+            position         INTEGER DEFAULT 0,
+            rating           INTEGER NOT NULL,
+            created_at_ms    BIGINT NOT NULL,
+            created_at       TIMESTAMPTZ DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_sf_user_prefix ON suggestion_feedback(user_id, query_prefix_norm, created_at_ms);
+        CREATE INDEX IF NOT EXISTS idx_sf_suggestion ON suggestion_feedback(suggestion_norm);
+
         CREATE TABLE IF NOT EXISTS error_logs (
             id         SERIAL PRIMARY KEY,
             route      TEXT DEFAULT '',
@@ -851,6 +895,43 @@ def _init_analytics_db():
                 con.execute(f"ALTER TABLE search_logs ADD COLUMN {_col} TEXT DEFAULT ''")
             except Exception:
                 pass
+        con.execute(
+            "CREATE TABLE IF NOT EXISTS result_feedback ("
+            "  id INTEGER PRIMARY KEY,"
+            "  user_id INTEGER,"
+            "  query TEXT NOT NULL,"
+            "  query_norm TEXT NOT NULL,"
+            "  search_type TEXT DEFAULT 'text',"
+            "  url TEXT NOT NULL,"
+            "  domain TEXT DEFAULT '',"
+            "  title TEXT DEFAULT '',"
+            "  rank INTEGER DEFAULT 0,"
+            "  rating INTEGER NOT NULL,"
+            "  reason TEXT DEFAULT '',"
+            "  created_at_ms INTEGER NOT NULL,"
+            "  created_at TEXT DEFAULT (datetime('now'))"
+            ")"
+        )
+        con.execute("CREATE INDEX IF NOT EXISTS idx_rf_query_domain ON result_feedback(query_norm, domain)")
+        con.execute("CREATE INDEX IF NOT EXISTS idx_rf_created ON result_feedback(created_at_ms)")
+        con.execute("CREATE INDEX IF NOT EXISTS idx_rf_user ON result_feedback(user_id, created_at_ms)")
+        con.execute(
+            "CREATE TABLE IF NOT EXISTS suggestion_feedback ("
+            "  id INTEGER PRIMARY KEY,"
+            "  user_id INTEGER,"
+            "  query_prefix TEXT NOT NULL,"
+            "  query_prefix_norm TEXT NOT NULL,"
+            "  suggestion TEXT NOT NULL,"
+            "  suggestion_norm TEXT NOT NULL,"
+            "  action TEXT NOT NULL,"
+            "  position INTEGER DEFAULT 0,"
+            "  rating INTEGER NOT NULL,"
+            "  created_at_ms INTEGER NOT NULL,"
+            "  created_at TEXT DEFAULT (datetime('now'))"
+            ")"
+        )
+        con.execute("CREATE INDEX IF NOT EXISTS idx_sf_user_prefix ON suggestion_feedback(user_id, query_prefix_norm, created_at_ms)")
+        con.execute("CREATE INDEX IF NOT EXISTS idx_sf_suggestion ON suggestion_feedback(suggestion_norm)")
 
 
 _init_analytics_db()
@@ -3421,6 +3502,49 @@ def _rank_anti_template_results(results: list) -> list:
     return [results[i] for i in order]
 
 
+def _domain_for_feedback(url: str) -> str:
+    try:
+        return _host_key_for_diversity(url or "") or ""
+    except Exception:
+        return ""
+
+
+def _rerank_results_with_feedback(query: str, results: list) -> list:
+    if not query or not results or len(results) < 2:
+        return results
+    query_norm = (query or "").strip().lower()[:400]
+    if not query_norm:
+        return results
+    domains: list[str] = []
+    seen: set[str] = set()
+    for r in results:
+        d = _domain_for_feedback(r.get("url") or "")
+        if d and d not in seen:
+            seen.add(d)
+            domains.append(d)
+    if not domains:
+        return results
+    cutoff_ms = int(time.time() * 1000) - (90 * 24 * 60 * 60 * 1000)
+    placeholders = ",".join(["?"] * len(domains))
+    try:
+        rows = _analytics_execute(
+            f"SELECT domain, SUM(rating) AS score FROM result_feedback "
+            f"WHERE query_norm=? AND created_at_ms>=? AND domain IN ({placeholders}) "
+            f"GROUP BY domain",
+            [query_norm, cutoff_ms, *domains],
+        )
+    except Exception:
+        return results
+    if not rows:
+        return results
+    scores = {str(r.get("domain") or ""): int(r.get("score") or 0) for r in rows}
+    if not scores:
+        return results
+    indexed = [(i, r, scores.get(_domain_for_feedback(r.get("url") or ""), 0)) for i, r in enumerate(results)]
+    indexed.sort(key=lambda t: (-t[2], t[0]))
+    return [r for _, r, _ in indexed]
+
+
 @app.route("/search")
 @limiter.limit("120/minute")
 def search():
@@ -3643,6 +3767,8 @@ def search():
             mybot_id=_mb_id,
             mybot_user_id=_mb_uid,
         )
+        if results.get("results") and search_type not in ("images", "saved"):
+            results["results"] = _rerank_results_with_feedback(query, results["results"])
         _ajax_ms = int((time.perf_counter() - _t_ajax) * 1000)
         if page == 1:
             _log_search(query, search_type, region or "", len(results.get("results", [])), _ajax_ms, request=request)
@@ -3670,6 +3796,8 @@ def search():
         mybot_id=_mb_id,
         mybot_user_id=_mb_uid,
     )
+    if results.get("results") and search_type not in ("images", "saved"):
+        results["results"] = _rerank_results_with_feedback(query, results["results"])
     _latency_ms = int((time.perf_counter() - _t0) * 1000)
 
     # Log search analytics (non-blocking, never fails)
@@ -3828,13 +3956,136 @@ def api_suggestions():
             timeout=2.0,
         )
         data = resp.json()
+        items: list[str] = []
         if isinstance(data, list) and len(data) > 1 and isinstance(data[1], list):
-            return jsonify(data[1][:8])
-        if isinstance(data, list) and data and isinstance(data[0], dict):
-            return jsonify([item["phrase"] for item in data[:8] if "phrase" in item])
-        return jsonify([])
+            items = [str(x) for x in data[1] if x][:8]
+        elif isinstance(data, list) and data and isinstance(data[0], dict):
+            items = [str(item["phrase"]) for item in data[:8] if isinstance(item, dict) and item.get("phrase")]
+        if not items:
+            return jsonify([])
+        uid = _session_user_id_int(session.get("user_id"))
+        if uid:
+            prefix_norm = query.strip().lower()[:200]
+            cutoff_ms = int(time.time() * 1000) - (30 * 24 * 60 * 60 * 1000)
+            try:
+                rows = _analytics_execute(
+                    "SELECT suggestion_norm FROM suggestion_feedback "
+                    "WHERE user_id=? AND query_prefix_norm=? AND rating<0 AND created_at_ms>=? "
+                    "ORDER BY id DESC LIMIT 100",
+                    [uid, prefix_norm, cutoff_ms],
+                )
+                blocked = {str(r.get("suggestion_norm") or "") for r in (rows or [])}
+                if blocked:
+                    items = [s for s in items if s.strip().lower()[:200] not in blocked][:8]
+            except Exception:
+                pass
+        return jsonify(items[:8])
     except Exception:
         return jsonify([])
+
+
+@app.route("/api/feedback/result", methods=["POST"])
+@limiter.limit("240/minute")
+def api_feedback_result():
+    uid, bearer_err = _api_auth_user()
+    if bearer_err:
+        return bearer_err
+    if not request.is_json:
+        return jsonify({"ok": False, "error": "json_required"}), 400
+    data = request.get_json(silent=True) or {}
+    query = (data.get("query") or "").strip()
+    if not query or len(query) > MAX_QUERY_LENGTH:
+        return jsonify({"ok": False, "error": "invalid_query"}), 400
+    url = (data.get("url") or "").strip()
+    if not url or len(url) > 2000:
+        return jsonify({"ok": False, "error": "invalid_url"}), 400
+    try:
+        pu = urlparse(url)
+        if pu.scheme not in ("http", "https") or not pu.netloc:
+            return jsonify({"ok": False, "error": "invalid_url"}), 400
+    except Exception:
+        return jsonify({"ok": False, "error": "invalid_url"}), 400
+    search_type = (data.get("search_type") or "text").strip()[:24]
+    title = (data.get("title") or "").strip()[:300]
+    reason = (data.get("reason") or "").strip()[:280]
+    rating_raw = data.get("rating")
+    if rating_raw in ("up", "like", "helpful", True):
+        rating = 1
+    elif rating_raw in ("down", "dislike", "not_relevant", False):
+        rating = -1
+    else:
+        try:
+            rating = int(rating_raw)
+        except Exception:
+            rating = 0
+    if rating not in (-1, 1):
+        return jsonify({"ok": False, "error": "invalid_rating"}), 400
+    try:
+        rank = int(data.get("rank") or 0)
+    except Exception:
+        rank = 0
+    rank = max(0, min(rank, 500))
+    query_norm = query.strip().lower()[:400]
+    domain = _domain_for_feedback(url)[:255]
+    created_at_ms = int(time.time() * 1000)
+    try:
+        _analytics_execute(
+            "INSERT INTO result_feedback (user_id, query, query_norm, search_type, url, domain, title, rank, rating, reason, created_at_ms) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            [uid, query, query_norm, search_type, url, domain, title, rank, rating, reason, created_at_ms],
+        )
+        return jsonify({"ok": True})
+    except Exception:
+        return jsonify({"ok": False})
+
+
+@app.route("/api/feedback/suggestion", methods=["POST"])
+@limiter.limit("240/minute")
+def api_feedback_suggestion():
+    uid, bearer_err = _api_auth_user()
+    if bearer_err:
+        return bearer_err
+    if not request.is_json:
+        return jsonify({"ok": False, "error": "json_required"}), 400
+    data = request.get_json(silent=True) or {}
+    query_prefix = (data.get("query_prefix") or "").strip()
+    suggestion = (data.get("suggestion") or "").strip()
+    if not query_prefix or not suggestion:
+        return jsonify({"ok": False, "error": "missing_fields"}), 400
+    if len(query_prefix) > 200 or len(suggestion) > 200:
+        return jsonify({"ok": False, "error": "too_long"}), 400
+    action = (data.get("action") or "").strip().lower()
+    if action not in ("select", "dismiss"):
+        return jsonify({"ok": False, "error": "invalid_action"}), 400
+    try:
+        position = int(data.get("position") or 0)
+    except Exception:
+        position = 0
+    position = max(0, min(position, 50))
+    rating_raw = data.get("rating")
+    if rating_raw in ("up", "like", "helpful", True):
+        rating = 1
+    elif rating_raw in ("down", "dislike", "not_relevant", False):
+        rating = -1
+    else:
+        try:
+            rating = int(rating_raw)
+        except Exception:
+            rating = 0
+    if rating not in (-1, 1):
+        return jsonify({"ok": False, "error": "invalid_rating"}), 400
+    created_at_ms = int(time.time() * 1000)
+    query_prefix_norm = query_prefix.strip().lower()[:200]
+    suggestion_norm = suggestion.strip().lower()[:200]
+    try:
+        _analytics_execute(
+            "INSERT INTO suggestion_feedback (user_id, query_prefix, query_prefix_norm, suggestion, suggestion_norm, action, position, rating, created_at_ms) "
+            "VALUES (?,?,?,?,?,?,?,?,?)",
+            [uid, query_prefix, query_prefix_norm, suggestion, suggestion_norm, action, position, rating, created_at_ms],
+        )
+        return jsonify({"ok": True})
+    except Exception:
+        return jsonify({"ok": False})
 
 
 @app.route("/api/entity")
@@ -4700,6 +4951,161 @@ def api_answer_layer():
             "sources": sources_out,
         }
     )
+
+
+@app.route("/api/protocol-answer")
+@limiter.limit("40 per minute")
+def api_protocol_answer():
+    query = (request.args.get("q") or "").strip()
+    region = (request.args.get("region") or "").strip()
+    lang = (request.args.get("lang") or "").strip()
+    depth = (request.args.get("depth") or ProtocolDepth.STANDARD).strip().lower()
+    cleanweb = request.args.get("cleanweb", "").strip().lower() in ("1", "true", "yes", "on")
+
+    if not query or len(query) > MAX_QUERY_LENGTH:
+        return Response("Invalid query\n", status=400, mimetype="text/plain")
+
+    if depth not in (ProtocolDepth.QUICK, ProtocolDepth.STANDARD, ProtocolDepth.DEEP):
+        depth = ProtocolDepth.STANDARD
+
+    prep = preprocess_query(query)
+    safety = protocol_detect_harmful_query(query)
+
+    user_lat = _parse_request_coord("lat")
+    user_lon = _parse_request_coord("lon")
+    if user_lat is not None and not (-90 <= user_lat <= 90):
+        user_lat = None
+    if user_lon is not None and not (-180 <= user_lon <= 180):
+        user_lon = None
+    anchor_geo = None
+    if user_lat is not None and user_lon is not None and has_local_intent_signals(prep):
+        anchor_geo = _reverse_geocode_label(user_lat, user_lon)
+    loc_ctx = resolve_location_for_search(prep, user_lat, user_lon, anchor_geo)
+    backend_q = build_backend_search_query(query, prep, loc_ctx)
+
+    anti_template = bool(cleanweb)
+    try:
+        payload = _fetch_results(
+            backend_q,
+            1,
+            "text",
+            region or None,
+            lang or None,
+            anti_template=anti_template,
+            local_rank_context=loc_ctx if loc_ctx.get("has_local_intent") else None,
+            source_query_for_fallback=query,
+        )
+    except Exception as e:
+        logger.exception("protocol_answer_fetch_failed")
+        return Response(f"Search failed: {e}\n", status=502, mimetype="text/plain")
+
+    organic = payload.get("results") or []
+    if not organic:
+        return Response("No results\n", status=404, mimetype="text/plain")
+
+    max_ctx = 8 if depth == ProtocolDepth.QUICK else (16 if depth == ProtocolDepth.DEEP else 12)
+    hits = organic[:max_ctx]
+    sources, excluded = protocol_sources_from_hits(query, hits, cleanweb=cleanweb)
+    if not sources:
+        return Response("No usable sources\n", status=404, mimetype="text/plain")
+
+    sources_block = []
+    for s in sources:
+        published = ""
+        if s.published_at:
+            try:
+                published = s.published_at.astimezone(timezone.utc).strftime("%Y-%m-%d")
+            except Exception:
+                published = ""
+        unverified = "unverified" if s.unverified else "verified"
+        sources_block.append(
+            f"[{s.index}] TIER={s.tier}; HOST={s.hostname}; {unverified}; PUBLISHED={published}\n"
+            f"TITLE: {s.title}\n"
+            f"URL: {s.url}\n"
+            f"EXCERPT: {s.excerpt}"
+        )
+    bundle = "\n\n".join(sources_block)
+
+    safety_rules = ""
+    if safety.get("context_warning"):
+        safety_rules = (
+            "Safety: The query matches a harm/illegal-activity pattern. Do NOT provide step-by-step, "
+            "operational, or facilitation instructions. Provide only high-level, non-actionable context and "
+            "legal/safety considerations."
+        )
+        if safety.get("self_harm"):
+            safety_rules += (
+                " Include one brief sentence with crisis resources (e.g., local emergency number; in the U.S. 988)."
+            )
+
+    structure = ""
+    if depth == ProtocolDepth.QUICK:
+        structure = (
+            "Output clean Markdown ONLY with:\n"
+            "## DIRECT\n"
+            "One sentence that answers the query and ends with '(Confidence: 0.xx)'. Use citations like [1].\n"
+            "No other sections."
+        )
+    elif depth == ProtocolDepth.STANDARD:
+        structure = (
+            "Output clean Markdown ONLY with:\n"
+            "## DIRECT\n"
+            "One sentence that answers the query and ends with '(Confidence: 0.xx)'. Use citations like [1].\n"
+            "## CONTEXT\n"
+            "2–3 short paragraphs explaining why, with citations [n] for every substantive claim. No URLs in narrative."
+        )
+    else:
+        structure = (
+            "Output clean Markdown ONLY with:\n"
+            "## DIRECT\n"
+            "One sentence that answers the query and ends with '(Confidence: 0.xx)'. Use citations like [1].\n"
+            "## CONTEXT\n"
+            "2–3 short paragraphs explaining why, with citations [n] for every substantive claim. No URLs in narrative.\n"
+            "## DISSENT\n"
+            "One short paragraph: strongest alternative view/counterargument supported by sources.\n"
+            "## RELATED\n"
+            "3–6 related query suggestions as bullet points." 
+        )
+
+    sys_prompt = (
+        "You are a neutral research synthesizer for a search engine. "
+        "Use ONLY the provided source excerpts. Do not invent facts, numbers, dates, or quotes. "
+        "Cite sources as bracketed numbers like [1]. Never include a URL in the narrative. "
+        "Do not mention models, AI, or system prompts. "
+        + (" " + safety_rules if safety_rules else "")
+        + "\n\n"
+        + structure
+    )
+    user_prompt = f"Query: {query}\n\nSources:\n{bundle}"
+
+    try:
+        raw = _ollama_chat(
+            [
+                {"role": "system", "content": sys_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            timeout=55.0 if depth != ProtocolDepth.QUICK else 35.0,
+        )
+        answer_md = (raw or "").strip()
+    except Exception:
+        logger.debug("protocol_answer_ollama_failed", exc_info=True)
+        answer_md = "## DIRECT\nUnavailable. See the sources below. (Confidence: 0.20)"
+
+    answer_md = protocol_render_superscript_citations(answer_md, max_sources=len(sources))
+    if safety.get("context_warning"):
+        answer_md = sanitize_harmful_instructions(answer_md)
+    if safety.get("self_harm"):
+        low = answer_md.lower()
+        if "988" not in low and "emergency" not in low:
+            answer_md = answer_md.strip() + "\n\nIf you're in immediate danger, contact local emergency services; in the U.S., call or text 988."
+    methodology = build_protocol_methodology_line(searched=len(hits), synthesized=len(sources), excluded=excluded)
+    out_md = build_protocol_markdown(
+        answer_block_markdown=answer_md,
+        sources=sources,
+        methodology=methodology,
+        safety=safety,
+    )
+    return Response(out_md, status=200, mimetype="text/markdown")
 
 
 @app.route("/api/ai-summary")

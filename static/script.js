@@ -1715,7 +1715,7 @@ document.addEventListener("DOMContentLoaded", () => {
     function renderSuggestions(items) {
       if (!items.length) { hideDropdown(); return; }
       dropdown.innerHTML = items.map((text, i) =>
-        `<div class="ac-item" data-idx="${i}"><span class="ac-item-icon ac-item-icon-search">${ICON_SEARCH_GLASS_SVG}</span><span class="ac-item-text">${esc(text)}</span></div>`
+        `<div class="ac-item" data-idx="${i}"><span class="ac-item-icon ac-item-icon-search">${ICON_SEARCH_GLASS_SVG}</span><span class="ac-item-text">${esc(text)}</span><button class="ac-dismiss-btn" data-dismiss-idx="${i}" type="button" title="Not relevant" aria-label="Hide suggestion ${esc(text)}">${CLOSE_ICON_SVG}</button></div>`
       ).join("");
       activeIdx = -1;
       showDropdown();
@@ -1742,7 +1742,30 @@ document.addEventListener("DOMContentLoaded", () => {
       if (idx >= 0 && idx < items.length) { items[idx].classList.add("active"); items[idx].scrollIntoView({ block: "nearest" }); }
       activeIdx = idx;
     }
-    function selectItem(text) { input.value = text; hideDropdown(); addHistory(text); form.submit(); }
+    function postSuggestionFeedback(payload) {
+      fetch("/api/feedback/suggestion", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify(payload),
+      }).catch(() => {});
+    }
+    function selectItem(text, meta) {
+      const prefix = meta && meta.prefix ? meta.prefix : input.value.trim();
+      input.value = text;
+      hideDropdown();
+      addHistory(text);
+      if (meta && meta.source === "suggestion") {
+        postSuggestionFeedback({
+          query_prefix: prefix,
+          suggestion: text,
+          action: "select",
+          position: meta.idx || 0,
+          rating: 1,
+        });
+      }
+      form.submit();
+    }
 
     let acController = null;
     function fetchSuggestions(q) {
@@ -1769,11 +1792,17 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!dropdown.classList.contains("open") || !items.length) return;
       if (e.key === "ArrowDown") { e.preventDefault(); setActive(activeIdx < items.length - 1 ? activeIdx + 1 : 0); }
       else if (e.key === "ArrowUp") { e.preventDefault(); setActive(activeIdx > 0 ? activeIdx - 1 : items.length - 1); }
-      else if (e.key === "Enter" && activeIdx >= 0) { e.preventDefault(); selectItem(items[activeIdx].querySelector(".ac-item-text").textContent); }
+      else if (e.key === "Enter" && activeIdx >= 0) {
+        e.preventDefault();
+        const it = items[activeIdx];
+        const text = it.querySelector(".ac-item-text").textContent;
+        const isHistory = it.getAttribute("data-history") === "1";
+        selectItem(text, { idx: activeIdx, source: isHistory ? "history" : "suggestion", prefix: input.value.trim() });
+      }
       else if (e.key === "Escape") hideDropdown();
     });
     dropdown.addEventListener("mousedown", (e) => {
-      if (e.target.closest(".ac-item, .ac-delete-btn, .ac-clear-btn")) {
+      if (e.target.closest(".ac-item, .ac-delete-btn, .ac-clear-btn, .ac-dismiss-btn")) {
         e.preventDefault();
       }
     });
@@ -1788,8 +1817,33 @@ document.addEventListener("DOMContentLoaded", () => {
       }
       const delBtn = e.target.closest(".ac-delete-btn");
       if (delBtn) { e.preventDefault(); e.stopPropagation(); const idx = parseInt(delBtn.getAttribute("data-del-idx")); const items = getHistory(); if (idx >= 0 && idx < items.length) removeHistory(items[idx]); renderHistory(); return; }
+      const dismissBtn = e.target.closest(".ac-dismiss-btn");
+      if (dismissBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        const item = dismissBtn.closest(".ac-item");
+        const idx = parseInt(dismissBtn.getAttribute("data-dismiss-idx") || "0");
+        const text = item ? item.querySelector(".ac-item-text").textContent : "";
+        if (text) {
+          postSuggestionFeedback({
+            query_prefix: input.value.trim(),
+            suggestion: text,
+            action: "dismiss",
+            position: idx,
+            rating: -1,
+          });
+        }
+        if (item) item.remove();
+        if (!getItems().length) hideDropdown();
+        return;
+      }
       const item = e.target.closest(".ac-item");
-      if (item) { e.preventDefault(); selectItem(item.querySelector(".ac-item-text").textContent); }
+      if (item) {
+        e.preventDefault();
+        const idx = parseInt(item.getAttribute("data-idx") || "0");
+        const isHistory = item.getAttribute("data-history") === "1";
+        selectItem(item.querySelector(".ac-item-text").textContent, { idx, source: isHistory ? "history" : "suggestion", prefix: input.value.trim() });
+      }
     });
 
     // '/' keyboard shortcut to focus search (when not already in an input)
@@ -1954,6 +2008,7 @@ document.addEventListener("DOMContentLoaded", () => {
           const el = document.createElement(type === "images" ? "div" : "article");
           el.style.animationDelay = `${delay}ms`;
           el.dataset.url = r.url || "";
+          if (type !== "images") el.dataset.rank = String(idx);
 
           if (type === "images") {
             el.className = "image-card";
@@ -1965,18 +2020,18 @@ document.addEventListener("DOMContentLoaded", () => {
             el.innerHTML = `<img src="${esc(r.thumbnail || r.image)}" alt="${esc(r.title)}" loading="lazy"><div class="image-card-info"><span class="image-title">${esc(r.title)}</span>${r.source ? `<span class="image-source">${esc(r.source)}</span>` : ""}${lic}</div>`;
           } else if (type === "videos") {
             el.className = "result video-result";
-            el.innerHTML = `${r.thumbnail ? `<a href="${esc(r.url)}" target="_blank" rel="noopener" class="video-thumb"><img src="${esc(r.thumbnail)}" alt="${esc(r.title)}" loading="lazy">${r.duration ? `<span class="duration">${esc(r.duration)}</span>` : ""}</a>` : ""}<div class="result-text"><a href="${esc(r.url)}" target="_blank" rel="noopener" class="result-title">${esc(r.title)}</a>${faviconImg(r.url)}<cite class="result-url">${esc(r.publisher || "")}</cite><p class="result-snippet">${esc(r.description || "")}</p></div>`;
+            el.innerHTML = `${r.thumbnail ? `<a href="${esc(r.url)}" target="_blank" rel="noopener" class="video-thumb"><img src="${esc(r.thumbnail)}" alt="${esc(r.title)}" loading="lazy">${r.duration ? `<span class="duration">${esc(r.duration)}</span>` : ""}</a>` : ""}<div class="result-text"><a href="${esc(r.url)}" target="_blank" rel="noopener" class="result-title">${esc(r.title)}</a>${faviconImg(r.url)}<cite class="result-url">${esc(r.publisher || "")}</cite><p class="result-snippet">${esc(r.description || "")}</p><div class="result-actions" data-feedback="1"><button type="button" class="result-action-btn feedback-btn" data-rating="up">Helpful</button><button type="button" class="result-action-btn feedback-btn" data-rating="down">Not relevant</button></div></div>`;
           } else if (type === "onion") {
             el.className = "result onion-result";
             const isOnion = r.onion || (r.url && /\.onion(\/|$)/i.test(r.url));
-            el.innerHTML = `<div class="onion-result-header"><a href="${esc(r.url)}" target="_blank" rel="noopener" class="result-title">${esc(r.title)}</a>${isOnion ? '<span class="onion-badge">.onion</span>' : ""}</div><cite class="result-url">${esc(r.url)}</cite><p class="result-snippet">${esc(r.body || "")}</p>`;
+            el.innerHTML = `<div class="onion-result-header"><a href="${esc(r.url)}" target="_blank" rel="noopener" class="result-title">${esc(r.title)}</a>${isOnion ? '<span class="onion-badge">.onion</span>' : ""}</div><cite class="result-url">${esc(r.url)}</cite><p class="result-snippet">${esc(r.body || "")}</p><div class="result-actions" data-feedback="1"><button type="button" class="result-action-btn feedback-btn" data-rating="up">Helpful</button><button type="button" class="result-action-btn feedback-btn" data-rating="down">Not relevant</button></div>`;
           } else if (type === "code") {
             el.className = "result code-result";
-            el.innerHTML = `<div class="code-result-header"><a href="${esc(r.url)}" target="_blank" rel="noopener" class="result-title">${esc(r.title)}</a>${r.language ? `<span class="code-lang-badge">${esc(r.language)}</span>` : ""}<span class="code-source-badge">${esc(r.source || "")}</span></div>${faviconImg(r.url)}<cite class="result-url">${esc(r.url)}</cite><p class="result-snippet">${esc(r.body || "")}</p><div class="code-meta">${r.stars ? `<span class="code-stat">&#9733; ${esc(r.stars)}</span>` : ""}${r.forks ? `<span class="code-stat">&#9906; ${esc(r.forks)}</span>` : ""}</div>`;
+            el.innerHTML = `<div class="code-result-header"><a href="${esc(r.url)}" target="_blank" rel="noopener" class="result-title">${esc(r.title)}</a>${r.language ? `<span class="code-lang-badge">${esc(r.language)}</span>` : ""}<span class="code-source-badge">${esc(r.source || "")}</span></div>${faviconImg(r.url)}<cite class="result-url">${esc(r.url)}</cite><p class="result-snippet">${esc(r.body || "")}</p><div class="code-meta">${r.stars ? `<span class="code-stat">&#9733; ${esc(r.stars)}</span>` : ""}${r.forks ? `<span class="code-stat">&#9906; ${esc(r.forks)}</span>` : ""}</div><div class="result-actions" data-feedback="1"><button type="button" class="result-action-btn feedback-btn" data-rating="up">Helpful</button><button type="button" class="result-action-btn feedback-btn" data-rating="down">Not relevant</button></div>`;
           } else {
             el.className = "result";
             el.setAttribute("data-source-type", r.source_type || "");
-            el.innerHTML = `<button class="bookmark-btn" data-url="${esc(r.url)}" data-title="${esc(r.title)}" data-snippet="${esc(r.body || "")}" aria-label="Save result" title="Save"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg></button>${resultDomainRow(r.url, r.source_type, r.source)}<a href="${esc(r.url)}" target="_blank" rel="noopener" class="result-title">${esc(r.title)}</a><p class="result-snippet">${esc(r.body || "")}</p>${r.date ? `<time class="result-date">${esc(r.date)}</time>` : ""}`;
+            el.innerHTML = `<button class="bookmark-btn" data-url="${esc(r.url)}" data-title="${esc(r.title)}" data-snippet="${esc(r.body || "")}" aria-label="Save result" title="Save"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg></button>${resultDomainRow(r.url, r.source_type, r.source)}<a href="${esc(r.url)}" target="_blank" rel="noopener" class="result-title">${esc(r.title)}</a><p class="result-snippet">${esc(r.body || "")}</p>${r.date ? `<time class="result-date">${esc(r.date)}</time>` : ""}<div class="result-actions" data-feedback="1"><button type="button" class="result-action-btn feedback-btn" data-rating="up">Helpful</button><button type="button" class="result-action-btn feedback-btn" data-rating="down">Not relevant</button></div>`;
           }
           frag.appendChild(el);
         });
@@ -3189,6 +3244,43 @@ document.addEventListener("DOMContentLoaded", () => {
   if (bookmarkAccountUser) {
     syncBookmarksWithServer({ silent: true }).catch(() => {});
   }
+
+  (function initResultFeedback() {
+    const container = document.getElementById("results");
+    const q = window.__searchQuery;
+    const st = window.__searchType || "text";
+    if (!container || !q || st === "images" || st === "saved") return;
+    container.addEventListener("click", (e) => {
+      const btn = e.target.closest(".feedback-btn");
+      if (!btn) return;
+      const article = btn.closest("[data-url]");
+      if (!article) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const url = article.dataset.url || "";
+      const title = (article.querySelector(".result-title")?.textContent || "").trim();
+      const rank = parseInt(article.dataset.rank || "0", 10) || 0;
+      const rating = btn.dataset.rating === "up" ? 1 : -1;
+      fetch("/api/feedback/result", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          query: q,
+          search_type: st,
+          url,
+          title,
+          rank,
+          rating,
+        }),
+      }).catch(() => {});
+      const wrap = btn.closest(".result-actions");
+      if (wrap) {
+        wrap.querySelectorAll(".feedback-btn").forEach(b => { b.disabled = true; });
+      }
+      btn.textContent = "Thanks";
+    });
+  })();
 
   // ===== Related Searches =====
   const relatedContainer = document.getElementById("related-searches");

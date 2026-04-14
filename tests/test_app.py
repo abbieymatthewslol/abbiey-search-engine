@@ -191,6 +191,63 @@ class TestSuggestionsAPI:
         assert resp.get_json() == []
 
 
+class TestFeedbackAPI:
+    def test_result_feedback_accepts_payload(self, client):
+        resp = client.post(
+            "/api/feedback/result",
+            json={
+                "query": "python",
+                "search_type": "text",
+                "url": "https://example.com/1",
+                "title": "Example",
+                "rank": 0,
+                "rating": 1,
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data and "ok" in data
+
+    def test_suggestion_feedback_accepts_payload(self, client):
+        resp = client.post(
+            "/api/feedback/suggestion",
+            json={
+                "query_prefix": "pyt",
+                "suggestion": "python",
+                "action": "select",
+                "position": 0,
+                "rating": 1,
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data and "ok" in data
+
+    def test_search_reranks_using_feedback(self, client, mock_ddg):
+        mock_ddg.text.return_value = [
+            {"title": "Example 1", "href": "https://example.com/1", "body": "Body 1"},
+            {"title": "Other 2", "href": "https://other.com/2", "body": "Body 2"},
+        ]
+        fb = client.post(
+            "/api/feedback/result",
+            json={
+                "query": "python",
+                "search_type": "text",
+                "url": "https://other.com/2",
+                "title": "Other 2",
+                "rank": 1,
+                "rating": 1,
+            },
+        )
+        assert fb.status_code == 200
+        resp = client.get("/search?q=python&type=text")
+        assert resp.status_code == 200
+        html = resp.data.decode("utf-8", errors="ignore")
+        m = re.search(r'<article class="result[^"]*"[^>]*data-url="([^"]+)"', html)
+        assert m
+        assert m.group(1) == "https://other.com/2"
+
+
 class TestEntityAPI:
     """Test the entity detection endpoint."""
 

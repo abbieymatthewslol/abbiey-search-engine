@@ -635,7 +635,8 @@ body.has-results .search-btn.search-btn-icon {
 .ac-item:hover .ac-item-icon,
 .ac-item.active .ac-item-icon { opacity: 1; }
 .ac-item-icon-clock { display: flex; align-items: center; color: var(--text-muted); }
-.ac-delete-btn {
+.ac-delete-btn,
+.ac-dismiss-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -648,8 +649,12 @@ body.has-results .search-btn.search-btn-icon {
 }
 .ac-item:hover .ac-delete-btn,
 .ac-item.active .ac-delete-btn,
-.ac-delete-btn:focus-visible { opacity: 1; }
-.ac-delete-btn:hover { color: #ef4444; background: color-mix(in srgb, #ef4444 12%, transparent); }
+.ac-item:hover .ac-dismiss-btn,
+.ac-item.active .ac-dismiss-btn,
+.ac-delete-btn:focus-visible,
+.ac-dismiss-btn:focus-visible { opacity: 1; }
+.ac-delete-btn:hover,
+.ac-dismiss-btn:hover { color: #ef4444; background: color-mix(in srgb, #ef4444 12%, transparent); }
 .ac-item-history { color: var(--text-dim); }
 .ac-item-desc { font-size: .78rem; color: var(--text-muted); margin-left: .15rem; }
 

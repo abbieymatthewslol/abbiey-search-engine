@@ -8,6 +8,8 @@ Supports HTML and text, plus JSON / NDJSON dataset responses that embed https UR
 
 from __future__ import annotations
 
+import csv
+import io
 import json
 import logging
 import re
@@ -102,6 +104,70 @@ def parse_json_documents(raw: str) -> list[Any]:
         except Exception:
             continue
     return docs
+
+
+def parse_csv_rows(
+    raw: str, *, max_rows: int = 200, max_cols: int = 30, max_len_each: int = 400
+) -> list[list[str]]:
+    raw = (raw or "").strip()
+    if not raw:
+        return []
+    stream = io.StringIO(raw)
+    try:
+        sample = raw[:4000]
+        dialect = csv.Sniffer().sniff(sample, delimiters=",\t;|")
+    except Exception:
+        dialect = csv.excel
+    out: list[list[str]] = []
+    try:
+        reader = csv.reader(stream, dialect)
+        for row in reader:
+            if len(out) >= max_rows:
+                break
+            cleaned: list[str] = []
+            for cell in row[:max_cols]:
+                s = str(cell).strip()[:max_len_each]
+                if s:
+                    cleaned.append(s)
+            if cleaned:
+                out.append(cleaned)
+    except Exception:
+        return []
+    return out
+
+
+def collect_http_urls_from_tabular(rows: list[list[str]], cap: int = _MAX_JSON_URLS_PER_PAGE) -> list[str]:
+    acc: list[str] = []
+    for row in rows:
+        for cell in row:
+            if len(acc) >= cap:
+                return acc
+            s = (cell or "").strip()
+            if s.startswith("http://") or s.startswith("https://"):
+                if s not in acc:
+                    acc.append(s)
+    return acc
+
+
+def snippet_from_tabular(rows: list[list[str]], cap: int = MAX_SNIPPET) -> str:
+    parts: list[str] = []
+    total = 0
+    for row in rows:
+        for cell in row:
+            if total >= cap:
+                break
+            s = (cell or "").strip()
+            if not s or s.startswith("http://") or s.startswith("https://"):
+                continue
+            s = re.sub(r"\s+", " ", s).strip()[:600]
+            if not s:
+                continue
+            parts.append(s)
+            total += len(s) + 1
+        if total >= cap:
+            break
+    text = re.sub(r"\s+", " ", " ".join(parts)).strip()
+    return text[:cap]
 
 
 def collect_http_urls_from_json(obj: Any, cap: int = _MAX_JSON_URLS_PER_PAGE) -> list[str]:
@@ -249,12 +315,22 @@ def crawl_bot_pages(
                     continue
 
                 path_l = (pu.path or "").lower().split("?")[0].rstrip("/")
-                looks_json = (
-                    "json" in ct
-                    or "application/ld+json" in ct
-                    or path_l.endswith(".json")
+                looks_json = "json" in ct or "application/ld+json" in ct or path_l.endswith(".json")
+                looks_jsonl = (
+                    "ndjson" in ct
+                    or "jsonl" in ct
+                    or path_l.endswith(".ndjson")
+                    or path_l.endswith(".jsonl")
+                    or path_l.endswith(".jsonlines")
                 )
-                if looks_json:
+                looks_csv = (
+                    "text/csv" in ct
+                    or "application/csv" in ct
+                    or "text/tab-separated-values" in ct
+                    or path_l.endswith(".csv")
+                    or path_l.endswith(".tsv")
+                )
+                if looks_json or looks_jsonl:
                     try:
                         text = body.decode("utf-8", errors="replace")
                     except Exception:
@@ -269,6 +345,29 @@ def crawl_bot_pages(
                             if u not in urls_found:
                                 urls_found.append(u)
                     snip = snippet_from_json_values(merged_for_walk)
+                    if not snip and urls_found:
+                        snip = "Links: " + " ".join(urls_found[:20])[:MAX_SNIPPET]
+                    title = _title_from_dataset_url(url)
+                    results.append({"url": url, "title": title, "snippet": snip or title})
+
+                    if depth >= max_depth:
+                        continue
+                    for u in urls_found:
+                        joined = u.split("#")[0]
+                        n = normalize_http_seed(joined, allow_hosts)
+                        if n and n not in seen and len(seen) + len(queue) < max_pages * 20:
+                            queue.append((n, depth + 1))
+                    continue
+                if looks_csv:
+                    try:
+                        text = body.decode("utf-8", errors="replace")
+                    except Exception:
+                        continue
+                    rows = parse_csv_rows(text)
+                    if not rows:
+                        continue
+                    urls_found = collect_http_urls_from_tabular(rows)
+                    snip = snippet_from_tabular(rows)
                     if not snip and urls_found:
                         snip = "Links: " + " ".join(urls_found[:20])[:MAX_SNIPPET]
                     title = _title_from_dataset_url(url)

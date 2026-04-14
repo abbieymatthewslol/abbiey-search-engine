@@ -4,10 +4,13 @@ import json
 
 from search_bots import (
     collect_http_urls_from_json,
+    collect_http_urls_from_tabular,
     normalize_http_seed,
+    parse_csv_rows,
     parse_json_documents,
     parse_json_list,
     snippet_from_json_values,
+    snippet_from_tabular,
 )
 
 
@@ -39,6 +42,23 @@ def test_parse_json_documents_single_and_ndjson():
 def test_parse_json_list_accepts_string_json():
     raw = json.dumps(["a.example.com"])
     assert parse_json_list(raw, max_items=5, max_len_each=120) == ["a.example.com"]
+
+
+def test_parse_csv_rows_and_extract_urls():
+    raw = "name,url\nA,https://example.com/a\nB,https://example.com/b\n"
+    rows = parse_csv_rows(raw)
+    assert rows and rows[0][0].lower() == "name"
+    urls = collect_http_urls_from_tabular(rows)
+    assert "https://example.com/a" in urls
+    assert "https://example.com/b" in urls
+
+
+def test_snippet_from_tabular_skips_urls():
+    raw = "title,url\nHello world,https://example.com/a\n"
+    rows = parse_csv_rows(raw)
+    snip = snippet_from_tabular(rows)
+    assert "Hello world" in snip
+    assert "https://" not in snip
 
 
 def test_search_bots_list_requires_auth(client):
