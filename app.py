@@ -3131,10 +3131,10 @@ def api_search_access_claim():
             rows = _users_execute(
                 "SELECT 1 AS ok FROM payment_events WHERE checkout_token=? LIMIT 1",
                 [checkout_token],
-            webhook_verified = bool(rows)
             )
+            webhook_verified = bool(rows)
         except Exception:
-            pass
+            logger.exception("search_access_claim_webhook_lookup_failed")
     if not webhook_verified and not _search_checkout_pending():
         return jsonify({"error": "checkout_not_pending", "message": "Checkout could not be verified."}), 409
     uid = _session_user_id_int(session.get("user_id"))
@@ -3152,7 +3152,7 @@ def api_search_access_claim():
                 [checkout_token],
             )
         except Exception:
-            pass
+            logger.exception("pending_checkout_claim_failed")
     session.pop(_SEARCH_CHECKOUT_PENDING_SESSION_KEY, None)
     resp = jsonify({"ok": True, "unlocked": True, "source": "account" if uid else "browser"})
     _set_search_unlock_cookie(resp, token)

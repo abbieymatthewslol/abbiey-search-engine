@@ -1406,6 +1406,27 @@ class TestSearchAccessPersistence:
         assert status.status_code == 200
         assert status.get_json()["unlocked"] is True
 
+    def test_claim_accepts_verified_checkout_token_without_pending_cookie(self, client):
+        def _users_execute_side_effect(sql, params=None):
+            s = (sql or "").strip().lower()
+            if s.startswith("select 1 as ok from payment_events"):
+                return [{"ok": 1}]
+            if s.startswith("update pending_checkouts"):
+                return []
+            return []
+
+        with patch("app._users_execute", side_effect=_users_execute_side_effect):
+            with patch("app._upsert_search_unlock", return_value="tok"):
+                resp = client.post(
+                    "/api/search-access/claim",
+                    json={"checkout_token": "tok_123"},
+                )
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["ok"] is True
+        assert data["unlocked"] is True
+        assert "abbiey_search_unlock=" in (resp.headers.get("Set-Cookie") or "")
+
 
 class TestHealthProbe:
     def test_public_health_endpoint_omits_sensitive_endpoint(self, client):
