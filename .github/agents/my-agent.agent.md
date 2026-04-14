@@ -52,6 +52,15 @@ Before considering work “done”, try to ensure:
   - `git status`
   - the relevant file contents
 
+## If the task prompt is empty or ambiguous
+- Treat it as a **maintenance run** instead of stopping.
+- Perform a safe default checklist:
+  1. run `git status` and confirm branch cleanliness
+  2. run the primary test suite (`pytest tests/ -v`)
+  3. if tests fail, fix only clear, low-risk failures
+  4. if tests pass and no actionable bug is found, report a no-op health pass
+- Keep changes minimal; avoid speculative refactors.
+
 # Things you must NOT do
 - Don’t propose “merge everything” as a default.
 - Don’t remove large modules/files unless asked or clearly obsolete.
