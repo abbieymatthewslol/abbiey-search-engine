@@ -872,6 +872,35 @@ document.addEventListener("DOMContentLoaded", () => {
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") { menu.setAttribute("hidden", ""); btn.setAttribute("aria-expanded", "false"); }
     });
+
+    fetch("/api/user/search-bots", { credentials: "same-origin" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d || !Array.isArray(d.bots) || !d.bots.length) return;
+        const qEl = document.getElementById("search-input") || document.querySelector('input[name="q"]');
+        const q = (qEl && qEl.value) ? qEl.value.trim() : "";
+        const sub = document.createElement("div");
+        sub.className = "tab-more-mybot-sub";
+        sub.setAttribute("role", "group");
+        sub.setAttribute("aria-label", "Your custom search bots");
+        const cap = document.createElement("span");
+        cap.className = "tab-more-subcap";
+        cap.textContent = "Your bots";
+        sub.appendChild(cap);
+        d.bots.forEach((b) => {
+          const a = document.createElement("a");
+          a.className = "tab-more-item tab-more-mybot-item";
+          const p = new URLSearchParams();
+          p.set("type", "mybot");
+          p.set("bot_id", String(b.id));
+          if (q) p.set("q", q);
+          a.href = `/search?${p.toString()}`;
+          a.textContent = b.name || `Bot ${b.id}`;
+          sub.appendChild(a);
+        });
+        menu.appendChild(sub);
+      })
+      .catch(() => {});
   })();
 
   // ===== Filters toggle =====

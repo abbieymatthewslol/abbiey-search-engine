@@ -785,6 +785,24 @@ body.has-results .search-btn.search-btn-icon {
   color: var(--text);
   font-weight: 600;
 }
+.tab-more-mybot-sub {
+  border-top: 1px solid var(--border-subtle);
+  margin-top: .25rem;
+  padding-top: .2rem;
+  padding-bottom: .1rem;
+}
+.tab-more-subcap {
+  display: block;
+  padding: .2rem .75rem .3rem;
+  font-size: .68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+.tab-more-mybot-item {
+  padding-left: 1rem;
+}
 
 .bookmark-count-badge {
   display: inline-flex;
