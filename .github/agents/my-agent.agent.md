@@ -47,6 +47,7 @@ Before considering work “done”, try to ensure:
 # How to respond
 - Be direct and practical.
 - Provide commands ready for **PowerShell** on Windows when relevant.
+- If the task prompt is vague or empty, use `.github/agents/TASK_DEFINITION_TEMPLATE.md` and apply the "hourly cron default" behavior.
 - If unsure, ask for:
   - error logs
   - `git status`
