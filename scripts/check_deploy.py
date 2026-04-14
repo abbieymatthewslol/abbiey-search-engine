@@ -16,6 +16,7 @@ import sys
 import urllib.request
 import urllib.error
 import json
+import time
 
 LIVE_URL   = "https://www.abbieysearch.com"
 GITHUB_API = "https://api.github.com/repos/abbieymatthewslol/abbiey-search-engine/commits/master"
@@ -68,13 +69,19 @@ def get_github_hash():
         return None
 
 def fetch_html(url):
-    try:
-        req = urllib.request.Request(url, headers={"User-Agent": "check-deploy/1.0"})
-        with urllib.request.urlopen(req, timeout=10) as r:
-            return r.read().decode("utf-8", errors="ignore")
-    except Exception as e:
-        print(f"  {YELLOW}⚠ Could not reach {url}: {e}{RESET}")
-        return ""
+    last_error = None
+    for attempt in range(3):
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "check-deploy/1.0"})
+            with urllib.request.urlopen(req, timeout=10) as r:
+                return r.read().decode("utf-8", errors="ignore"), None
+        except Exception as e:
+            last_error = e
+            if attempt < 2:
+                time.sleep(2 ** attempt)
+
+    print(f"  {YELLOW}⚠ Could not reach {url}: {last_error}{RESET}")
+    return None, str(last_error)
 
 def get_deployed_hash(html):
     match = re.search(r'<meta name="deploy-hash" content="([^"]+)"', html)
@@ -107,8 +114,14 @@ def main():
     # --- Template fingerprint checks ---
     print(f"  {BOLD}Template checks (live site){RESET}")
     all_templates_ok = True
+    template_checks_incomplete = False
     for path, _ in TEMPLATE_FINGERPRINTS.items():
-        html = fetch_html(LIVE_URL + path)
+        html, fetch_error = fetch_html(LIVE_URL + path)
+        if fetch_error or html is None:
+            print(f"    {YELLOW}⚠{RESET} {LIVE_URL}{path}  (validation skipped: {fetch_error})")
+            template_checks_incomplete = True
+            continue
+
         ok, missing = check_template_fingerprint(path, html)
         deployed_hash = get_deployed_hash(html)
         hash_s = short(deployed_hash) if deployed_hash else f"{YELLOW}no hash{RESET}"
@@ -132,6 +145,11 @@ def main():
 
     if not all_templates_ok:
         print(f"{RED}  ✗ Live templates are stale — repo changes not deployed yet.{RESET}")
+        drift = True
+
+    if template_checks_incomplete:
+        print(f"{YELLOW}  ⚠ Template validation incomplete due to temporary fetch errors.{RESET}")
+        print("    Retry later to confirm live template state.")
         drift = True
 
     if not drift:
