@@ -3528,7 +3528,8 @@ def _rerank_results_with_feedback(query: str, results: list) -> list:
     placeholders = ",".join(["?"] * len(domains))
     try:
         rows = _analytics_execute(
-            f"SELECT domain, SUM(rating) AS score FROM result_feedback "
+            f"SELECT domain, SUM(rating) AS score, MAX(created_at_ms) AS last_feedback_ms "
+            f"FROM result_feedback "
             f"WHERE query_norm=? AND created_at_ms>=? AND domain IN ({placeholders}) "
             f"GROUP BY domain",
             [query_norm, cutoff_ms, *domains],
@@ -3537,12 +3538,27 @@ def _rerank_results_with_feedback(query: str, results: list) -> list:
         return results
     if not rows:
         return results
-    scores = {str(r.get("domain") or ""): int(r.get("score") or 0) for r in rows}
-    if not scores:
+    domain_meta = {}
+    for r in rows:
+        key = str(r.get("domain") or "")
+        if not key:
+            continue
+        domain_meta[key] = (
+            int(r.get("score") or 0),
+            int(r.get("last_feedback_ms") or 0),
+        )
+    if not domain_meta:
         return results
-    indexed = [(i, r, scores.get(_domain_for_feedback(r.get("url") or ""), 0)) for i, r in enumerate(results)]
-    indexed.sort(key=lambda t: (-t[2], t[0]))
-    return [r for _, r, _ in indexed]
+    indexed = []
+    for i, r in enumerate(results):
+        score, last_feedback_ms = domain_meta.get(
+            _domain_for_feedback(r.get("url") or ""),
+            (0, 0),
+        )
+        indexed.append((i, r, score, last_feedback_ms))
+    # Keep ranking stable but let fresher feedback win score ties.
+    indexed.sort(key=lambda t: (-t[2], -t[3], t[0]))
+    return [r for _, r, _, _ in indexed]
 
 
 @app.route("/search")
