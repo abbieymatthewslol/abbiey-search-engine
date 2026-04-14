@@ -15,11 +15,12 @@ import subprocess
 import sys
 import urllib.request
 import urllib.error
+import urllib.parse
 import json
 import time
 
 LIVE_URL   = "https://www.abbieysearch.com"
-GITHUB_API = "https://api.github.com/repos/abbieymatthewslol/abbiey-search-engine/commits/master"
+GITHUB_API_BASE = "https://api.github.com/repos/abbieymatthewslol/abbiey-search-engine/commits"
 REPO_ROOT  = subprocess.check_output(
     ["git", "rev-parse", "--show-toplevel"]
 ).decode().strip()
@@ -58,9 +59,16 @@ def get_local_hash() -> str:
         ["git", "rev-parse", "HEAD"], cwd=REPO_ROOT
     ).decode().strip()
 
-def get_github_hash():
+def get_current_branch() -> str:
+    return subprocess.check_output(
+        ["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=REPO_ROOT
+    ).decode().strip()
+
+def get_github_hash(branch_name):
+    branch_ref = urllib.parse.quote(branch_name, safe="")
+    github_api = f"{GITHUB_API_BASE}/{branch_ref}"
     try:
-        req = urllib.request.Request(GITHUB_API, headers={"User-Agent": "check-deploy"})
+        req = urllib.request.Request(github_api, headers={"User-Agent": "check-deploy"})
         with urllib.request.urlopen(req, timeout=10) as r:
             data = json.loads(r.read())
             return data["sha"]
@@ -100,15 +108,16 @@ def main():
     print(f"\n{BOLD}🔍 abbiey.search — Deployment Drift Check{RESET}")
     print("─" * 45)
 
+    current_branch = get_current_branch()
     local_hash  = get_local_hash()
-    github_hash = get_github_hash()
+    github_hash = get_github_hash(current_branch)
 
     local_s  = short(local_hash)
     github_s = short(github_hash)
-    github_ok = bool(github_hash and github_hash.startswith(local_s))
+    github_ok = bool(github_hash and local_hash.startswith(github_s))
 
     print(f"  Local HEAD    {local_s}")
-    print(f"  GitHub master {github_s}  {symbol(github_ok)}")
+    print(f"  GitHub {current_branch} {github_s}  {symbol(github_ok)}")
     print()
 
     # --- Template fingerprint checks ---
@@ -139,8 +148,8 @@ def main():
     drift = False
 
     if not github_ok:
-        print(f"{RED}  ✗ Local commits NOT pushed to GitHub.{RESET}")
-        print(f"    Run: git push origin master")
+        print(f"{RED}  ✗ Local commits NOT pushed to GitHub branch '{current_branch}'.{RESET}")
+        print(f"    Run: git push origin {current_branch}")
         drift = True
 
     if not all_templates_ok:
