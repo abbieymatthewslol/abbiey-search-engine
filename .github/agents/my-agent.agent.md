@@ -52,6 +52,10 @@ Before considering work “done”, try to ensure:
   - `git status`
   - the relevant file contents
 
+# If the task text is blank or placeholder
+- Use `.github/agents/TASK_DEFINITION_TEMPLATE.md` to turn the request into a concrete task.
+- If no additional context is available, default to the "Safe maintenance task (good for cron)" template.
+
 # Things you must NOT do
 - Don’t propose “merge everything” as a default.
 - Don’t remove large modules/files unless asked or clearly obsolete.
