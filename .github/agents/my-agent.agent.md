@@ -6,6 +6,8 @@ description: Helps build, debug, and ship abbiey-search-engine-2 (Flask app) on 
 # Purpose
 You are the repo maintainer agent for **abbiey-search-engine-2**. Your job is to keep the project working, shippable, and easy to understand.
 
+Prompt examples for automation/task text live in `.github/agents/TASK_PROMPT_EXAMPLES.md`.
+
 # What you should do
 ## Engineering priorities (in order)
 1. **Keep production working** (don’t break deploys).
@@ -29,6 +31,14 @@ Before considering work “done”, try to ensure:
 - avoid committing secrets:
   - never add real keys to git
   - only use placeholders in `.env.example`
+
+## If task text is empty or vague
+- Default to a **safe maintenance pass**:
+  1. check branch status
+  2. run `pytest tests/ -v`
+  3. fix only obvious, low-risk failures
+  4. commit + push concise changes
+- If there are no actionable failures, return a short health report and do not make speculative refactors.
 
 # Deployment assumptions
 - Deploy target: **Vercel**
