@@ -2,6 +2,7 @@
 
 import json
 import re
+import uuid
 from unittest.mock import patch, MagicMock
 
 import app
@@ -193,10 +194,11 @@ class TestSuggestionsAPI:
 
 class TestFeedbackAPI:
     def test_result_feedback_accepts_payload(self, client):
+        query = f"python-feedback-{uuid.uuid4().hex}"
         resp = client.post(
             "/api/feedback/result",
             json={
-                "query": "python",
+                "query": query,
                 "search_type": "text",
                 "url": "https://example.com/1",
                 "title": "Example",
@@ -224,6 +226,7 @@ class TestFeedbackAPI:
         assert data and "ok" in data
 
     def test_search_reranks_using_feedback(self, client, mock_ddg):
+        query = f"python-rerank-{uuid.uuid4().hex}"
         mock_ddg.text.return_value = [
             {"title": "Example 1", "href": "https://example.com/1", "body": "Body 1"},
             {"title": "Other 2", "href": "https://other.com/2", "body": "Body 2"},
@@ -231,7 +234,7 @@ class TestFeedbackAPI:
         fb = client.post(
             "/api/feedback/result",
             json={
-                "query": "python",
+                "query": query,
                 "search_type": "text",
                 "url": "https://other.com/2",
                 "title": "Other 2",
@@ -240,7 +243,7 @@ class TestFeedbackAPI:
             },
         )
         assert fb.status_code == 200
-        resp = client.get("/search?q=python&type=text")
+        resp = client.get(f"/search?q={query}&type=text")
         assert resp.status_code == 200
         html = resp.data.decode("utf-8", errors="ignore")
         m = re.search(r'<article class="result[^"]*"[^>]*data-url="([^"]+)"', html)
