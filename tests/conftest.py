@@ -103,6 +103,28 @@ def clear_cache():
         _cache.clear()
     with _search_counter_lock:
         _search_counters.clear()
+
+
+@pytest.fixture(autouse=True)
+def clear_feedback_tables():
+    """Prevent feedback rows from leaking across tests."""
+    from app import _analytics_execute
+
+    statements = (
+        "DELETE FROM result_feedback",
+        "DELETE FROM suggestion_feedback",
+    )
+    for stmt in statements:
+        try:
+            _analytics_execute(stmt)
+        except Exception:
+            pass
+    yield
+    for stmt in statements:
+        try:
+            _analytics_execute(stmt)
+        except Exception:
+            pass
     yield
     with _cache_lock:
         _cache.clear()
