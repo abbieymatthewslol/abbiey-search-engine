@@ -17,3 +17,15 @@ Recent history uses short imperative subjects, often with prefixes like `feat:`,
 
 ## Security & Configuration Tips
 Never commit real secrets from `.env`, `.env.local`, or Vercel. Treat local SQLite artifacts such as `analytics.db`, `users.db`, and `waitlist.db` as disposable development data unless a migration explicitly requires them.
+
+## Cursor Cloud specific instructions
+
+### Services
+The app is a single Flask monolith (`python3 app.py`, port 8000). No external services are required for local dev — storage falls back to SQLite and search uses DuckDuckGo (no API key). Set `ABBIEY_SKIP_WELCOME_SCREEN=1` to bypass the first-visit onboarding page when running or testing.
+
+### Gotchas
+- The VM has `python3` on PATH but **not** `python`. Use `python3` explicitly (e.g. `python3 app.py`, `python3 -m pytest`).
+- `pip install` goes to `~/.local/`; ensure `$HOME/.local/bin` is on PATH before invoking `pytest`, `flask`, or `gunicorn`.
+- One test (`test_search_reranks_using_feedback`) hits live external APIs (Reddit, Stract, Marginalia, SearxNG) and may fail due to rate limits or blocking — this is expected in CI-like environments and not a code issue.
+- Tests run with `RUNNING_PYTEST=1` automatically, which disables Supabase URL enforcement and other production guards. See `tests/conftest.py` for fixtures.
+- The CSP nonce pattern means every `<script>` tag in templates must include `nonce="{{ csp_nonce }}"`. Forgetting it causes silent script-blocking in production.
