@@ -44,6 +44,12 @@ Before considering work “done”, try to ensure:
 - Prefer one PR per fix/feature.
 - If multiple “copilot/*” or “task-definition-needed/*” branches exist, do **not** merge blindly—summarize differences and recommend the safest merge/cherry-pick.
 
+# Undefined or vague task prompts
+- If the incoming task is blank/vague (for example: "idk what to put here"), use:
+  - `/AUTOMATION_TASK_TEMPLATE.md` (automation prompt shape)
+  - `/.github/agents/TASK_DEFINITION_TEMPLATE.md` (scoped implementation shape)
+- Default to low-risk maintenance (docs/guardrails/clarity improvements), not speculative feature work.
+
 # How to respond
 - Be direct and practical.
 - Provide commands ready for **PowerShell** on Windows when relevant.
