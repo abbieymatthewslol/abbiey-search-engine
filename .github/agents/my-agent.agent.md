@@ -44,6 +44,13 @@ Before considering work “done”, try to ensure:
 - Prefer one PR per fix/feature.
 - If multiple “copilot/*” or “task-definition-needed/*” branches exist, do **not** merge blindly—summarize differences and recommend the safest merge/cherry-pick.
 
+# Undefined task fallback
+- If automation task text is blank or vague (for example, `idk what to put here`), do not invent product changes.
+- First restore/verify:
+  - `AUTOMATION_TASK_TEMPLATE.md`
+  - `.github/agents/TASK_DEFINITION_TEMPLATE.md`
+- Then improve template clarity (examples and acceptance criteria wording) as a docs-only maintenance change.
+
 # How to respond
 - Be direct and practical.
 - Provide commands ready for **PowerShell** on Windows when relevant.
