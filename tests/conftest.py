@@ -97,14 +97,31 @@ def disable_retrieval_pipeline(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def clear_cache():
-    """Clear the result cache and search counters before each test."""
-    from app import _cache, _cache_lock, _search_counters, _search_counter_lock
+    """Reset in-memory caches and feedback tables so tests stay deterministic."""
+    from app import (
+        _analytics_execute,
+        _cache,
+        _cache_lock,
+        _search_counters,
+        _search_counter_lock,
+    )
     with _cache_lock:
         _cache.clear()
     with _search_counter_lock:
         _search_counters.clear()
+    for table in ("result_feedback", "suggestion_feedback"):
+        try:
+            _analytics_execute(f"DELETE FROM {table}")
+        except Exception:
+            # Some tests monkeypatch storage; cleanup is best-effort.
+            pass
     yield
     with _cache_lock:
         _cache.clear()
     with _search_counter_lock:
         _search_counters.clear()
+    for table in ("result_feedback", "suggestion_feedback"):
+        try:
+            _analytics_execute(f"DELETE FROM {table}")
+        except Exception:
+            pass
