@@ -103,6 +103,11 @@ def clear_cache():
         _cache.clear()
     with _search_counter_lock:
         _search_counters.clear()
+    yield
+    with _cache_lock:
+        _cache.clear()
+    with _search_counter_lock:
+        _search_counters.clear()
 
 
 @pytest.fixture(autouse=True)
@@ -125,8 +130,3 @@ def clear_feedback_tables():
             _analytics_execute(stmt)
         except Exception:
             pass
-    yield
-    with _cache_lock:
-        _cache.clear()
-    with _search_counter_lock:
-        _search_counters.clear()
