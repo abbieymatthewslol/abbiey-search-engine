@@ -18,6 +18,19 @@
       }
     }
   ],
+  "redirects": [
+    {
+      "source": "/(.*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "www.abbieysearch.com"
+        }
+      ],
+      "destination": "https://abbieysearch.com/$1",
+      "permanent": true
+    }
+  ],
   "routes": [
     {
       "src": "/(.*)",
