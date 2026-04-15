@@ -52,6 +52,12 @@ Before considering work “done”, try to ensure:
   - `git status`
   - the relevant file contents
 
+## If the task prompt is blank or vague
+- Do not guess risky product changes.
+- Use `AUTOMATION_TASK_TEMPLATE.md` and `.github/agents/TASK_DEFINITION_TEMPLATE.md` as fallback guidance.
+- Prefer low-risk improvements (docs/template clarity, missing pointers, acceptance criteria examples).
+- Only touch code when there is a clear and small repo-health issue.
+
 # Things you must NOT do
 - Don’t propose “merge everything” as a default.
 - Don’t remove large modules/files unless asked or clearly obsolete.
