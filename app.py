@@ -4305,6 +4305,11 @@ def _sniff_image_magic(head: bytes) -> str | None:
         return "image/gif"
     if len(head) >= 12 and head.startswith(b"RIFF") and head[8:12] == b"WEBP":
         return "image/webp"
+    # ISO BMFF (AVIF / HEIF family): ....ftyp + brand
+    if len(head) >= 12 and head[4:8] == b"ftyp":
+        brand = head[8:12]
+        if brand in (b"avif", b"avis"):
+            return "image/avif"
     return None
 
 
@@ -4362,7 +4367,7 @@ def api_reverse_image():
             return jsonify({"ok": False, "error": "file_too_large"}), 413
         sniffed = _sniff_image_magic(raw)
         mime = sniffed or (f.mimetype or "") or "application/octet-stream"
-        if sniffed is None and mime not in {"image/jpeg", "image/png", "image/webp", "image/gif"}:
+        if sniffed is None and mime not in {"image/jpeg", "image/png", "image/webp", "image/gif", "image/avif"}:
             return jsonify({"ok": False, "error": "unsupported_type"}), 400
         base = _public_base_url()
         host = (urlparse(base).hostname or "").lower()

@@ -1,5 +1,6 @@
 """Tests for reverse-image lookup helpers and API."""
 
+import io
 from unittest.mock import patch
 
 import app as app_module
@@ -11,6 +12,23 @@ def test_validate_client_image_url_https_only():
     assert ok
     ok2, _ = validate_client_image_url("http://example.com/a.jpg")
     assert not ok2
+
+
+def test_sniff_image_magic_avif_ftyp():
+    blob = b"\x00\x00\x00\x20ftypavif\x00\x00\x00\x00" + b"\x00" * 16
+    assert app_module._sniff_image_magic(blob) == "image/avif"
+
+
+def test_api_reverse_image_multipart_localhost_needs_site_url(client):
+    """Upload path requires a public base URL so Bing can fetch the preview once."""
+    jpeg = b"\xff\xd8\xff\xe0" + b"\x00" * 200
+    resp = client.post(
+        "/api/reverse-image",
+        data={"image": (io.BytesIO(jpeg), "photo.jpg")},
+        content_type="multipart/form-data",
+    )
+    assert resp.status_code == 422
+    assert resp.get_json().get("error") == "upload_needs_public_https"
 
 
 def test_parse_bing_reverse_html_extracts_rows():

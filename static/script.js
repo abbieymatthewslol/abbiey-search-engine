@@ -3582,33 +3582,59 @@ document.addEventListener("DOMContentLoaded", () => {
   (function initReverseImageSearch() {
     const btn = document.getElementById("reverse-image-btn");
     const panel = document.getElementById("reverse-image-panel");
+    const urlEntryBtn = document.getElementById("reverse-image-url-entry");
+    const pickBtn = document.getElementById("reverse-image-pick-btn");
     const closeBtn = document.getElementById("reverse-image-close");
     const submitBtn = document.getElementById("reverse-image-submit");
     const urlInput = document.getElementById("reverse-image-url");
     const fileInput = document.getElementById("reverse-image-file");
     const capInput = document.getElementById("reverse-image-caption");
-    if (!btn || !panel) return;
+    const fileHint = document.getElementById("reverse-image-file-hint");
+    if (!btn || !panel || !fileInput) return;
+
+    let busy = false;
+
+    function openImageFilePicker() {
+      fileInput.value = "";
+      if (fileHint) fileHint.textContent = "";
+      if (typeof fileInput.showPicker === "function") {
+        fileInput.showPicker().catch(() => {
+          fileInput.click();
+        });
+      } else {
+        fileInput.click();
+      }
+    }
 
     function setOpen(open) {
       panel.hidden = !open;
-      btn.setAttribute("aria-expanded", open ? "true" : "false");
+      urlEntryBtn?.setAttribute("aria-expanded", open ? "true" : "false");
+      if (open) {
+        requestAnimationFrame(() => {
+          urlInput?.focus();
+        });
+      }
     }
 
-    btn.addEventListener("click", () => setOpen(panel.hidden));
-    closeBtn?.addEventListener("click", () => setOpen(false));
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && !panel.hidden) setOpen(false);
-    });
+    function setBusy(on) {
+      busy = on;
+      btn.disabled = on;
+      submitBtn && (submitBtn.disabled = on);
+      pickBtn && (pickBtn.disabled = on);
+      btn.setAttribute("aria-busy", on ? "true" : "false");
+    }
 
-    submitBtn?.addEventListener("click", async () => {
+    async function runReverseImageSubmit() {
+      if (busy) return;
       const cap = (capInput?.value || "").trim();
-      const file = fileInput?.files?.[0];
+      const file = fileInput.files && fileInput.files[0];
       const url = (urlInput?.value || "").trim();
       if (!file && !url) {
         window.alert("Add an HTTPS image link or choose a photo from your device.");
         return;
       }
-      submitBtn.disabled = true;
+      if (fileHint) fileHint.textContent = file ? "Searching…" : "";
+      setBusy(true);
       try {
         let resp;
         if (file) {
@@ -3626,13 +3652,54 @@ document.addEventListener("DOMContentLoaded", () => {
         const data = await resp.json().catch(() => ({}));
         if (!resp.ok || !data.ok) {
           window.alert(data.message || data.error || "Could not look up that image.");
+          fileInput.value = "";
+          if (fileHint) fileHint.textContent = "";
           return;
         }
         if (data.redirect) window.location.href = data.redirect;
       } finally {
-        submitBtn.disabled = false;
+        setBusy(false);
+        if (fileHint && fileHint.textContent === "Searching…") fileHint.textContent = "";
+      }
+    }
+
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (busy) return;
+      openImageFilePicker();
+    });
+
+    pickBtn?.addEventListener("click", () => {
+      if (busy) return;
+      openImageFilePicker();
+    });
+
+    urlEntryBtn?.addEventListener("click", () => {
+      if (busy) return;
+      setOpen(panel.hidden);
+    });
+
+    closeBtn?.addEventListener("click", () => {
+      setOpen(false);
+      urlEntryBtn?.focus();
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !panel.hidden) {
+        setOpen(false);
+        urlEntryBtn?.focus();
       }
     });
+
+    fileInput.addEventListener("change", () => {
+      const f = fileInput.files && fileInput.files[0];
+      if (!f) return;
+      if (fileHint) fileHint.textContent = f.name || "Selected";
+      runReverseImageSubmit();
+    });
+
+    submitBtn?.addEventListener("click", () => runReverseImageSubmit());
   })();
 
   (function initHomeSearchModes() {
