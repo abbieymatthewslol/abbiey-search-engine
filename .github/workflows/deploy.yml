@@ -1,11 +1,13 @@
 name: Deploy to Vercel
 
-# Deploys the single production project for https://abbieysearch.com (see .github/PLATFORM_INTEGRATIONS.md).
+# Production deploys: Vercel Git integration (push to the branch set as Production in Vercel).
+# On push to master: run tests only. Full CLI deploy runs only when you manually start this workflow.
+# See .github/PLATFORM_INTEGRATIONS.md (Option B).
 on:
   push:
     branches:
       - master
-  # GitHub → Actions → "Deploy to Vercel" → Run workflow (no code change needed)
+  # GitHub → Actions → "Deploy to Vercel" → Run workflow (manual CLI deploy / rollback)
   workflow_dispatch:
 
 concurrency:
@@ -37,6 +39,8 @@ jobs:
         run: pytest tests/ -v --tb=short
 
   deploy:
+    # Avoid double-deploy: Vercel builds production from Git. Use this job only when dispatching manually.
+    if: github.event_name == 'workflow_dispatch'
     needs: test
     runs-on: ubuntu-latest
     steps:

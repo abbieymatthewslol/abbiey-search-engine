@@ -12,6 +12,7 @@
           "retrieval/**",
           "entity_parser.py",
           "query_understanding.py",
+          "reverse_image.py",
           "digital_pet.py",
           "app.py"
         ]
