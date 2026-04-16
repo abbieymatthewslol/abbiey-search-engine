@@ -66,21 +66,21 @@ $commitSha = (git rev-parse HEAD).Trim()
 Write-Host "Pushing $Branch to $Remote (commit $commitSha) ..." -ForegroundColor Cyan
 cmd.exe /c ('cd /d "{0}" && git push -u {1} {2}' -f $RepoRoot, $Remote, $Branch)
 if ($LASTEXITCODE -ne 0) {
-    Show-DeployNotification -Title "abbiey.search — GitHub" -Body "Push failed for $Branch." -Kind Error
+    Show-DeployNotification -Title "abbiey.search - GitHub" -Body "Push failed for $Branch." -Kind Error
     throw "git push failed with exit code $LASTEXITCODE"
 }
 
 if ($SkipVercelWait) {
-    Show-DeployNotification -Title "abbiey.search — GitHub" -Body "Pushed $Branch to $Remote." -Kind Info
+    Show-DeployNotification -Title "abbiey.search - GitHub" -Body "Pushed $Branch to $Remote." -Kind Info
     Write-Host "Done." -ForegroundColor Green
     exit 0
 }
 
-Show-DeployNotification -Title "abbiey.search — GitHub" -Body "Pushed $Branch. Waiting for Vercel production..." -Kind Info
+Show-DeployNotification -Title "abbiey.search - GitHub" -Body "Pushed $Branch. Waiting for Vercel production..." -Kind Info
 
 $tok = $env:VERCEL_TOKEN
 if (-not $tok) {
-    Show-DeployNotification -Title "abbiey.search — Vercel" -Body "Set user env VERCEL_TOKEN to auto-detect deploy READY after push." -Kind Info
+    Show-DeployNotification -Title "abbiey.search - Vercel" -Body "Set user env VERCEL_TOKEN to auto-detect deploy READY after push." -Kind Info
     Write-Warning "VERCEL_TOKEN not set; skipping Vercel API poll."
     exit 0
 }
@@ -95,7 +95,7 @@ do {
         $resp = Invoke-RestMethod -Uri $uri -Headers $headers -Method Get -TimeoutSec 40
     }
     catch {
-        Show-DeployNotification -Title "abbiey.search — Vercel API" -Body $_.Exception.Message -Kind Error
+        Show-DeployNotification -Title "abbiey.search - Vercel API" -Body $_.Exception.Message -Kind Error
         throw
     }
 
@@ -119,22 +119,22 @@ do {
 
     $state = [string]$dep.readyState
     if ($state -eq "READY") {
-        $hostUrl = "https://abbieysearch.com"
+        $deployUrl = "https://abbieysearch.com"
         if ($dep.url) {
-            $hostUrl = "https://" + ($dep.url -replace '^https?://', '')
+            $deployUrl = "https://" + ($dep.url -replace '^https?://', '')
         }
-        Show-DeployNotification -Title "abbiey.search — Vercel" -Body ("Production deploy READY.`n{0}" -f $hostUrl) -Kind Info
-        Write-Host "Vercel READY: $hostUrl" -ForegroundColor Green
+        Show-DeployNotification -Title "abbiey.search - Vercel" -Body ("Production deploy READY.`n{0}" -f $deployUrl) -Kind Info
+        Write-Host "Vercel READY: $deployUrl" -ForegroundColor Green
         exit 0
     }
     if ($state -eq "ERROR" -or $state -eq "CANCELED") {
-        Show-DeployNotification -Title "abbiey.search — Vercel" -Body "Deploy state: $state" -Kind Error
+        Show-DeployNotification -Title "abbiey.search - Vercel" -Body "Deploy state: $state" -Kind Error
         throw "Vercel deployment readyState=$state"
     }
 
     Write-Host ("Build state: {0}  {1}" -f $state, (Get-Date -Format "HH:mm:ss"))
 } while ((Get-Date) -lt $deadline)
 
-Show-DeployNotification -Title "abbiey.search — Vercel" -Body "Timed out waiting for READY. Check Vercel dashboard." -Kind Info
+Show-DeployNotification -Title "abbiey.search - Vercel" -Body "Timed out waiting for READY. Check Vercel dashboard." -Kind Info
 Write-Warning "No READY within $MaxWaitMinutes minutes."
 exit 0
