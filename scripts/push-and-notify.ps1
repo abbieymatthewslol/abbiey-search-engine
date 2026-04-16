@@ -34,21 +34,37 @@ function Show-DeployNotification {
         [ValidateSet("Info", "Error")]
         [string] $Kind = "Info"
     )
-    Add-Type -AssemblyName System.Windows.Forms -ErrorAction Stop | Out-Null
-    Add-Type -AssemblyName System.Drawing -ErrorAction Stop | Out-Null
-    $ni = New-Object System.Windows.Forms.NotifyIcon
-    $ni.Visible = $true
-    if ($Kind -eq "Error") {
-        $ni.Icon = [System.Drawing.SystemIcons]::Error
-        $tip = [System.Windows.Forms.ToolTipIcon]::Error
+    $fm = $ExecutionContext.SessionState.LanguageMode
+    if ($fm -eq "ConstrainedLanguage" -or $fm -eq "NoLanguage") {
+        $color = if ($Kind -eq "Error") { "Red" } else { "Green" }
+        Write-Host ""
+        Write-Host ("=== {0} ===" -f $Title) -ForegroundColor $color
+        Write-Host $Body -ForegroundColor $color
+        Write-Host "===================" -ForegroundColor $color
+        Write-Host ""
+        return
     }
-    else {
-        $ni.Icon = [System.Drawing.SystemIcons]::Information
-        $tip = [System.Windows.Forms.ToolTipIcon]::Info
+    try {
+        Add-Type -AssemblyName System.Windows.Forms -ErrorAction Stop
+        Add-Type -AssemblyName System.Drawing -ErrorAction Stop
+        $ni = New-Object System.Windows.Forms.NotifyIcon
+        $ni.Visible = $true
+        if ($Kind -eq "Error") {
+            $ni.Icon = [System.Drawing.SystemIcons]::Error
+            $tip = [System.Windows.Forms.ToolTipIcon]::Error
+        }
+        else {
+            $ni.Icon = [System.Drawing.SystemIcons]::Information
+            $tip = [System.Windows.Forms.ToolTipIcon]::Info
+        }
+        $ni.ShowBalloonTip(22000, $Title, $Body, $tip)
+        Start-Sleep -Milliseconds 500
+        $ni.Dispose()
     }
-    $ni.ShowBalloonTip(22000, $Title, $Body, $tip)
-    Start-Sleep -Milliseconds 500
-    $ni.Dispose()
+    catch {
+        Write-Warning "Tray notification unavailable: $($_.Exception.Message)"
+        Write-Host ("{0}: {1}" -f $Title, $Body)
+    }
 }
 
 $teamId = "team_YeguIG4NHm4Kp0Jf5AbOwgFN"
