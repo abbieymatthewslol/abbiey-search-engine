@@ -52,6 +52,15 @@ Before considering work “done”, try to ensure:
   - `git status`
   - the relevant file contents
 
+## Fallback for blank/vague automation prompts
+- If the prompt is empty or vague (for example, "idk what to put here"), do not stall.
+- First verify these files exist and are current:
+  - `AUTOMATION_TASK_TEMPLATE.md`
+  - `.github/agents/TASK_DEFINITION_TEMPLATE.md`
+  - README automation guidance linking to both
+- If any are missing or weak, restore/improve them as a docs-only maintenance change.
+- Keep fallback work low-risk unless there is an obvious repo-health blocker.
+
 # Things you must NOT do
 - Don’t propose “merge everything” as a default.
 - Don’t remove large modules/files unless asked or clearly obsolete.
