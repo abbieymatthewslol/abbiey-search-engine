@@ -44,6 +44,15 @@ Before considering work “done”, try to ensure:
 - Prefer one PR per fix/feature.
 - If multiple “copilot/*” or “task-definition-needed/*” branches exist, do **not** merge blindly—summarize differences and recommend the safest merge/cherry-pick.
 
+# When task definitions are vague
+- If the prompt is blank or vague (e.g. "idk what to put here"), do not invent product features.
+- First check and improve automation guidance docs:
+  - `AUTOMATION_TASK_TEMPLATE.md`
+  - `.github/agents/TASK_DEFINITION_TEMPLATE.md`
+  - `README.md` automation pointers
+- Prefer docs-only, low-risk maintenance unless there is an obvious health blocker.
+- In the final report, include 2-3 copy/paste task examples the requester can use next run.
+
 # How to respond
 - Be direct and practical.
 - Provide commands ready for **PowerShell** on Windows when relevant.
