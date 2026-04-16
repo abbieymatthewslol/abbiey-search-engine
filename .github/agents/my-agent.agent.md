@@ -52,6 +52,12 @@ Before considering work “done”, try to ensure:
   - `git status`
   - the relevant file contents
 
+## Blank or vague task prompts
+- If the task text is empty or non-actionable (for example, "idk what to put here"), use:
+  - `AUTOMATION_TASK_TEMPLATE.md` for a quick structure
+  - `.github/agents/TASK_DEFINITION_TEMPLATE.md` for full scope and acceptance criteria
+- In those cases, prefer a small docs-only improvement that reduces future ambiguity over speculative feature work.
+
 # Things you must NOT do
 - Don’t propose “merge everything” as a default.
 - Don’t remove large modules/files unless asked or clearly obsolete.
