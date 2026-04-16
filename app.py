@@ -321,6 +321,113 @@ _PREVIEW_MSG_PRIVATE = "That address cannot be previewed."
 _PREVIEW_MSG_TIMEOUT = "Preview timed out. The page may be slow or unreachable."
 _PREVIEW_MSG_UNAVAILABLE = "We couldn't load a preview for this page."
 
+# Preview fetch: browser-like headers improve compatibility with sites that reject non-browser UAs.
+_PREVIEW_FETCH_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Upgrade-Insecure-Requests": "1",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-User": "?1",
+}
+_MAX_PREVIEW_HTML_BYTES = 100_000
+_MAX_PREVIEW_SNAPSHOT_CHARS = 78_000
+
+
+def _preview_response_looks_html(resp: httpx.Response, sample: str) -> bool:
+    ct = (resp.headers.get("content-type") or "").lower()
+    if "html" in ct or "xhtml" in ct:
+        return True
+    s = (sample or "")[:800].lower()
+    return "<html" in s or "<!doctype html" in s
+
+
+def _sanitize_preview_html(raw_html: str, base_url: str) -> str:
+    """Strip active content for a sandboxed iframe srcdoc snapshot (same-origin safe)."""
+    from bs4 import BeautifulSoup  # type: ignore[import-untyped]
+    from html import escape
+
+    kill_tags = frozenset(
+        {
+            "script",
+            "noscript",
+            "iframe",
+            "frame",
+            "frameset",
+            "object",
+            "embed",
+            "link",
+            "base",
+            "template",
+            "form",
+        }
+    )
+    soup = BeautifulSoup(raw_html, "html.parser")
+
+    bad_url = re.compile(r"^\s*javascript:", re.I)
+
+    for node in soup.find_all(True):
+        name = (node.name or "").lower()
+        if name in kill_tags:
+            node.decompose()
+            continue
+        if name == "meta":
+            he = node.get("http-equiv")
+            if isinstance(he, str) and he.lower() == "refresh":
+                node.decompose()
+                continue
+
+    for node in soup.find_all(True):
+        for attr in list(node.attrs.keys()):
+            if attr.lower().startswith("on"):
+                del node.attrs[attr]
+        for attr in ("href", "src", "poster", "action", "formaction"):
+            if attr not in node.attrs:
+                continue
+            val = node.attrs[attr]
+            if isinstance(val, str) and bad_url.match(val):
+                del node.attrs[attr]
+        ss = node.get("srcset")
+        if isinstance(ss, str) and "javascript:" in ss.lower():
+            del node.attrs["srcset"]
+
+    body = soup.body
+    if body is not None:
+        inner = body.decode_contents()
+    else:
+        inner = str(soup)
+
+    inner = inner.strip()
+    if len(inner) > _MAX_PREVIEW_SNAPSHOT_CHARS:
+        inner = inner[:_MAX_PREVIEW_SNAPSHOT_CHARS] + "<p>…</p>"
+
+    bhref = escape(base_url, quote=True)
+    return (
+        "<!DOCTYPE html><html><head>"
+        '<meta charset="utf-8">'
+        f'<base href="{bhref}">'
+        '<meta name="viewport" content="width=device-width, initial-scale=1">'
+        "<style>"
+        "body{margin:0;padding:10px 12px;font:14px/1.45 system-ui,-apple-system,Segoe UI,sans-serif;"
+        "background:#fafafa;color:#111;word-wrap:break-word}"
+        "@media (prefers-color-scheme: dark) {"
+        "body{background:#1e1e24;color:#eaeaea}"
+        "}"
+        "a{color:#06c}a:visited{color:#609}"
+        "@media (prefers-color-scheme: dark) {"
+        "a{color:#8ab4f8}a:visited{color:#c58af9}"
+        "}"
+        "</style></head><body>"
+        f"{inner}"
+        "</body></html>"
+    )
+
+
 _CHAT_MSG_MISSING = "Run a search first, then ask a question in the research assistant."
 _CHAT_MSG_QUERY_LONG = "That search is too long for the assistant. Try a shorter query."
 _CHAT_MSG_MESSAGE_LONG = "That message is too long. Please shorten it and try again."
@@ -4611,7 +4718,7 @@ def api_preview():
             url,
             timeout=4.0,
             follow_redirects=True,
-            headers={"User-Agent": "Mozilla/5.0 (compatible; abbiey.search/1.0)"},
+            headers=_PREVIEW_FETCH_HEADERS,
         # Guard against redirect-based SSRF: validate final URL after redirects
         )
         final_url = str(resp.url)
@@ -4622,7 +4729,7 @@ def api_preview():
         if ".onion" in (final_parsed.netloc or ""):
             return jsonify({"error": _PREVIEW_MSG_ONION}), 400
         resp.raise_for_status()
-        html = resp.text[:100000]  # Cap at 100KB
+        html = resp.text[:_MAX_PREVIEW_HTML_BYTES]
 
         # Extract title
         title_match = re.search(r"<title[^>]*>(.*?)</title>", html, re.IGNORECASE | re.DOTALL)
@@ -4675,14 +4782,20 @@ def api_preview():
         )
         site_name = site_match.group(1).strip() if site_match else ""
 
-        return jsonify({
+        payload = {
             "title": title[:200],
             "description": description[:500],
             "excerpt": excerpt,
             "image": og_image,
             "site_name": site_name,
             "url": url,
-        })
+        }
+        if _preview_response_looks_html(resp, html):
+            try:
+                payload["snapshot_html"] = _sanitize_preview_html(html, final_url)
+            except Exception:
+                logger.exception("preview_sanitize_failed")
+        return jsonify(payload)
     except httpx.TimeoutException:
         _log_event("preview_fetch_timeout")
         return jsonify({"error": _PREVIEW_MSG_TIMEOUT}), 504

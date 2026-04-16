@@ -3060,6 +3060,16 @@ header > .header-brand-top {
   line-height: 1.4;
 }
 .preview-site, .preview-url { font-size: .775rem; color: var(--url-color); margin-bottom: .5rem; }
+.preview-snapshot {
+  width: 100%;
+  min-height: 200px;
+  max-height: min(55vh, 520px);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  background: var(--bg-surface);
+  margin: 0 0 .875rem;
+}
+
 .preview-desc, .preview-excerpt {
   font-size: .875rem;
   color: var(--text-dim);

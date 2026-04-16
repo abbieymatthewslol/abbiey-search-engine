@@ -2315,6 +2315,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const _previewSite = document.getElementById("preview-site");
   const _previewDesc = document.getElementById("preview-desc");
   const _previewExcerpt = document.getElementById("preview-excerpt");
+  const _previewSnapshot = document.getElementById("preview-snapshot");
   const _previewLink = document.getElementById("preview-link");
 
   if (previewPanel && previewClose) {
@@ -2523,6 +2524,10 @@ document.addEventListener("DOMContentLoaded", () => {
               _previewExcerpt.textContent = "";
               _previewSite.textContent = "";
               _previewImg.style.display = "none";
+              if (_previewSnapshot) {
+                _previewSnapshot.removeAttribute("srcdoc");
+                _previewSnapshot.style.display = "none";
+              }
               _previewLink.href = u;
               schedulePreviewFocusFromKeyboard();
             });
@@ -2551,6 +2556,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
         if (hasImage) { _previewImg.src = data.image; _previewImg.style.display = "block"; }
         else { _previewImg.style.display = "none"; _previewImg.src = ""; }
+
+        if (_previewSnapshot) {
+          if (data.snapshot_html) {
+            _previewSnapshot.srcdoc = data.snapshot_html;
+            _previewSnapshot.style.display = "block";
+          } else {
+            _previewSnapshot.removeAttribute("srcdoc");
+            _previewSnapshot.style.display = "none";
+          }
+        }
 
         _previewTitle.textContent = data.title || "";
         _previewSite.textContent = siteName;

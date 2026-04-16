@@ -483,6 +483,31 @@ class TestApiPreview:
         get_mock.assert_called_once()
         assert get_mock.call_args[0][0] == "https://example.com/page"
 
+    def test_preview_includes_sanitized_snapshot_html(self, client):
+        from unittest.mock import MagicMock, patch
+
+        import httpx
+
+        html = (
+            "<html><head><title>T</title><script>alert(1)</script></head>"
+            "<body><p>Hello</p><iframe src=\"https://evil\"></iframe></body></html>"
+        )
+        mock_resp = MagicMock()
+        mock_resp.text = html
+        mock_resp.raise_for_status = MagicMock()
+        mock_resp.url = httpx.URL("https://example.com/page")
+        mock_resp.headers = {"content-type": "text/html; charset=utf-8"}
+        with patch.object(httpx, "get", return_value=mock_resp):
+            resp = client.get(
+                "/api/preview", query_string={"url": "https://example.com/page"}
+            )
+        assert resp.status_code == 200
+        data = resp.get_json()
+        snap = data.get("snapshot_html") or ""
+        assert "<script" not in snap.lower()
+        assert "iframe" not in snap.lower()
+        assert "Hello" in snap
+
 
 class TestChatAPI:
     """Test the AI research assistant chat endpoint."""
