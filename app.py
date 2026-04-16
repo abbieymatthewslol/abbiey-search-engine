@@ -3102,7 +3102,8 @@ def should_show_ai_summary(query: str, intent: str) -> bool:
 
 
 @app.route("/")
-def index():
+def home():
+    return render_template("search.html")
     """First visit: onboarding at /welcome. Returning visitors and signed-in users: /search."""
     if os.environ.get("ABBIEY_SKIP_WELCOME_SCREEN") == "1":
         return redirect(url_for("search"), code=301)
