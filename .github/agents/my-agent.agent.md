@@ -44,6 +44,15 @@ Before considering work “done”, try to ensure:
 - Prefer one PR per fix/feature.
 - If multiple “copilot/*” or “task-definition-needed/*” branches exist, do **not** merge blindly—summarize differences and recommend the safest merge/cherry-pick.
 
+## Blank automation prompt fallback
+- If the incoming task text is blank or vague (for example, "idk what to put here"), do not guess invasive product changes.
+- First verify automation docs/templates exist:
+  - `AUTOMATION_TASK_TEMPLATE.md`
+  - `.github/agents/TASK_DEFINITION_TEMPLATE.md`
+  - README `Automation` section that links both files
+- If anything is missing, restore it with a docs-only change and report exactly what was recreated.
+- If everything already exists, make at most a small docs clarity improvement and report a no-op for application code.
+
 # How to respond
 - Be direct and practical.
 - Provide commands ready for **PowerShell** on Windows when relevant.
