@@ -232,6 +232,17 @@ def _env_truthy(key: str) -> bool:
     return os.environ.get(key, "").strip().lower() in ("1", "true", "yes", "on")
 
 
+def _skip_welcome_for_root() -> bool:
+    """If True, GET / redirects to /search instead of the first-visit /welcome gate."""
+    raw = (os.environ.get("ABBIEY_SKIP_WELCOME_SCREEN") or "").strip().lower()
+    if raw in ("1", "true", "yes", "on"):
+        return True
+    if raw in ("0", "false", "no", "off"):
+        return False
+    # Unset: on Vercel, default to search-first so organic traffic lands on the real UI.
+    return bool(os.environ.get("VERCEL"))
+
+
 # Self-host only: disables all Flask-Limiter rules (public deployments should leave this off).
 ABBIEY_OPEN_ACCESS = _env_truthy("ABBIEY_OPEN_ACCESS")
 
@@ -3102,10 +3113,9 @@ def should_show_ai_summary(query: str, intent: str) -> bool:
 
 
 @app.route("/")
-def home():
-    return render_template("search.html")
-    """First visit: onboarding at /welcome. Returning visitors and signed-in users: /search."""
-    if os.environ.get("ABBIEY_SKIP_WELCOME_SCREEN") == "1":
+def index():
+    """First visit: onboarding at /welcome (unless skipped). Returning visitors and signed-in users: /search."""
+    if _skip_welcome_for_root():
         return redirect(url_for("search"), code=301)
     if _session_user_id_int(session.get("user_id")):
         return redirect(url_for("search"), code=301)
