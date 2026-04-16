@@ -54,12 +54,14 @@ from query_understanding import (
     build_backend_search_query,
     resolve_location_for_search,
     query_ui_hints,
+    refine_query_for_search,
     should_enable_ai_summary,
     has_local_intent_signals,
     detect_query_clarification,
     is_simple_answer_query,
 )
 from retrieval.pipeline import run_text_retrieval_pipeline_sync
+from reverse_image import fetch_reverse_hits_for_image_url, validate_client_image_url
 from search_bots import crawl_bot_pages, normalize_http_seed, parse_json_list
 import digital_pet as _digital_pet
 from osint.service import enrich as _osint_enrich_run
@@ -2073,7 +2075,7 @@ def _expand_query(query: str) -> "tuple[str, list[str]]":
     to avoid over-broadening complex searches.
     """
     tokens = query.lower().split()
-    if len(tokens) > 4:
+    if len(tokens) > 10:
         return query, []
     added: "list[str]" = []
     for token in tokens:
@@ -2082,7 +2084,7 @@ def _expand_query(query: str) -> "tuple[str, list[str]]":
             added.extend(_SYNONYMS[clean][:2])
     if not added:
         return query, []
-    expansion = " OR ".join(f'"{s}"' for s in added[:3])
+    expansion = " OR ".join(f'"{s}"' for s in added[:4])
     return f"{query} {expansion}", added
 
 
@@ -2132,7 +2134,7 @@ RETAILER_DOMAINS = {
     "shopping.google.com": "Google Shopping",
     "google.com": "Google Shopping",
 }
-CACHE_FETCH_SIZE = 100  # Fetch enough results to serve multiple pages
+CACHE_FETCH_SIZE = 160  # Fetch enough results to serve multiple pages / deeper ranking
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -2212,6 +2214,12 @@ _in_flight_lock = threading.Lock()
 # Onion link status cache (TTL 10 min)
 _onion_status_cache = TTLCache(maxsize=2000, ttl=600)
 _onion_status_lock = threading.Lock()
+
+# Reverse image: Bing imgurl flow (short-lived preview bytes + cached hit lists)
+_reverse_image_hits_cache = TTLCache(maxsize=400, ttl=600)
+_reverse_image_hits_lock = threading.Lock()
+_reverse_image_preview_cache = TTLCache(maxsize=200, ttl=180)
+_reverse_image_preview_lock = threading.Lock()
 
 # Lazy-init shared httpx client
 _http = None
@@ -2945,6 +2953,7 @@ _TEMPLATE_DEFAULTS = dict(
     img_ov_src="",
     img_src_checked=["ddg", "openverse", "commons"],
     img_scroll_extras="",
+    img_rev_key="",
     query_ui={
         "intent": "informational",
         "interrogative_or_explanatory": False,
@@ -3561,6 +3570,9 @@ def search():
     if safesearch not in {"off", "moderate", "strict"}:
         safesearch = "off"
 
+    _raw_img_rev = (request.args.get("img_rev_key") or "").strip()
+    img_rev_key = _raw_img_rev if re.fullmatch(r"[A-Za-z0-9_-]{16,128}", _raw_img_rev) else ""
+
     current_uid = _session_user_id_int(session.get("user_id"))
     current_user_has_paid_access = _search_access_granted(
         uid=current_uid, token=_search_unlock_cookie_token()
@@ -3628,6 +3640,12 @@ def search():
             "index.html",
             **{
                 **_TEMPLATE_DEFAULTS,
+                "search_type": search_type,
+                "region": region or "",
+                "lang": lang or "",
+                "time_filter": time_filter or "",
+                "cleanweb": cleanweb,
+                "img_rev_key": img_rev_key,
                 "current_user_has_paid_access": current_user_has_paid_access,
                 "osint_enabled": _abbiey_osint_enabled(),
             },
@@ -3678,6 +3696,7 @@ def search():
             img_ov_src="",
             img_src_checked=[],
             img_scroll_extras="",
+            img_rev_key="",
             query_ui=_TEMPLATE_DEFAULTS["query_ui"],
             search_lat=None,
             search_lon=None,
@@ -3704,10 +3723,15 @@ def search():
     if operators.get("lang"):
         lang = operators["lang"][0]
 
-    # Query expansion
+    # Query expansion (abbreviations → OR synonyms)
     expanded_query, expansion_terms = _expand_query(clean_query)
     if expansion_terms:
         clean_query = expanded_query
+
+    # Typo + conversational filler cleanup — clearer match to user intent
+    refined_query, query_refinement_notes = refine_query_for_search(clean_query)
+    if refined_query != clean_query or query_refinement_notes:
+        clean_query = refined_query
 
     user_lat = _parse_request_coord("lat")
     user_lon = _parse_request_coord("lon")
@@ -3717,7 +3741,7 @@ def search():
         user_lon = None
 
     prep = preprocess_query(clean_query)
-    query_ui = query_ui_hints(prep)
+    query_ui = query_ui_hints(prep, refinement_notes=query_refinement_notes)
     anchor_geo = None
     if user_lat is not None and user_lon is not None and has_local_intent_signals(prep):
         anchor_geo = _reverse_geocode_label(user_lat, user_lon)
@@ -3766,6 +3790,7 @@ def search():
             source_query_for_fallback=query,
             mybot_id=_mb_id,
             mybot_user_id=_mb_uid,
+            img_rev_key=img_rev_key or None,
         )
         if results.get("results") and search_type not in ("images", "saved"):
             results["results"] = _rerank_results_with_feedback(query, results["results"])
@@ -3795,6 +3820,7 @@ def search():
         source_query_for_fallback=query,
         mybot_id=_mb_id,
         mybot_user_id=_mb_uid,
+        img_rev_key=img_rev_key or None,
     )
     if results.get("results") and search_type not in ("images", "saved"):
         results["results"] = _rerank_results_with_feedback(query, results["results"])
@@ -3941,6 +3967,7 @@ def search():
         safeguard=safeguard,
         osint_enabled=_abbiey_osint_enabled(),
         mybot_id=mybot_id,
+        img_rev_key=img_rev_key,
     )
 @app.route("/api/suggestions")
 @limiter.limit("200/minute")
@@ -4105,13 +4132,14 @@ def api_entity():
         )
     if len(query) > MAX_QUERY_LENGTH:
         return jsonify({"error": "Query too long"}), 400
-    prep = preprocess_query(query)
+    refined, refine_notes = refine_query_for_search(query)
+    prep = preprocess_query(refined)
     entities = detect_entities(query, _preprocessed=prep)
     queries = build_search_queries(query, entities)
     primary = primary_entity(entities)
     return jsonify({
         "preprocessing": prep.to_dict(),
-        "query_ui": query_ui_hints(prep),
+        "query_ui": query_ui_hints(prep, refinement_notes=refine_notes),
         "entities": [asdict(e) for e in entities],
         "primary": asdict(primary) if primary else None,
         "queries": queries,
@@ -4138,6 +4166,139 @@ def api_osint_enrich():
         return jsonify({"ok": False, "error": "missing_body", "facts": [], "modules": [], "entity": None}), 400
     status = 200 if payload.get("ok") else 422
     return jsonify(payload), status
+
+
+def _sniff_image_magic(head: bytes) -> str | None:
+    h = head[:32]
+    if h.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if h.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if h.startswith(b"GIF87a") or h.startswith(b"GIF89a"):
+        return "image/gif"
+    if len(head) >= 12 and head.startswith(b"RIFF") and head[8:12] == b"WEBP":
+        return "image/webp"
+    return None
+
+
+def _public_base_url() -> str:
+    env = (os.environ.get("SITE_URL") or "").strip().rstrip("/")
+    if env:
+        return env
+    if has_request_context():
+        return (request.host_url or "").rstrip("/")
+    return ""
+
+
+@app.route("/api/reverse-image/preview/<token>")
+def api_reverse_image_preview(token: str):
+    """Ephemeral URL so Bing can retrieve an uploaded image once during lookup."""
+    if not re.fullmatch(r"[A-Za-z0-9_-]{16,128}", token or ""):
+        return Response("Not found", status=404)
+    with _reverse_image_preview_lock:
+        row = _reverse_image_preview_cache.get(token)
+    if not row:
+        return Response("Not found", status=404)
+    body, content_type = row[0], row[1]
+    return Response(
+        body,
+        mimetype=content_type or "application/octet-stream",
+        headers={"Cache-Control": "private, no-store, max-age=0"},
+    )
+
+
+@app.route("/api/reverse-image", methods=["POST"])
+@limiter.limit("20/minute")
+def api_reverse_image():
+    """HTTPS image URL or multipart upload → Bing similar images, cached for results page."""
+    max_b = int(os.environ.get("ABBIEY_REVERSE_IMAGE_MAX_BYTES", str(4 * 1024 * 1024)))
+    caption_default = "Visual matches"
+
+    def _hits_with_client(img_url: str) -> list:
+        with httpx.Client(
+            timeout=30.0,
+            follow_redirects=True,
+            limits=httpx.Limits(max_connections=10, max_keepalive_connections=5),
+            headers={"User-Agent": "Mozilla/5.0 (compatible; abbiey.search/1.0)"},
+        ) as cli:
+            return fetch_reverse_hits_for_image_url(img_url, client=cli)
+
+    ct = (request.content_type or "").lower()
+    hits: list = []
+
+    if "multipart/form-data" in ct:
+        f = request.files.get("image")
+        if not f or not f.filename:
+            return jsonify({"ok": False, "error": "missing_file"}), 400
+        raw = f.read(max_b + 1)
+        if len(raw) > max_b:
+            return jsonify({"ok": False, "error": "file_too_large"}), 413
+        sniffed = _sniff_image_magic(raw)
+        mime = sniffed or (f.mimetype or "") or "application/octet-stream"
+        if sniffed is None and mime not in {"image/jpeg", "image/png", "image/webp", "image/gif"}:
+            return jsonify({"ok": False, "error": "unsupported_type"}), 400
+        base = _public_base_url()
+        host = (urlparse(base).hostname or "").lower()
+        if not base or host in {"127.0.0.1", "localhost"}:
+            return (
+                jsonify(
+                    {
+                        "ok": False,
+                        "error": "upload_needs_public_https",
+                        "message": (
+                            "Upload matching needs a public HTTPS site (set SITE_URL) so the image can be "
+                            "fetched once for lookup — or paste a direct HTTPS image link instead."
+                        ),
+                    }
+                ),
+                422,
+            )
+        prev_tok = secrets.token_urlsafe(24)
+        with _reverse_image_preview_lock:
+            _reverse_image_preview_cache[prev_tok] = (raw, mime)
+        preview_url = f"{base}/api/reverse-image/preview/{prev_tok}"
+        try:
+            hits = _hits_with_client(preview_url)
+        finally:
+            with _reverse_image_preview_lock:
+                _reverse_image_preview_cache.pop(prev_tok, None)
+        cap = (request.form.get("caption") or "").strip()
+    else:
+        data = request.get_json(silent=True) or {}
+        image_url = (data.get("image_url") or "").strip()
+        if not image_url:
+            return jsonify({"ok": False, "error": "missing_image_url"}), 400
+        ok_u, _why = validate_client_image_url(image_url)
+        if not ok_u:
+            return jsonify({"ok": False, "error": "bad_image_url"}), 400
+        hits = _hits_with_client(image_url)
+        cap = (data.get("caption") or "").strip()
+
+    if not hits:
+        return (
+            jsonify(
+                {
+                    "ok": False,
+                    "error": "no_matches",
+                    "message": "No similar images were returned — try another photo or image URL.",
+                }
+            ),
+            422,
+        )
+
+    q_label = cap[:200] if cap else caption_default
+    result_tok = secrets.token_urlsafe(24)
+    with _reverse_image_hits_lock:
+        _reverse_image_hits_cache[result_tok] = hits
+
+    q_enc = quote_plus(q_label)
+    return jsonify(
+        {
+            "ok": True,
+            "redirect": f"/search?q={q_enc}&type=images&img_rev_key={result_tok}",
+            "count": len(hits),
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -7691,8 +7852,29 @@ def _fetch_results(
     source_query_for_fallback=None,
     mybot_id=None,
     mybot_user_id=None,
+    img_rev_key=None,
 ):
     """Fetch results with caching. Returns paginated slice."""
+    if search_type == "images" and img_rev_key:
+        with _reverse_image_hits_lock:
+            full_hits = _reverse_image_hits_cache.get(img_rev_key)
+        if full_hits is None:
+            return {
+                "results": [],
+                "has_more": False,
+                "page": page,
+                "notice": "That image match session expired or was invalid. Open the photo button and try again.",
+            }
+        start = RESULTS_PER_PAGE * (page - 1)
+        page_results = full_hits[start : start + RESULTS_PER_PAGE]
+        has_more = len(full_hits) > start + RESULTS_PER_PAGE
+        return {
+            "results": page_results,
+            "has_more": has_more,
+            "page": page,
+            "notice": "Similar images (Microsoft Bing index). Thumbnails and destination pages are third-party sites.",
+        }
+
     operators = operators or {}
     # Include operators in cache key to prevent cross-contamination
     ops_str = "&".join(f"{k}={','.join(v)}" for k, v in sorted(operators.items())) if operators else ""
@@ -7861,7 +8043,7 @@ def _fetch_results(
                     _ddg_fut = _ddg_pool.submit(
                         _try_ddg, effective_query, max_results, search_type, region, time_filter, safesearch
                     )
-                    results = _ddg_fut.result(timeout=5)
+                    results = _ddg_fut.result(timeout=9)
             except Exception:
                 logger.exception("DDG failed/timed out for query=%s type=%s", query, search_type)
 

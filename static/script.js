@@ -1991,6 +1991,9 @@ document.addEventListener("DOMContentLoaded", () => {
     if (sentinel.dataset.cleanweb === "1") scrollUrl += "&cleanweb=1";
     const imgExtra = sentinel.dataset.imgExtra;
     if (type === "images" && imgExtra) scrollUrl += `&${imgExtra}`;
+    if (type === "images" && sentinel.dataset.imgRevKey) {
+      scrollUrl += `&img_rev_key=${encodeURIComponent(sentinel.dataset.imgRevKey)}`;
+    }
     let geoSuf = geoQuerySuffix();
     if (!geoSuf && sentinel.dataset.lat && sentinel.dataset.lon) {
       geoSuf = `&lat=${encodeURIComponent(sentinel.dataset.lat)}&lon=${encodeURIComponent(sentinel.dataset.lon)}`;
@@ -2017,7 +2020,8 @@ document.addEventListener("DOMContentLoaded", () => {
             el.dataset.source = r.source || "";
             el.dataset.license = r.license || "";
             const lic = r.license ? `<span class="image-license" title="License">${esc(r.license)}</span>` : "";
-            el.innerHTML = `<img src="${esc(r.thumbnail || r.image)}" alt="${esc(r.title)}" loading="lazy"><div class="image-card-info"><span class="image-title">${esc(r.title)}</span>${r.source ? `<span class="image-source">${esc(r.source)}</span>` : ""}${lic}</div>`;
+            const desc = r.body ? `<p class="image-result-desc">${esc(r.body)}</p>` : "";
+            el.innerHTML = `<img src="${esc(r.thumbnail || r.image)}" alt="${esc(r.title)}" loading="lazy"><div class="image-card-info"><span class="image-title">${esc(r.title)}</span>${r.source ? `<span class="image-source">${esc(r.source)}</span>` : ""}${desc}${lic}</div>`;
           } else if (type === "videos") {
             el.className = "result video-result";
             el.innerHTML = `${r.thumbnail ? `<a href="${esc(r.url)}" target="_blank" rel="noopener" class="video-thumb"><img src="${esc(r.thumbnail)}" alt="${esc(r.title)}" loading="lazy">${r.duration ? `<span class="duration">${esc(r.duration)}</span>` : ""}</a>` : ""}<div class="result-text"><a href="${esc(r.url)}" target="_blank" rel="noopener" class="result-title">${esc(r.title)}</a>${faviconImg(r.url)}<cite class="result-url">${esc(r.publisher || "")}</cite><p class="result-snippet">${esc(r.description || "")}</p><div class="result-actions" data-feedback="1"><button type="button" class="result-action-btn feedback-btn" data-rating="up">Helpful</button><button type="button" class="result-action-btn feedback-btn" data-rating="down">Not relevant</button></div></div>`;
@@ -3556,6 +3560,90 @@ document.addEventListener("DOMContentLoaded", () => {
       filterInput.value = "";
       applyFilter("");
       filterInput.focus();
+    });
+  })();
+
+  // ===== Home: Web / Images / News / Videos before first query =====
+  (function initReverseImageSearch() {
+    const btn = document.getElementById("reverse-image-btn");
+    const panel = document.getElementById("reverse-image-panel");
+    const closeBtn = document.getElementById("reverse-image-close");
+    const submitBtn = document.getElementById("reverse-image-submit");
+    const urlInput = document.getElementById("reverse-image-url");
+    const fileInput = document.getElementById("reverse-image-file");
+    const capInput = document.getElementById("reverse-image-caption");
+    if (!btn || !panel) return;
+
+    function setOpen(open) {
+      panel.hidden = !open;
+      btn.setAttribute("aria-expanded", open ? "true" : "false");
+    }
+
+    btn.addEventListener("click", () => setOpen(panel.hidden));
+    closeBtn?.addEventListener("click", () => setOpen(false));
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !panel.hidden) setOpen(false);
+    });
+
+    submitBtn?.addEventListener("click", async () => {
+      const cap = (capInput?.value || "").trim();
+      const file = fileInput?.files?.[0];
+      const url = (urlInput?.value || "").trim();
+      if (!file && !url) {
+        window.alert("Add an HTTPS image link or choose a photo from your device.");
+        return;
+      }
+      submitBtn.disabled = true;
+      try {
+        let resp;
+        if (file) {
+          const fd = new FormData();
+          fd.append("image", file);
+          if (cap) fd.append("caption", cap);
+          resp = await fetch("/api/reverse-image", { method: "POST", body: fd });
+        } else {
+          resp = await fetch("/api/reverse-image", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ image_url: url, caption: cap || undefined }),
+          });
+        }
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok || !data.ok) {
+          window.alert(data.message || data.error || "Could not look up that image.");
+          return;
+        }
+        if (data.redirect) window.location.href = data.redirect;
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+  })();
+
+  (function initHomeSearchModes() {
+    const row = document.querySelector(".home-search-modes-row");
+    const typeInput = document.getElementById("search-type-input");
+    if (!row || !typeInput) return;
+
+    function syncPressed(activeBtn) {
+      row.querySelectorAll(".home-mode-btn").forEach((b) => {
+        const on = b === activeBtn;
+        b.classList.toggle("active", on);
+        b.setAttribute("aria-pressed", on ? "true" : "false");
+      });
+    }
+
+    const initial = (typeInput.value || "text").trim() || "text";
+    const match = row.querySelector(`.home-mode-btn[data-search-mode="${initial}"]`);
+    if (match) syncPressed(match);
+
+    row.addEventListener("click", (e) => {
+      const btn = e.target.closest(".home-mode-btn");
+      if (!btn || !row.contains(btn)) return;
+      const mode = (btn.dataset.searchMode || "").trim();
+      if (!mode) return;
+      typeInput.value = mode;
+      syncPressed(btn);
     });
   })();
 

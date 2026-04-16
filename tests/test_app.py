@@ -93,6 +93,14 @@ class TestRoutes:
         assert resp.status_code == 200
         assert b"abbiey.search" in resp.data
 
+    def test_search_home_preserves_image_mode_from_url(self, client):
+        """Deep-link / empty home: ?type=images should set hidden type + show Images mode."""
+        resp = client.get("/search?type=images")
+        assert resp.status_code == 200
+        assert b'value="images"' in resp.data
+        assert b"home-search-modes" in resp.data
+        assert b'data-search-mode="images"' in resp.data
+
     def test_search_home_shows_creator_credit(self, client):
         resp = client.get("/search", follow_redirects=False)
         assert resp.status_code == 200

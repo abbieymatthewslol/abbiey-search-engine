@@ -246,6 +246,19 @@ def parse_query_patterns(normalized: str) -> Optional[PatternParse]:
             location=m.group(3).strip(),
         )
 
+    # How-to / troubleshooting (engine-friendly rewrite in build_backend_search_query)
+    m = re.match(r"^how\s+(?:do\s+i|should\s+i|can\s+i|to)\s+(.+)$", sl, re.I)
+    if m:
+        subj = m.group(1).strip()
+        if len(subj) >= 2:
+            return PatternParse(kind="how_to", subject=subj)
+
+    m = re.match(r"^why\s+(?:is|are|was|were|does|do|did|can|could|would|won'?t|don't|dont)\s+(.+)$", sl, re.I)
+    if m:
+        subj = m.group(1).strip()
+        if len(subj) >= 2:
+            return PatternParse(kind="why_question", subject=subj)
+
     m = re.match(r"^(closest|nearest)\s+(.+)$", sl, re.I)
     if m:
         return PatternParse(
@@ -319,6 +332,114 @@ def place_category_matches(text: str) -> List[Dict[str, str]]:
     return results
 
 
+# Common misspellings (whole-word). Longer keys first so substrings do not steal matches.
+_COMMON_MISSPELLINGS: Tuple[Tuple[str, str], ...] = tuple(
+    sorted(
+        {
+            "teh": "the",
+            "hte": "the",
+            "thier": "their",
+            "recieve": "receive",
+            "occured": "occurred",
+            "occurence": "occurrence",
+            "definately": "definitely",
+            "seperate": "separate",
+            "occassion": "occasion",
+            "wierd": "weird",
+            "acheive": "achieve",
+            "beleive": "believe",
+            "calender": "calendar",
+            "enviroment": "environment",
+            "goverment": "government",
+            "neccessary": "necessary",
+            "publically": "publicly",
+            "tommorrow": "tomorrow",
+            "untill": "until",
+            "writting": "writing",
+            "alot": "a lot",
+            "becuase": "because",
+            "familar": "familiar",
+            "happend": "happened",
+            "independant": "independent",
+            "knowlege": "knowledge",
+            "libary": "library",
+            "maintainance": "maintenance",
+            "mispell": "misspell",
+            "noticable": "noticeable",
+            "parliment": "parliament",
+            "priviledge": "privilege",
+            "probaly": "probably",
+            "recomend": "recommend",
+            "refered": "referred",
+            "relevent": "relevant",
+            "sieze": "seize",
+            "sucess": "success",
+            "tounge": "tongue",
+            "truely": "truly",
+            "usefull": "useful",
+            "vaccum": "vacuum",
+            "vegitable": "vegetable",
+            "wether": "whether",
+            "whereever": "wherever",
+        }.items(),
+        key=lambda kv: len(kv[0]),
+        reverse=True,
+    )
+)
+
+_LEADING_FILLER = re.compile(
+    r"^\s*(?:"
+    r"um+\s+|uh+\s+|like\s+|so+\s+|hey\s+|ok\s+|okay\s+|"
+    r"pls\s+|please\s+|"
+    r"can\s+you\s+|could\s+you\s+|"
+    r"help\s+me\s+|"
+    r"i\s+want\s+to\s+know\s+|i\s+need\s+to\s+know\s+|"
+    r"tell\s+me\s+|"
+    r"quick\s+q(?:uestion)?\s*[:,]\s*"
+    r")+",
+    re.I,
+)
+
+
+def refine_query_for_search(raw: str) -> Tuple[str, List[str]]:
+    """
+    Light cleanup before intent/pattern parsing: filler, spacing, common typos.
+
+    Returns (refined_text, human-readable notes for UI — never empty unless nothing changed).
+    """
+    notes: List[str] = []
+    if not raw or not raw.strip():
+        return (raw or "").strip(), notes
+    s = raw.strip()
+    s = _LEADING_FILLER.sub("", s)
+    if s != raw.strip():
+        notes.append("Skipped filler words so the search matches what you meant")
+    # Collapse whitespace
+    s2 = re.sub(r"[ \t]+", " ", s).strip()
+    if s2 != s:
+        s = s2
+    # Whole-word typo fixes
+    fixed = s
+    for wrong, right in _COMMON_MISSPELLINGS:
+        pat = re.compile(r"(?<![\w-])" + re.escape(wrong) + r"(?![\w-])", re.I)
+
+        def _rep(m: re.Match, r: str = right) -> str:
+            g = m.group(0)
+            if g[:1].isupper():
+                return r[:1].upper() + r[1:] if len(r) > 1 else r.upper()
+            return r
+
+        new_fixed, n = pat.subn(_rep, fixed)
+        if n:
+            fixed = new_fixed
+            notes.append(f"Corrected “{wrong}” → “{right}”")
+    if len(notes) > 4:
+        filler_note = notes[0] if notes and "filler" in notes[0].lower() else None
+        typo_notes = [x for x in notes if "Corrected" in x]
+        notes = ([filler_note] if filler_note else []) + typo_notes[:2]
+    return fixed.strip(), notes
+
+
 def preprocess_query(query: str) -> PreprocessedQuery:
     """Full pipeline: synonyms → intent → patterns → unknown hints."""
     original = query if query else ""
@@ -390,6 +511,25 @@ def has_local_intent_signals(prep: PreprocessedQuery) -> bool:
     return False
 
 
+def _intent_summary_line(prep: PreprocessedQuery) -> str:
+    """Short line describing what the engine is optimizing for (shown above results)."""
+    if prep.pattern:
+        pk = prep.pattern.kind
+        if pk == "how_to":
+            return "How-to · guides, steps, and tutorials that match your question"
+        if pk == "why_question":
+            return "Explanations · causes, context, and expert takes"
+        if pk in ("closest", "near_me", "near_poi", "best_in"):
+            return "Places & services · hours, maps, and options near you"
+    if prep.intent == "navigational":
+        return "Official pages · sign-in, homepage, and app entry points"
+    if prep.intent == "transactional":
+        return "Shopping · prices, reviews, and where to buy"
+    if prep.intent == "local_search":
+        return "Near you · local listings and map-friendly results"
+    return ""
+
+
 # Terms that often need disambiguation before a single “right” answer makes sense.
 _POLYSEMOUS: Dict[str, List[Tuple[str, str]]] = {
     "python": [("Programming language", "python programming language"), ("Snake", "python snake animal")],
@@ -457,7 +597,10 @@ def is_simple_answer_query(text: str, clarify: Optional[Dict[str, Any]]) -> bool
     return bool(has_informational_summary_signals(s))
 
 
-def query_ui_hints(prep: PreprocessedQuery) -> Dict[str, Any]:
+def query_ui_hints(
+    prep: PreprocessedQuery,
+    refinement_notes: Optional[List[str]] = None,
+) -> Dict[str, Any]:
     """Signals for template/JS: interrogative vs transactional/local, AI summary, local chrome."""
     info_sig = has_informational_summary_signals(prep.original) or has_informational_summary_signals(
         prep.normalized
@@ -467,6 +610,9 @@ def query_ui_hints(prep: PreprocessedQuery) -> Dict[str, Any]:
     clarify = detect_query_clarification(prep)
     summary_ok = should_enable_ai_summary(prep)
     answer_mode = "single" if (summary_ok and is_simple_answer_query(prep.original, clarify)) else "standard"
+    notes = list(refinement_notes or [])
+    summary_line = _intent_summary_line(prep)
+    show_understanding = bool(notes) or bool(summary_line)
     return {
         "intent": prep.intent,
         "interrogative_or_explanatory": bool(info_sig),
@@ -476,6 +622,11 @@ def query_ui_hints(prep: PreprocessedQuery) -> Dict[str, Any]:
         "show_ai_summary": summary_ok,
         "clarify": clarify,
         "answer_mode": answer_mode,
+        "understanding": {
+            "show": show_understanding,
+            "line": summary_line,
+            "refinements": notes,
+        },
     }
 
 
@@ -516,15 +667,21 @@ def build_backend_search_query(
     q = ""
 
     if pat:
-        if pat.kind == "closest" and pat.subject:
+        if pat.kind == "how_to" and pat.subject:
             subj = pat.subject.strip()
-            q = f"{subj} near me sorted by distance"
+            q = f"{subj} how to guide tutorial step by step"
+        elif pat.kind == "why_question" and pat.subject:
+            subj = pat.subject.strip()
+            q = f"why {subj} explained causes reasons"
+        elif pat.kind == "closest" and pat.subject:
+            subj = pat.subject.strip()
+            q = f"{subj} nearest near me"
         elif pat.kind == "near_me" and pat.subject:
-            q = f"{pat.subject.strip()} near me open now"
+            q = f"{pat.subject.strip()} near me"
         elif pat.kind == "near_poi" and pat.subject and pat.location:
             q = f"{pat.subject.strip()} near {pat.location.strip()}"
         elif pat.kind == "best_in" and pat.subject and pat.location:
-            q = f"best {pat.subject.strip()} in {pat.location.strip()}"
+            q = f"best {pat.subject.strip()} in {pat.location.strip()} reviews rated"
 
     if not q:
         q = (prep.normalized or clean_query or "").strip()

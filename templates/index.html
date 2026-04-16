@@ -458,6 +458,9 @@
                     <div class="search-box">
                         <svg class="search-icon icon-search-glass" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><g transform="rotate(38 12 11.5)" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="11" r="5.5" stroke-width="1.65"/><path d="M9.05 9.4A3.15 3.15 0 0 1 10.95 7.72" stroke-width="1.35"/><line x1="16.2" y1="15.05" x2="20.95" y2="20.4" stroke-width="2.2"/></g></svg>
                         <input type="text" name="q" id="search-input" value="{{ query or '' }}" placeholder="Search anything…" data-placeholder-rotate="true" autocomplete="off" autofocus aria-label="Search query">
+                        <button type="button" class="reverse-image-btn" id="reverse-image-btn" aria-label="Search by image" aria-expanded="false" aria-controls="reverse-image-panel" title="Search by image">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+                        </button>
                         <button type="button" class="voice-btn" id="voice-btn" aria-label="Search by voice" title="Voice search">
                             <svg class="voice-icon-mic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2M12 19v4M8 23h8"/></svg>
                             <svg class="voice-icon-stop" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="display:none"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
@@ -474,6 +477,23 @@
                     </div>
                     <div class="ac-dropdown" id="ac-dropdown"></div>
                 </div>
+                <div id="reverse-image-panel" class="reverse-image-panel" hidden role="region" aria-label="Search by image">
+                    <p class="reverse-image-lead">Find similar images across the web. Paste a direct <strong>HTTPS</strong> image link, or choose a photo (upload works on the live site with a public URL).</p>
+                    <label class="reverse-image-field"><span class="reverse-image-label">Image URL</span>
+                        <input type="url" id="reverse-image-url" inputmode="url" autocomplete="off" placeholder="https://…/photo.jpg" class="reverse-image-input">
+                    </label>
+                    <label class="reverse-image-field"><span class="reverse-image-label">From device</span>
+                        <input type="file" id="reverse-image-file" accept="image/jpeg,image/png,image/webp,image/gif" class="reverse-image-file">
+                    </label>
+                    <label class="reverse-image-field"><span class="reverse-image-label">Results title (optional)</span>
+                        <input type="text" id="reverse-image-caption" class="reverse-image-input" maxlength="200" value="Visual matches" placeholder="Visual matches">
+                    </label>
+                    <div class="reverse-image-actions">
+                        <button type="button" class="reverse-image-submit" id="reverse-image-submit">Find similar images</button>
+                        <button type="button" class="reverse-image-cancel" id="reverse-image-close">Close</button>
+                    </div>
+                    <p class="reverse-image-foot">Matching uses Microsoft Bing&rsquo;s image index. Page links and thumbnails are third-party sites.</p>
+                </div>
                 <input type="hidden" name="type" id="search-type-input" value="{{ search_type or 'text' }}">
                 <input type="hidden" name="region" id="region-input" value="{{ region or '' }}">
                 <input type="hidden" name="lang" id="lang-input" value="{{ lang or '' }}">
@@ -485,6 +505,15 @@
             </form>
 
             {% if not query %}
+            <nav class="home-search-modes" aria-label="What to search">
+                <span class="home-search-modes-label" id="home-search-modes-label">Search</span>
+                <div class="home-search-modes-row" role="group" aria-labelledby="home-search-modes-label">
+                    <button type="button" class="home-mode-btn{% if search_type == 'text' %} active{% endif %}" data-search-mode="text" aria-pressed="{% if search_type == 'text' %}true{% else %}false{% endif %}">All</button>
+                    <button type="button" class="home-mode-btn{% if search_type == 'images' %} active{% endif %}" data-search-mode="images" aria-pressed="{% if search_type == 'images' %}true{% else %}false{% endif %}">Images</button>
+                    <button type="button" class="home-mode-btn{% if search_type == 'news' %} active{% endif %}" data-search-mode="news" aria-pressed="{% if search_type == 'news' %}true{% else %}false{% endif %}">News</button>
+                    <button type="button" class="home-mode-btn{% if search_type == 'videos' %} active{% endif %}" data-search-mode="videos" aria-pressed="{% if search_type == 'videos' %}true{% else %}false{% endif %}">Videos</button>
+                </div>
+            </nav>
             <div class="home-message" aria-label="Search positioning">
                 <p class="home-message-title">Unfiltered answers, with receipts.</p>
                 <p class="home-message-subtitle">Get direct, detailed explanations with sources, tradeoffs, and next steps. Built privacy-first: no server-side query logging, optional incognito in Settings, and one-tap history clear.</p>
@@ -534,6 +563,20 @@
             {% if query and query_ui.local_intent and search_type == 'text' %}
             <div class="local-search-hint" id="local-search-hint" role="status">
                 Local search: results are re-ranked using map and listing signals. Exact distance per result is not available from the web index.
+            </div>
+            {% endif %}
+            {% if query and search_type == 'text' and query_ui.understanding and query_ui.understanding.show %}
+            <div class="query-understanding-bar" id="query-understanding-bar" role="status" aria-live="polite">
+                {% if query_ui.understanding.line %}
+                <p class="query-understanding-line">{{ query_ui.understanding.line }}</p>
+                {% endif %}
+                {% if query_ui.understanding.refinements %}
+                <ul class="query-understanding-refinements">
+                    {% for r in query_ui.understanding.refinements %}
+                    <li>{{ r }}</li>
+                    {% endfor %}
+                </ul>
+                {% endif %}
             </div>
             {% endif %}
             {% if query %}
@@ -1164,6 +1207,7 @@
                             <span class="image-title">{{ r.title }}</span>
                             {% if r.source %}<span class="image-source">{{ r.source }}</span>{% endif %}
                             {% if r.license %}<span class="image-license" title="License">{{ r.license }}</span>{% endif %}
+                            {% if r.body %}<p class="image-result-desc">{{ r.body }}</p>{% endif %}
                         </div>
                     </div>
                     {% elif search_type == 'videos' %}
@@ -1277,7 +1321,7 @@
         <div id="trending-searches" class="trending-searches" style="display:none"></div>
 
         {% if has_more %}
-        <div id="scroll-sentinel" data-page="1" data-query="{{ query }}" data-type="{{ search_type }}" data-has-more="true" data-img-extra="{{ img_scroll_extras or '' }}" data-cleanweb="{% if cleanweb %}1{% endif %}" data-lat="{% if search_lat is not none %}{{ search_lat }}{% endif %}" data-lon="{% if search_lon is not none %}{{ search_lon }}{% endif %}"{% if search_type == 'mybot' and mybot_id %} data-bot-id="{{ mybot_id }}"{% endif %}>
+        <div id="scroll-sentinel" data-page="1" data-query="{{ query }}" data-type="{{ search_type }}" data-has-more="true" data-img-extra="{{ img_scroll_extras or '' }}" data-img-rev-key="{{ img_rev_key or '' }}" data-cleanweb="{% if cleanweb %}1{% endif %}" data-lat="{% if search_lat is not none %}{{ search_lat }}{% endif %}" data-lon="{% if search_lon is not none %}{{ search_lon }}{% endif %}"{% if search_type == 'mybot' and mybot_id %} data-bot-id="{{ mybot_id }}"{% endif %}>
             <div class="scroll-loader">
                 <div class="spinner"></div>
             </div>
