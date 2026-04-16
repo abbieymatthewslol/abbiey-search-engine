@@ -52,6 +52,12 @@ Before considering work “done”, try to ensure:
   - `git status`
   - the relevant file contents
 
+## Fallback when task text is blank/vague
+- If the incoming task is undefined (for example: "idk what to put here"), do not invent risky product changes.
+- Use `AUTOMATION_TASK_TEMPLATE.md` at repo root as the default task scaffold.
+- Use `.github/agents/TASK_DEFINITION_TEMPLATE.md` for a detailed copy/paste prompt with acceptance criteria.
+- Prefer low-risk maintenance improvements (docs, small test stability fixes, or obvious CI blockers) and clearly state assumptions.
+
 # Things you must NOT do
 - Don’t propose “merge everything” as a default.
 - Don’t remove large modules/files unless asked or clearly obsolete.
