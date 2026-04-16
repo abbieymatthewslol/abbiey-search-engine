@@ -30,6 +30,15 @@ Before considering work “done”, try to ensure:
   - never add real keys to git
   - only use placeholders in `.env.example`
 
+## If the task text is blank or vague
+- Treat inputs like "idk what to put here", "do stuff", or empty task bodies as undefined tasks.
+- First improve task quality guidance using:
+  - `AUTOMATION_TASK_TEMPLATE.md`
+  - `.github/agents/TASK_DEFINITION_TEMPLATE.md`
+  - the Automation section in `README.md`
+- Keep this fallback docs-first unless there is an obvious repo-health blocker (for example, a trivial failing test caused by syntax).
+- Include at least one concrete example task with measurable acceptance criteria when updating templates.
+
 # Deployment assumptions
 - Deploy target: **Vercel**
 - Environment configuration may involve **Supabase**.
