@@ -3657,6 +3657,153 @@ def _rank_anti_template_results(results: list) -> list:
     return [results[i] for i in order]
 
 
+# --- Neutral query steering ---------------------------------------------------
+#
+# Keep results neutral by default: if the user's query does not imply they want
+# criticism / problems / complaints, gently de-prioritize results whose title +
+# snippet skew strongly negative (complaints, scandals, failures, scams). At
+# the same time, boost results whose text actually covers the user's query
+# tokens — so ranking follows what was asked for, not what the web happens to
+# have opinions about.
+#
+# This only nudges ordering; it never removes results, never rewrites the
+# query, and never activates when the user explicitly asks for the negative
+# side (e.g. "xyz problems", "is foo a scam", "cons of bar").
+
+_NEGATIVE_INTENT_RE = re.compile(
+    r"(?i)\b("
+    r"problem|problems|issue|issues|bug|bugs|error|errors|complaint|complaints|"
+    r"scam|scams|fraud|fake|rip[-\s]?off|ripoff|"
+    r"bad|worst|worse|awful|terrible|horrible|"
+    r"broken|fail|failed|failure|failing|crash|crashes|"
+    r"danger|dangerous|harm|harmful|risk|risks|risky|unsafe|"
+    r"hate|hated|hating|sucks|"
+    r"cons|downside|downsides|drawback|drawbacks|limitation|limitations|"
+    r"lawsuit|lawsuits|sued|scandal|scandals|controversy|controversies|"
+    r"review|reviews|criticism|critique|vs\b|versus\b|compare|comparison"
+    r")\b"
+)
+
+_NEGATIVE_TEXT_RE = re.compile(
+    r"(?i)\b("
+    r"scam|scams|scandal|scandals|fraud|fraudulent|ripoff|rip[-\s]off|fake|"
+    r"lawsuit|lawsuits|sued|"
+    r"worst|awful|terrible|horrible|disaster|disastrous|"
+    r"hate|hates|hated|"
+    r"dangerous|harmful|unsafe|toxic|"
+    r"banned|outrage|outraged|scandalous|"
+    r"exposed|expose|exposes|"
+    r"shame|shamed|shaming|embarrassing|humiliating"
+    r")\b"
+)
+
+_NEGATIVE_TITLE_BOOST_RE = re.compile(
+    r"(?i)\b(scam|scandal|fraud|disaster|worst|terrible|horrible|lawsuit|exposed|shame)\b"
+)
+
+
+def _query_implies_negative_intent(query: str) -> bool:
+    """True when the user's query actually asks for critical / negative material."""
+    q = (query or "").strip()
+    if not q:
+        return False
+    return bool(_NEGATIVE_INTENT_RE.search(q))
+
+
+def _query_tokens_for_alignment(query: str) -> list:
+    """Content tokens (alphanumeric, length >= 3, stopwords removed) for overlap scoring."""
+    q = (query or "").lower()
+    if not q:
+        return []
+    toks = re.findall(r"[a-z0-9][a-z0-9'-]{1,}", q)
+    stop = {
+        "the", "and", "but", "for", "with", "from", "into", "onto", "about",
+        "that", "this", "these", "those", "are", "was", "were", "will", "would",
+        "can", "could", "should", "have", "has", "had", "does", "did", "not",
+        "you", "your", "our", "their", "its", "what", "who", "which", "how",
+        "why", "when", "where", "near", "over", "under", "than", "then", "also",
+        "there", "here", "been", "being", "just", "like",
+    }
+    out: list = []
+    seen: set = set()
+    for t in toks:
+        if len(t) < 3:
+            continue
+        if t in stop:
+            continue
+        if t in seen:
+            continue
+        seen.add(t)
+        out.append(t)
+        if len(out) >= 12:
+            break
+    return out
+
+
+def _result_text_blob(result: dict) -> str:
+    title = result.get("title") or ""
+    body = result.get("body") or result.get("description") or result.get("snippet") or ""
+    return f"{title} {body}"
+
+
+def _query_alignment_score(tokens: list, blob_lower: str) -> float:
+    """Fraction of query tokens that appear in the result's title + snippet, lightly weighted."""
+    if not tokens or not blob_lower:
+        return 0.0
+    hits = 0
+    for t in tokens:
+        if t in blob_lower:
+            hits += 1
+    coverage = hits / max(1, len(tokens))
+    return coverage
+
+
+def _negative_lean_score(result: dict) -> float:
+    """How negatively the result's surfaced text skews (0 = neutral)."""
+    title = (result.get("title") or "").lower()
+    body = (result.get("body") or result.get("description") or result.get("snippet") or "").lower()
+    if not title and not body:
+        return 0.0
+    score = 0.0
+    if _NEGATIVE_TITLE_BOOST_RE.search(title):
+        score += 0.6
+    t_hits = len(_NEGATIVE_TEXT_RE.findall(title))
+    b_hits = len(_NEGATIVE_TEXT_RE.findall(body))
+    score += 0.22 * t_hits + 0.08 * b_hits
+    return min(score, 1.2)
+
+
+def _rank_neutral_query_aligned(results: list, query: str) -> list:
+    """Default text ranking: steer toward query terms; stay neutral unless asked otherwise.
+
+    * Boosts results whose title / snippet contain the user's query tokens.
+    * Dampens strongly negative-leaning results when the query did not ask for
+      criticism (e.g. plain "coffee shops" stays neutral; "coffee shop scams"
+      keeps the negative side).
+    * Preserves original order for ties so we only nudge, never shuffle blindly.
+    """
+    if not results or len(results) < 2:
+        return results
+    tokens = _query_tokens_for_alignment(query)
+    user_wants_negative = _query_implies_negative_intent(query)
+
+    scored = []
+    for i, r in enumerate(results):
+        blob_lower = _result_text_blob(r).lower()
+        align = _query_alignment_score(tokens, blob_lower)
+        neg = _negative_lean_score(r)
+        # Query alignment always helps; negativity only hurts when the user
+        # did not ask for it. When they did, we leave results alone (neg = 0
+        # contribution) so critical coverage still surfaces.
+        align_bonus = 0.35 * align
+        neg_penalty = 0.0 if user_wants_negative else (0.40 * neg)
+        score = align_bonus - neg_penalty
+        scored.append((score, i, r))
+
+    scored.sort(key=lambda t: (-t[0], t[1]))
+    return [r for _, _, r in scored]
+
+
 def _domain_for_feedback(url: str) -> str:
     try:
         return _host_key_for_diversity(url or "") or ""
@@ -3707,6 +3854,388 @@ def _rerank_results_with_feedback(query: str, results: list) -> list:
         indexed.append((i, r, score, last_ms))
     indexed.sort(key=lambda t: (-t[2], -t[3], t[0]))
     return [r for _, r, _, _ in indexed]
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Official-site promotion for mainstream brand queries
+#
+# When the user searches a widely-used app / company / product name
+# (Instagram, Facebook, Google, Apple, Microsoft, Snapchat, …), they
+# almost always want the official homepage first. SEO listicles, app
+# review aggregators, and Wikipedia redirects should never sit above
+# the real thing. We promote an existing on-page result if a backend
+# already returned it, and synthesize a canonical card at position 0
+# otherwise so the original site is guaranteed to be first.
+# ──────────────────────────────────────────────────────────────────────
+
+def _brand_key(s: str) -> str:
+    s = (s or "").strip().lower()
+    s = re.sub(r"[^\w\s]", " ", s, flags=re.UNICODE)
+    return re.sub(r"\s+", " ", s).strip()
+
+
+# Trailing words we can safely strip when looking up a brand
+# (e.g. "instagram login", "snapchat app", "facebook website").
+_BRAND_STRIPPABLE_SUFFIX_TOKENS = frozenset({
+    "app", "apps", "login", "signin", "signup", "website", "site",
+    "home", "homepage", "page", "official", "com", "online",
+    "download", "web", "mobile",
+})
+
+
+# Each tuple: (aliases, canonical_url, match_hosts, title, body)
+# aliases: first entry is considered the primary display name.
+# match_hosts: hosts considered "the official site" when present in SERP.
+#   Match is by equality or subdomain (host == h or host endswith "." + h).
+_OFFICIAL_SITE_ENTRIES_RAW = [
+    # ── Social / messaging / video ─────────────────────────────────
+    (("instagram", "ig", "insta"), "https://www.instagram.com/", ("instagram.com",), "Instagram", "Official Instagram \u2014 photos, Reels, and messaging."),
+    (("facebook", "fb"), "https://www.facebook.com/", ("facebook.com", "fb.com"), "Facebook", "Official Facebook \u2014 connect with friends, groups, and Pages."),
+    (("whatsapp", "whats app"), "https://www.whatsapp.com/", ("whatsapp.com",), "WhatsApp", "Official WhatsApp \u2014 private messaging and calls."),
+    (("messenger", "facebook messenger", "fb messenger"), "https://www.messenger.com/", ("messenger.com",), "Messenger", "Official Messenger by Meta."),
+    (("threads",), "https://www.threads.net/", ("threads.net", "threads.com"), "Threads", "Official Threads app from Instagram."),
+    (("x", "twitter"), "https://x.com/", ("x.com", "twitter.com"), "X (formerly Twitter)", "Official X \u2014 the app formerly known as Twitter."),
+    (("tiktok", "tik tok"), "https://www.tiktok.com/", ("tiktok.com",), "TikTok", "Official TikTok \u2014 short videos and livestreams."),
+    (("snapchat", "snap"), "https://www.snapchat.com/", ("snapchat.com",), "Snapchat", "Official Snapchat \u2014 Snaps, Stories, and Spotlight."),
+    (("pinterest",), "https://www.pinterest.com/", ("pinterest.com",), "Pinterest", "Official Pinterest \u2014 ideas and inspiration boards."),
+    (("reddit",), "https://www.reddit.com/", ("reddit.com",), "Reddit", "Official Reddit \u2014 communities and conversations."),
+    (("linkedin",), "https://www.linkedin.com/", ("linkedin.com",), "LinkedIn", "Official LinkedIn \u2014 professional network and jobs."),
+    (("telegram",), "https://telegram.org/", ("telegram.org", "telegram.com"), "Telegram", "Official Telegram \u2014 fast, secure messaging."),
+    (("signal",), "https://signal.org/", ("signal.org",), "Signal", "Official Signal \u2014 private encrypted messaging."),
+    (("discord",), "https://discord.com/", ("discord.com",), "Discord", "Official Discord \u2014 voice, video, and chat servers."),
+    (("wechat", "we chat"), "https://www.wechat.com/", ("wechat.com",), "WeChat", "Official WeChat \u2014 messaging and mini-programs."),
+    (("weibo",), "https://www.weibo.com/", ("weibo.com",), "Weibo", "Official Weibo \u2014 Chinese microblogging platform."),
+    (("youtube", "yt"), "https://www.youtube.com/", ("youtube.com", "youtu.be"), "YouTube", "Official YouTube \u2014 videos, Shorts, and live."),
+    (("youtube music",), "https://music.youtube.com/", ("music.youtube.com",), "YouTube Music", "Official YouTube Music."),
+    (("vimeo",), "https://vimeo.com/", ("vimeo.com",), "Vimeo", "Official Vimeo \u2014 high-quality video platform."),
+    (("twitch",), "https://www.twitch.tv/", ("twitch.tv",), "Twitch", "Official Twitch \u2014 live streaming for gamers."),
+    (("kick",), "https://kick.com/", ("kick.com",), "Kick", "Official Kick \u2014 live streaming platform."),
+    (("quora",), "https://www.quora.com/", ("quora.com",), "Quora", "Official Quora \u2014 questions and answers."),
+    (("tumblr",), "https://www.tumblr.com/", ("tumblr.com",), "Tumblr", "Official Tumblr \u2014 microblogging and fandoms."),
+    (("bluesky", "bsky"), "https://bsky.app/", ("bsky.app",), "Bluesky", "Official Bluesky \u2014 decentralised social network."),
+    (("mastodon",), "https://joinmastodon.org/", ("joinmastodon.org", "mastodon.social"), "Mastodon", "Official Mastodon \u2014 federated social network."),
+
+    # ── Big tech / search / cloud ──────────────────────────────────
+    (("google",), "https://www.google.com/", ("google.com",), "Google", "Official Google \u2014 search, services, and more."),
+    (("gmail", "google mail"), "https://mail.google.com/", ("mail.google.com", "gmail.com"), "Gmail", "Official Gmail \u2014 Google's email service."),
+    (("google maps", "gmaps"), "https://maps.google.com/", ("maps.google.com",), "Google Maps", "Official Google Maps \u2014 navigation and places."),
+    (("google drive", "gdrive"), "https://drive.google.com/", ("drive.google.com",), "Google Drive", "Official Google Drive \u2014 cloud storage."),
+    (("google photos",), "https://photos.google.com/", ("photos.google.com",), "Google Photos", "Official Google Photos."),
+    (("google translate",), "https://translate.google.com/", ("translate.google.com",), "Google Translate", "Official Google Translate."),
+    (("google calendar",), "https://calendar.google.com/", ("calendar.google.com",), "Google Calendar", "Official Google Calendar."),
+    (("google meet",), "https://meet.google.com/", ("meet.google.com",), "Google Meet", "Official Google Meet \u2014 video meetings."),
+    (("google docs",), "https://docs.google.com/document/", ("docs.google.com",), "Google Docs", "Official Google Docs \u2014 collaborative documents."),
+    (("google sheets",), "https://docs.google.com/spreadsheets/", ("docs.google.com", "sheets.google.com"), "Google Sheets", "Official Google Sheets \u2014 spreadsheets."),
+    (("google slides",), "https://docs.google.com/presentation/", ("docs.google.com", "slides.google.com"), "Google Slides", "Official Google Slides \u2014 presentations."),
+    (("google classroom",), "https://classroom.google.com/", ("classroom.google.com",), "Google Classroom", "Official Google Classroom."),
+    (("google scholar",), "https://scholar.google.com/", ("scholar.google.com",), "Google Scholar", "Official Google Scholar \u2014 academic search."),
+    (("google news",), "https://news.google.com/", ("news.google.com",), "Google News", "Official Google News."),
+    (("google play", "play store", "google play store"), "https://play.google.com/", ("play.google.com",), "Google Play", "Official Google Play Store."),
+    (("gemini", "google gemini", "bard"), "https://gemini.google.com/", ("gemini.google.com", "bard.google.com"), "Google Gemini", "Official Google Gemini \u2014 Google's AI assistant."),
+
+    (("apple",), "https://www.apple.com/", ("apple.com",), "Apple", "Official Apple \u2014 iPhone, Mac, iPad, and services."),
+    (("icloud",), "https://www.icloud.com/", ("icloud.com",), "iCloud", "Official iCloud \u2014 Apple cloud services."),
+    (("apple music",), "https://music.apple.com/", ("music.apple.com",), "Apple Music", "Official Apple Music."),
+    (("apple tv", "apple tv plus", "apple tv+"), "https://tv.apple.com/", ("tv.apple.com",), "Apple TV", "Official Apple TV."),
+    (("app store", "apple app store"), "https://www.apple.com/app-store/", ("apps.apple.com", "apple.com"), "App Store", "Official Apple App Store."),
+    (("itunes",), "https://www.apple.com/itunes/", ("apple.com",), "iTunes", "Official Apple iTunes."),
+
+    (("microsoft", "ms"), "https://www.microsoft.com/", ("microsoft.com",), "Microsoft", "Official Microsoft \u2014 Windows, Office, and services."),
+    (("windows",), "https://www.microsoft.com/windows/", ("microsoft.com",), "Windows", "Official Windows by Microsoft."),
+    (("outlook", "hotmail"), "https://outlook.live.com/", ("outlook.live.com", "outlook.com", "hotmail.com"), "Outlook", "Official Outlook \u2014 Microsoft email."),
+    (("onedrive",), "https://onedrive.live.com/", ("onedrive.live.com", "onedrive.com"), "OneDrive", "Official OneDrive \u2014 Microsoft cloud storage."),
+    (("office", "microsoft office", "office 365", "ms office", "microsoft 365"), "https://www.office.com/", ("office.com", "microsoft365.com"), "Microsoft Office", "Official Microsoft Office."),
+    (("teams", "microsoft teams", "ms teams"), "https://www.microsoft.com/microsoft-teams/", ("teams.microsoft.com", "microsoft.com"), "Microsoft Teams", "Official Microsoft Teams."),
+    (("bing",), "https://www.bing.com/", ("bing.com",), "Bing", "Official Microsoft Bing search."),
+    (("copilot", "microsoft copilot"), "https://copilot.microsoft.com/", ("copilot.microsoft.com",), "Microsoft Copilot", "Official Microsoft Copilot AI."),
+    (("xbox",), "https://www.xbox.com/", ("xbox.com",), "Xbox", "Official Xbox \u2014 games and consoles."),
+    (("skype",), "https://www.skype.com/", ("skype.com",), "Skype", "Official Skype \u2014 video calls and messaging."),
+
+    (("amazon",), "https://www.amazon.com/", ("amazon.com",), "Amazon", "Official Amazon \u2014 shop anything online."),
+    (("aws", "amazon web services"), "https://aws.amazon.com/", ("aws.amazon.com",), "Amazon Web Services", "Official AWS \u2014 cloud computing."),
+    (("prime video", "amazon prime video"), "https://www.primevideo.com/", ("primevideo.com", "amazon.com"), "Amazon Prime Video", "Official Amazon Prime Video."),
+    (("audible",), "https://www.audible.com/", ("audible.com",), "Audible", "Official Audible \u2014 audiobooks by Amazon."),
+    (("kindle", "amazon kindle"), "https://read.amazon.com/", ("read.amazon.com", "amazon.com"), "Kindle", "Official Amazon Kindle."),
+    (("goodreads",), "https://www.goodreads.com/", ("goodreads.com",), "Goodreads", "Official Goodreads \u2014 book reviews and ratings."),
+
+    (("meta",), "https://about.meta.com/", ("meta.com", "about.meta.com"), "Meta", "Official Meta \u2014 Facebook, Instagram, WhatsApp."),
+    (("openai", "open ai"), "https://openai.com/", ("openai.com",), "OpenAI", "Official OpenAI \u2014 makers of ChatGPT."),
+    (("chatgpt", "chat gpt"), "https://chatgpt.com/", ("chatgpt.com", "chat.openai.com"), "ChatGPT", "Official ChatGPT by OpenAI."),
+    (("anthropic",), "https://www.anthropic.com/", ("anthropic.com",), "Anthropic", "Official Anthropic \u2014 makers of Claude."),
+    (("claude", "claude ai"), "https://claude.ai/", ("claude.ai",), "Claude", "Official Claude AI by Anthropic."),
+    (("perplexity", "perplexity ai"), "https://www.perplexity.ai/", ("perplexity.ai",), "Perplexity", "Official Perplexity \u2014 AI answer engine."),
+    (("mistral", "mistral ai"), "https://mistral.ai/", ("mistral.ai",), "Mistral", "Official Mistral AI."),
+    (("huggingface", "hugging face"), "https://huggingface.co/", ("huggingface.co",), "Hugging Face", "Official Hugging Face \u2014 AI model hub."),
+    (("nvidia",), "https://www.nvidia.com/", ("nvidia.com",), "NVIDIA", "Official NVIDIA."),
+    (("intel",), "https://www.intel.com/", ("intel.com",), "Intel", "Official Intel."),
+    (("amd",), "https://www.amd.com/", ("amd.com",), "AMD", "Official AMD."),
+    (("adobe",), "https://www.adobe.com/", ("adobe.com",), "Adobe", "Official Adobe \u2014 Creative Cloud and more."),
+    (("oracle",), "https://www.oracle.com/", ("oracle.com",), "Oracle", "Official Oracle."),
+    (("salesforce",), "https://www.salesforce.com/", ("salesforce.com",), "Salesforce", "Official Salesforce."),
+    (("ibm",), "https://www.ibm.com/", ("ibm.com",), "IBM", "Official IBM."),
+    (("samsung",), "https://www.samsung.com/", ("samsung.com",), "Samsung", "Official Samsung \u2014 phones, TVs, and appliances."),
+    (("sony",), "https://www.sony.com/", ("sony.com",), "Sony", "Official Sony."),
+    (("lg",), "https://www.lg.com/", ("lg.com",), "LG", "Official LG."),
+    (("xiaomi", "mi"), "https://www.mi.com/", ("mi.com", "xiaomi.com"), "Xiaomi", "Official Xiaomi."),
+    (("huawei",), "https://www.huawei.com/", ("huawei.com",), "Huawei", "Official Huawei."),
+    (("oneplus", "one plus"), "https://www.oneplus.com/", ("oneplus.com",), "OnePlus", "Official OnePlus."),
+    (("hp", "hewlett packard"), "https://www.hp.com/", ("hp.com",), "HP", "Official HP."),
+    (("dell",), "https://www.dell.com/", ("dell.com",), "Dell", "Official Dell."),
+    (("lenovo",), "https://www.lenovo.com/", ("lenovo.com",), "Lenovo", "Official Lenovo."),
+    (("asus",), "https://www.asus.com/", ("asus.com",), "ASUS", "Official ASUS."),
+    (("tesla",), "https://www.tesla.com/", ("tesla.com",), "Tesla", "Official Tesla."),
+    (("spacex",), "https://www.spacex.com/", ("spacex.com",), "SpaceX", "Official SpaceX."),
+    (("nasa",), "https://www.nasa.gov/", ("nasa.gov",), "NASA", "Official NASA."),
+
+    # ── Streaming / audio / film ───────────────────────────────────
+    (("netflix",), "https://www.netflix.com/", ("netflix.com",), "Netflix", "Official Netflix."),
+    (("hulu",), "https://www.hulu.com/", ("hulu.com",), "Hulu", "Official Hulu."),
+    (("disney plus", "disney+", "disneyplus"), "https://www.disneyplus.com/", ("disneyplus.com",), "Disney+", "Official Disney+."),
+    (("max", "hbo max", "hbo"), "https://www.max.com/", ("max.com", "hbomax.com", "hbo.com"), "Max", "Official Max (formerly HBO Max)."),
+    (("paramount plus", "paramount+"), "https://www.paramountplus.com/", ("paramountplus.com",), "Paramount+", "Official Paramount+."),
+    (("peacock",), "https://www.peacocktv.com/", ("peacocktv.com",), "Peacock", "Official Peacock TV."),
+    (("spotify",), "https://www.spotify.com/", ("spotify.com",), "Spotify", "Official Spotify \u2014 music and podcasts."),
+    (("soundcloud",), "https://soundcloud.com/", ("soundcloud.com",), "SoundCloud", "Official SoundCloud."),
+    (("pandora",), "https://www.pandora.com/", ("pandora.com",), "Pandora", "Official Pandora."),
+    (("tidal",), "https://tidal.com/", ("tidal.com",), "Tidal", "Official Tidal \u2014 high-fidelity music."),
+    (("deezer",), "https://www.deezer.com/", ("deezer.com",), "Deezer", "Official Deezer."),
+    (("imdb",), "https://www.imdb.com/", ("imdb.com",), "IMDb", "Official IMDb \u2014 movies and TV."),
+    (("rotten tomatoes",), "https://www.rottentomatoes.com/", ("rottentomatoes.com",), "Rotten Tomatoes", "Official Rotten Tomatoes."),
+
+    # ── Gaming ─────────────────────────────────────────────────────
+    (("steam",), "https://store.steampowered.com/", ("store.steampowered.com", "steampowered.com", "steamcommunity.com"), "Steam", "Official Steam by Valve."),
+    (("epic games", "epic games store"), "https://www.epicgames.com/", ("epicgames.com",), "Epic Games", "Official Epic Games."),
+    (("roblox",), "https://www.roblox.com/", ("roblox.com",), "Roblox", "Official Roblox."),
+    (("minecraft",), "https://www.minecraft.net/", ("minecraft.net",), "Minecraft", "Official Minecraft."),
+    (("playstation", "ps5", "ps4"), "https://www.playstation.com/", ("playstation.com",), "PlayStation", "Official PlayStation."),
+    (("nintendo",), "https://www.nintendo.com/", ("nintendo.com",), "Nintendo", "Official Nintendo."),
+    (("riot games",), "https://www.riotgames.com/", ("riotgames.com",), "Riot Games", "Official Riot Games."),
+    (("ea", "electronic arts"), "https://www.ea.com/", ("ea.com",), "Electronic Arts", "Official Electronic Arts."),
+    (("ubisoft",), "https://www.ubisoft.com/", ("ubisoft.com",), "Ubisoft", "Official Ubisoft."),
+    (("rockstar games", "rockstar"), "https://www.rockstargames.com/", ("rockstargames.com",), "Rockstar Games", "Official Rockstar Games."),
+    (("activision",), "https://www.activision.com/", ("activision.com",), "Activision", "Official Activision."),
+    (("blizzard", "battle net", "battlenet"), "https://www.blizzard.com/", ("blizzard.com", "battle.net"), "Blizzard", "Official Blizzard Entertainment."),
+    (("fortnite",), "https://www.fortnite.com/", ("fortnite.com",), "Fortnite", "Official Fortnite."),
+
+    # ── Shopping / commerce ────────────────────────────────────────
+    (("ebay",), "https://www.ebay.com/", ("ebay.com",), "eBay", "Official eBay."),
+    (("etsy",), "https://www.etsy.com/", ("etsy.com",), "Etsy", "Official Etsy \u2014 handmade and vintage."),
+    (("alibaba",), "https://www.alibaba.com/", ("alibaba.com",), "Alibaba", "Official Alibaba."),
+    (("aliexpress",), "https://www.aliexpress.com/", ("aliexpress.com",), "AliExpress", "Official AliExpress."),
+    (("shopify",), "https://www.shopify.com/", ("shopify.com",), "Shopify", "Official Shopify."),
+    (("walmart",), "https://www.walmart.com/", ("walmart.com",), "Walmart", "Official Walmart."),
+    (("target",), "https://www.target.com/", ("target.com",), "Target", "Official Target."),
+    (("best buy", "bestbuy"), "https://www.bestbuy.com/", ("bestbuy.com",), "Best Buy", "Official Best Buy."),
+    (("ikea",), "https://www.ikea.com/", ("ikea.com",), "IKEA", "Official IKEA."),
+    (("costco",), "https://www.costco.com/", ("costco.com",), "Costco", "Official Costco."),
+    (("home depot", "the home depot"), "https://www.homedepot.com/", ("homedepot.com",), "The Home Depot", "Official The Home Depot."),
+    (("wayfair",), "https://www.wayfair.com/", ("wayfair.com",), "Wayfair", "Official Wayfair."),
+    (("temu",), "https://www.temu.com/", ("temu.com",), "Temu", "Official Temu."),
+    (("shein",), "https://www.shein.com/", ("shein.com",), "Shein", "Official Shein."),
+
+    # ── Rideshare / food delivery / travel ─────────────────────────
+    (("uber",), "https://www.uber.com/", ("uber.com",), "Uber", "Official Uber."),
+    (("uber eats", "ubereats"), "https://www.ubereats.com/", ("ubereats.com",), "Uber Eats", "Official Uber Eats."),
+    (("lyft",), "https://www.lyft.com/", ("lyft.com",), "Lyft", "Official Lyft."),
+    (("doordash", "door dash"), "https://www.doordash.com/", ("doordash.com",), "DoorDash", "Official DoorDash."),
+    (("grubhub",), "https://www.grubhub.com/", ("grubhub.com",), "Grubhub", "Official Grubhub."),
+    (("instacart",), "https://www.instacart.com/", ("instacart.com",), "Instacart", "Official Instacart."),
+    (("deliveroo",), "https://deliveroo.com/", ("deliveroo.com",), "Deliveroo", "Official Deliveroo."),
+    (("airbnb", "air bnb"), "https://www.airbnb.com/", ("airbnb.com",), "Airbnb", "Official Airbnb."),
+    (("booking", "booking com"), "https://www.booking.com/", ("booking.com",), "Booking.com", "Official Booking.com."),
+    (("expedia",), "https://www.expedia.com/", ("expedia.com",), "Expedia", "Official Expedia."),
+    (("tripadvisor", "trip advisor"), "https://www.tripadvisor.com/", ("tripadvisor.com",), "Tripadvisor", "Official Tripadvisor."),
+    (("kayak",), "https://www.kayak.com/", ("kayak.com",), "Kayak", "Official Kayak."),
+    (("hotels", "hotels com"), "https://www.hotels.com/", ("hotels.com",), "Hotels.com", "Official Hotels.com."),
+    (("agoda",), "https://www.agoda.com/", ("agoda.com",), "Agoda", "Official Agoda."),
+    (("vrbo",), "https://www.vrbo.com/", ("vrbo.com",), "Vrbo", "Official Vrbo."),
+
+    # ── Finance / payments ─────────────────────────────────────────
+    (("paypal", "pay pal"), "https://www.paypal.com/", ("paypal.com",), "PayPal", "Official PayPal."),
+    (("venmo",), "https://venmo.com/", ("venmo.com",), "Venmo", "Official Venmo."),
+    (("cash app", "cashapp"), "https://cash.app/", ("cash.app",), "Cash App", "Official Cash App."),
+    (("stripe",), "https://stripe.com/", ("stripe.com",), "Stripe", "Official Stripe."),
+    (("square",), "https://squareup.com/", ("squareup.com",), "Square", "Official Square."),
+    (("chase", "jp morgan chase", "jpmorgan chase"), "https://www.chase.com/", ("chase.com",), "Chase", "Official Chase Bank."),
+    (("bank of america", "boa"), "https://www.bankofamerica.com/", ("bankofamerica.com",), "Bank of America", "Official Bank of America."),
+    (("wells fargo",), "https://www.wellsfargo.com/", ("wellsfargo.com",), "Wells Fargo", "Official Wells Fargo."),
+    (("citi", "citibank"), "https://www.citi.com/", ("citi.com", "citibank.com"), "Citi", "Official Citi."),
+    (("hsbc",), "https://www.hsbc.com/", ("hsbc.com",), "HSBC", "Official HSBC."),
+    (("robinhood",), "https://robinhood.com/", ("robinhood.com",), "Robinhood", "Official Robinhood."),
+    (("coinbase",), "https://www.coinbase.com/", ("coinbase.com",), "Coinbase", "Official Coinbase."),
+    (("binance",), "https://www.binance.com/", ("binance.com",), "Binance", "Official Binance."),
+    (("kraken",), "https://www.kraken.com/", ("kraken.com",), "Kraken", "Official Kraken."),
+    (("revolut",), "https://www.revolut.com/", ("revolut.com",), "Revolut", "Official Revolut."),
+    (("wise", "transferwise"), "https://wise.com/", ("wise.com", "transferwise.com"), "Wise", "Official Wise (formerly TransferWise)."),
+    (("klarna",), "https://www.klarna.com/", ("klarna.com",), "Klarna", "Official Klarna."),
+    (("afterpay",), "https://www.afterpay.com/", ("afterpay.com",), "Afterpay", "Official Afterpay."),
+
+    # ── Productivity / dev / collab ────────────────────────────────
+    (("slack",), "https://slack.com/", ("slack.com",), "Slack", "Official Slack."),
+    (("zoom",), "https://zoom.us/", ("zoom.us",), "Zoom", "Official Zoom."),
+    (("notion",), "https://www.notion.so/", ("notion.so", "notion.com"), "Notion", "Official Notion."),
+    (("trello",), "https://trello.com/", ("trello.com",), "Trello", "Official Trello."),
+    (("asana",), "https://asana.com/", ("asana.com",), "Asana", "Official Asana."),
+    (("monday", "monday com"), "https://monday.com/", ("monday.com",), "monday.com", "Official monday.com."),
+    (("canva",), "https://www.canva.com/", ("canva.com",), "Canva", "Official Canva."),
+    (("figma",), "https://www.figma.com/", ("figma.com",), "Figma", "Official Figma."),
+    (("miro",), "https://miro.com/", ("miro.com",), "Miro", "Official Miro."),
+    (("dropbox",), "https://www.dropbox.com/", ("dropbox.com",), "Dropbox", "Official Dropbox."),
+    (("box",), "https://www.box.com/", ("box.com",), "Box", "Official Box."),
+    (("atlassian",), "https://www.atlassian.com/", ("atlassian.com",), "Atlassian", "Official Atlassian."),
+    (("jira",), "https://www.atlassian.com/software/jira", ("atlassian.com",), "Jira", "Official Jira by Atlassian."),
+    (("confluence",), "https://www.atlassian.com/software/confluence", ("atlassian.com",), "Confluence", "Official Confluence by Atlassian."),
+    (("github",), "https://github.com/", ("github.com",), "GitHub", "Official GitHub."),
+    (("gitlab",), "https://gitlab.com/", ("gitlab.com",), "GitLab", "Official GitLab."),
+    (("bitbucket",), "https://bitbucket.org/", ("bitbucket.org",), "Bitbucket", "Official Bitbucket."),
+    (("stack overflow", "stackoverflow"), "https://stackoverflow.com/", ("stackoverflow.com",), "Stack Overflow", "Official Stack Overflow."),
+    (("docker",), "https://www.docker.com/", ("docker.com",), "Docker", "Official Docker."),
+    (("kubernetes", "k8s"), "https://kubernetes.io/", ("kubernetes.io",), "Kubernetes", "Official Kubernetes."),
+    (("npm",), "https://www.npmjs.com/", ("npmjs.com",), "npm", "Official npm registry."),
+    (("pypi",), "https://pypi.org/", ("pypi.org",), "PyPI", "Official Python Package Index."),
+
+    # ── Knowledge / education ──────────────────────────────────────
+    (("wikipedia",), "https://www.wikipedia.org/", ("wikipedia.org",), "Wikipedia", "Official Wikipedia."),
+    (("wolfram alpha", "wolframalpha"), "https://www.wolframalpha.com/", ("wolframalpha.com",), "Wolfram Alpha", "Official Wolfram Alpha."),
+    (("coursera",), "https://www.coursera.org/", ("coursera.org",), "Coursera", "Official Coursera."),
+    (("edx",), "https://www.edx.org/", ("edx.org",), "edX", "Official edX."),
+    (("udemy",), "https://www.udemy.com/", ("udemy.com",), "Udemy", "Official Udemy."),
+    (("khan academy",), "https://www.khanacademy.org/", ("khanacademy.org",), "Khan Academy", "Official Khan Academy."),
+    (("duolingo",), "https://www.duolingo.com/", ("duolingo.com",), "Duolingo", "Official Duolingo."),
+
+    # ── News ───────────────────────────────────────────────────────
+    (("new york times", "nyt", "ny times", "nytimes"), "https://www.nytimes.com/", ("nytimes.com",), "The New York Times", "Official The New York Times."),
+    (("bbc",), "https://www.bbc.com/", ("bbc.com", "bbc.co.uk"), "BBC", "Official BBC."),
+    (("cnn",), "https://www.cnn.com/", ("cnn.com",), "CNN", "Official CNN."),
+    (("fox news",), "https://www.foxnews.com/", ("foxnews.com",), "Fox News", "Official Fox News."),
+    (("washington post", "wapo"), "https://www.washingtonpost.com/", ("washingtonpost.com",), "The Washington Post", "Official The Washington Post."),
+    (("wall street journal", "wsj"), "https://www.wsj.com/", ("wsj.com",), "The Wall Street Journal", "Official The Wall Street Journal."),
+    (("reuters",), "https://www.reuters.com/", ("reuters.com",), "Reuters", "Official Reuters."),
+    (("bloomberg",), "https://www.bloomberg.com/", ("bloomberg.com",), "Bloomberg", "Official Bloomberg."),
+    (("guardian", "the guardian"), "https://www.theguardian.com/", ("theguardian.com",), "The Guardian", "Official The Guardian."),
+    (("al jazeera", "aljazeera"), "https://www.aljazeera.com/", ("aljazeera.com",), "Al Jazeera", "Official Al Jazeera."),
+    (("npr",), "https://www.npr.org/", ("npr.org",), "NPR", "Official NPR."),
+    (("forbes",), "https://www.forbes.com/", ("forbes.com",), "Forbes", "Official Forbes."),
+
+    # ── Dating ─────────────────────────────────────────────────────
+    (("tinder",), "https://tinder.com/", ("tinder.com",), "Tinder", "Official Tinder."),
+    (("bumble",), "https://bumble.com/", ("bumble.com",), "Bumble", "Official Bumble."),
+    (("hinge",), "https://hinge.co/", ("hinge.co",), "Hinge", "Official Hinge."),
+    (("match", "match com"), "https://www.match.com/", ("match.com",), "Match", "Official Match."),
+    (("okcupid",), "https://www.okcupid.com/", ("okcupid.com",), "OkCupid", "Official OkCupid."),
+    (("grindr",), "https://www.grindr.com/", ("grindr.com",), "Grindr", "Official Grindr."),
+
+    # ── Search engines / browsers ──────────────────────────────────
+    (("yahoo",), "https://www.yahoo.com/", ("yahoo.com",), "Yahoo", "Official Yahoo."),
+    (("yandex",), "https://yandex.com/", ("yandex.com", "yandex.ru"), "Yandex", "Official Yandex."),
+    (("baidu",), "https://www.baidu.com/", ("baidu.com",), "Baidu", "Official Baidu."),
+    (("duckduckgo", "ddg"), "https://duckduckgo.com/", ("duckduckgo.com",), "DuckDuckGo", "Official DuckDuckGo."),
+    (("brave",), "https://brave.com/", ("brave.com",), "Brave", "Official Brave browser."),
+
+    # ── Shipping / real estate ─────────────────────────────────────
+    (("zillow",), "https://www.zillow.com/", ("zillow.com",), "Zillow", "Official Zillow."),
+    (("redfin",), "https://www.redfin.com/", ("redfin.com",), "Redfin", "Official Redfin."),
+    (("realtor", "realtor com"), "https://www.realtor.com/", ("realtor.com",), "Realtor.com", "Official Realtor.com."),
+    (("fedex",), "https://www.fedex.com/", ("fedex.com",), "FedEx", "Official FedEx."),
+    (("ups",), "https://www.ups.com/", ("ups.com",), "UPS", "Official UPS."),
+    (("dhl",), "https://www.dhl.com/", ("dhl.com",), "DHL", "Official DHL."),
+    (("usps",), "https://www.usps.com/", ("usps.com",), "USPS", "Official USPS."),
+    (("royal mail",), "https://www.royalmail.com/", ("royalmail.com",), "Royal Mail", "Official Royal Mail."),
+]
+
+
+def _build_official_site_lookup():
+    lookup: dict = {}
+    for aliases, url, hosts, title, body in _OFFICIAL_SITE_ENTRIES_RAW:
+        entry = {
+            "url": url,
+            "hosts": tuple(h.lower() for h in hosts),
+            "title": title,
+            "body": body,
+        }
+        for alias in aliases:
+            lookup[_brand_key(alias)] = entry
+    return lookup
+
+
+_OFFICIAL_SITE_LOOKUP = _build_official_site_lookup()
+
+
+def _match_official_site_entry(query: str):
+    """Return an entry dict if the query is (or cleanly reduces to) a known brand name."""
+    key = _brand_key(query)
+    if not key:
+        return None
+    entry = _OFFICIAL_SITE_LOOKUP.get(key)
+    if entry:
+        return entry
+    tokens = key.split()
+    if len(tokens) < 2 or len(tokens) > 6:
+        return None
+    # Try trimming trailing filler tokens ("instagram login", "snapchat app").
+    for cut in range(len(tokens) - 1, 0, -1):
+        tail_tokens = tokens[cut:]
+        if not all(t in _BRAND_STRIPPABLE_SUFFIX_TOKENS for t in tail_tokens):
+            continue
+        core = " ".join(tokens[:cut])
+        entry = _OFFICIAL_SITE_LOOKUP.get(core)
+        if entry:
+            return entry
+    return None
+
+
+def _result_host_matches_entry(url: str, entry: dict) -> bool:
+    if not url or not entry:
+        return False
+    try:
+        host = (urlparse(url).netloc or "").lower()
+    except Exception:
+        return False
+    if host.startswith("www."):
+        host = host[4:]
+    if not host:
+        return False
+    for h in entry.get("hosts") or ():
+        if host == h or host.endswith("." + h):
+            return True
+    return False
+
+
+def _promote_official_site(query: str, results: list) -> list:
+    """Pin the official site at position 0 for mainstream brand queries.
+
+    If a result with the canonical host is already present anywhere in the
+    list, move it to index 0. Otherwise synthesize a canonical card at index
+    0 so the original site is guaranteed to be first.
+    """
+    if not results or not isinstance(results, list):
+        return results
+    entry = _match_official_site_entry(query)
+    if not entry:
+        return results
+    for i, r in enumerate(results):
+        if _result_host_matches_entry(r.get("url") or "", entry):
+            if i == 0:
+                # Tag the head result for UI/telemetry even if no move is needed.
+                try:
+                    r.setdefault("official_site", True)
+                except Exception:
+                    pass
+                return results
+            promoted = r
+            try:
+                promoted.setdefault("official_site", True)
+            except Exception:
+                pass
+            return [promoted] + [x for j, x in enumerate(results) if j != i]
+    synthesized = {
+        "title": entry["title"],
+        "url": entry["url"],
+        "body": entry["body"],
+        "source": "Official site",
+        "official_site": True,
+    }
+    return [synthesized] + results
 
 
 @app.route("/search")
@@ -3969,6 +4498,12 @@ def search():
         )
         if results.get("results") and search_type not in ("images", "saved"):
             results["results"] = _rerank_results_with_feedback(query, results["results"])
+        if (
+            page == 1
+            and search_type == "text"
+            and results.get("results")
+        ):
+            results["results"] = _promote_official_site(query, results["results"])
         _ajax_ms = int((time.perf_counter() - _t_ajax) * 1000)
         if page == 1:
             _log_search(query, search_type, region or "", len(results.get("results", [])), _ajax_ms, request=request)
@@ -3999,6 +4534,12 @@ def search():
     )
     if results.get("results") and search_type not in ("images", "saved"):
         results["results"] = _rerank_results_with_feedback(query, results["results"])
+    if (
+        page == 1
+        and search_type == "text"
+        and results.get("results")
+    ):
+        results["results"] = _promote_official_site(query, results["results"])
     _latency_ms = int((time.perf_counter() - _t0) * 1000)
 
     # Log search analytics (non-blocking, never fails)
@@ -6338,6 +6879,112 @@ def _try_ddg(query, max_results, search_type, region=None, time_filter=None, saf
             }
             for r in raw
         ]
+
+
+# ---- Exa Search API (neural / keyword / auto) ----
+#
+# Exa returns results semantically aligned with the user's natural-language
+# query, which complements DDG's keyword-first index. Enabled automatically
+# when EXA_API_KEY is set; silently no-ops otherwise (so the engine keeps
+# working out of the box for self-hosters without an Exa account).
+
+_EXA_API_URL = "https://api.exa.ai/search"
+
+
+def _exa_api_key() -> str:
+    return (os.environ.get("EXA_API_KEY") or "").strip()
+
+
+def _try_exa(query, max_results, search_type, region=None, time_filter=None, safesearch="off"):
+    """Exa Search API — neural + keyword blended. Returns [] when EXA_API_KEY is missing
+    or the call fails. Supports text and news; images/videos fall back to other backends."""
+    key = _exa_api_key()
+    if not key:
+        return []
+    q = (query or "").strip()
+    if not q:
+        return []
+    if search_type not in ("text", "news"):
+        return []
+
+    num = max(1, min(int(max_results or 20), 25))
+    payload: dict = {
+        "query": q,
+        "type": "auto",
+        "numResults": num,
+        "contents": {
+            "text": {"maxCharacters": 420, "includeHtmlTags": False},
+            "highlights": {"numSentences": 2, "highlightsPerUrl": 1},
+        },
+    }
+    if search_type == "news":
+        payload["category"] = "news"
+        if time_filter and time_filter in {"d", "w", "m", "y"}:
+            now = datetime.now(timezone.utc)
+            delta_days = {"d": 1, "w": 7, "m": 31, "y": 366}[time_filter]
+            start = now - timedelta(days=delta_days)
+            payload["startPublishedDate"] = start.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+    try:
+        resp = _get_http().post(
+            _EXA_API_URL,
+            headers={
+                "x-api-key": key,
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            },
+            json=payload,
+            timeout=8,
+        )
+        if resp.status_code == 401:
+            logger.warning("Exa API: unauthorized (check EXA_API_KEY)")
+            return []
+        if resp.status_code >= 400:
+            logger.warning(
+                "Exa API: HTTP %s for query len=%s type=%s",
+                resp.status_code,
+                len(q),
+                search_type,
+            )
+            return []
+        data = resp.json() or {}
+    except Exception:
+        logger.warning("Exa fallback failed", exc_info=True)
+        return []
+
+    out: list = []
+    for r in data.get("results") or []:
+        if not isinstance(r, dict):
+            continue
+        url = (r.get("url") or "").strip()
+        if not url:
+            continue
+        title = (r.get("title") or "").strip() or url
+        body = (r.get("text") or "").strip()
+        if not body:
+            hls = r.get("highlights") or []
+            if isinstance(hls, list) and hls:
+                body = " ".join(str(h) for h in hls if h).strip()
+        if body and len(body) > 420:
+            body = body[:420].rsplit(" ", 1)[0] + "…"
+        item: dict = {
+            "title": title[:300],
+            "url": url,
+            "body": body,
+            "source": "Exa",
+        }
+        pub = r.get("publishedDate") or r.get("published_date") or ""
+        if pub:
+            item["date"] = str(pub)[:32]
+            item["published_at"] = str(pub)
+        author = (r.get("author") or "").strip()
+        if author:
+            item["author"] = author[:180]
+        out.append(item)
+
+    if out:
+        logger.info("Exa %s: %d results", search_type, len(out))
+    return out
 
 
 # ---- Layer 2: Wikipedia / MediaWiki API (text only) ----
@@ -9006,6 +9653,10 @@ def _fetch_results(
                     "reddit": lambda: _try_reddit_text(query),
                     "archive": lambda: _try_internet_archive_text(query),
                 }
+                if _exa_api_key():
+                    _rp_fetchers["exa"] = lambda: _try_exa(
+                        effective_query, max_results, "text", region, time_filter, safesearch
+                    )
                 if _looks_academic(query):
                     _rp_fetchers["arxiv"] = lambda: _try_arxiv(query)
                     _rp_fetchers["pubmed"] = lambda: _try_pubmed(query)
@@ -9051,6 +9702,12 @@ def _fetch_results(
                     _deep_pool.submit(_try_reddit_text, query): "reddit",
                     _deep_pool.submit(_try_internet_archive_text, query): "archive",
                 }
+                if _exa_api_key():
+                    _deep_futures[
+                        _deep_pool.submit(
+                            _try_exa, effective_query, max_results, "text", region, time_filter, safesearch
+                        )
+                    ] = "exa"
                 if _looks_academic(query):
                     _deep_futures[_deep_pool.submit(_try_arxiv, query)] = "arxiv"
                     _deep_futures[_deep_pool.submit(_try_pubmed, query)] = "pubmed"
@@ -9078,6 +9735,22 @@ def _fetch_results(
             finally:
                 _deep_pool.shutdown(wait=False)
 
+        # News: blend Exa alongside DDG when both have results (neutral semantic match)
+        if search_type == "news" and results and _exa_api_key():
+            try:
+                exa_news = _try_exa(
+                    effective_query, max_results, "news", region, time_filter, safesearch
+                ) or []
+                if exa_news:
+                    seen_news = {r.get("url", "") for r in results}
+                    for r in exa_news:
+                        u = r.get("url") or ""
+                        if u and u not in seen_news:
+                            seen_news.add(u)
+                            results.append(r)
+            except Exception:
+                logger.debug("exa_news_blend_failed", exc_info=True)
+
         # Image-specific fallbacks — parallel
         if not results and search_type == "images":
             logger.info("Image search empty, trying parallel fallbacks")
@@ -9099,13 +9772,19 @@ def _fetch_results(
         # News-specific fallbacks — parallel
         if not results and search_type == "news":
             logger.info("News search empty, trying parallel fallbacks")
-            with ThreadPoolExecutor(max_workers=4) as _news_pool:
+            with ThreadPoolExecutor(max_workers=5) as _news_pool:
                 _news_futs = [
                     _news_pool.submit(_try_google_news_rss, query),
                     _news_pool.submit(_try_bing_news_rss, query),
                     _news_pool.submit(_try_hackernews, query, max_results),
                     _news_pool.submit(_try_reddit_news, query, max_results),
                 ]
+                if _exa_api_key():
+                    _news_futs.append(
+                        _news_pool.submit(
+                            _try_exa, effective_query, max_results, "news", region, time_filter, safesearch
+                        )
+                    )
                 for fut in as_completed(_news_futs):
                     try:
                         r = fut.result(timeout=6)
@@ -9164,6 +9843,10 @@ def _fetch_results(
         results = _rank_local_search_results(results, local_rank_context)
     elif search_type == "text" and anti_template:
         results = _rank_anti_template_results(results)
+    elif search_type == "text":
+        # Default: neutral steering toward the user's query, without injecting
+        # negativity the user did not ask for.
+        results = _rank_neutral_query_aligned(results, query)
     # Store in cache and always release the in-flight lock so waiters are never stranded
     try:
         with _cache_lock:
