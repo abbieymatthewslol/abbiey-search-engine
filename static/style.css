@@ -376,6 +376,21 @@ body:not(.has-results) header {
 }
 .overflow-icon-btn:hover { color: var(--accent); }
 
+.overflow-menu-link {
+  display: block;
+  padding: .45rem .625rem;
+  margin: 0;
+  border-radius: var(--radius-sm);
+  font-size: .85rem;
+  color: var(--text-dim);
+  text-decoration: none;
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.overflow-menu-link:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
 /* ===== 4. APP LAYOUT ===== */
 .app-layout {
   display: flex;
@@ -2019,6 +2034,56 @@ article.result.code-result { font-size: .9rem; }
   width: 100%;
   max-width: 600px;
   margin-top: 1.35rem;
+}
+
+/* New landing hierarchy: logo → headline → search → one supporting line */
+.home-hero-headline {
+  margin: .65rem 0 0;
+  font-size: clamp(1.1rem, 2.2vw, 1.45rem);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+  color: var(--text);
+  text-align: center;
+}
+.home-message-sub {
+  margin: .9rem auto 0;
+  max-width: 34rem;
+  font-size: .85rem;
+  line-height: 1.5;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+/* Landing-state search bar: reduce affordance noise. On the home state
+   (body without .has-results) the image and voice buttons fade in only
+   when the search box is hovered or focused; the "Paste image URL" text
+   link hides entirely — the image icon inside the bar still opens that panel. */
+body:not(.has-results) .search-box .reverse-image-btn,
+body:not(.has-results) .search-box .voice-btn {
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-out);
+  pointer-events: none;
+}
+body:not(.has-results) .search-box:hover .reverse-image-btn,
+body:not(.has-results) .search-box:hover .voice-btn,
+body:not(.has-results) .search-box:focus-within .reverse-image-btn,
+body:not(.has-results) .search-box:focus-within .voice-btn {
+  opacity: 0.75;
+  pointer-events: auto;
+}
+body:not(.has-results) .search-box:focus-within .reverse-image-btn:hover,
+body:not(.has-results) .search-box:focus-within .voice-btn:hover {
+  opacity: 1;
+}
+body:not(.has-results) .reverse-image-url-entry { display: none; }
+
+.footer-credit {
+  margin-left: .5rem;
+  font-size: .78rem;
+  color: var(--text-muted);
+  opacity: 0.7;
+  font-weight: 400;
 }
 
 .trending-pill {
