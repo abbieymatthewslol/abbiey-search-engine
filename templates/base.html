@@ -10,7 +10,6 @@
     <link rel="shortcut icon" href="/favicon.ico">
     <meta name="deploy-hash" content="{{ deploy_hash }}">
     {% include 'includes/google_site_verification.html' %}
-    {% include 'includes/google_analytics.html' %}
     {% include 'includes/google_adsense_head.html' %}
     {% block canonical %}
     <link rel="canonical" href="{{ site_base_url }}{{ request.path }}">
@@ -133,6 +132,7 @@
             {% include 'includes/header_dev_link.html' %}
         </div>
     </header>
+    {% include 'includes/google_analytics.html' %}
 
     <div class="settings-overlay" id="settings-overlay" hidden>
         <div class="settings-modal" id="settings-modal" role="dialog" aria-label="Settings">

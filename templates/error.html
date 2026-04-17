@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="deploy-hash" content="{{ deploy_hash }}">
-    {% include 'includes/google_analytics.html' %}
     <!-- Vercel Speed Insights -->
     <script nonce="{{ csp_nonce }}">
         window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
@@ -34,6 +33,7 @@
         </button>
         </div>
     </header>
+    {% include 'includes/google_analytics.html' %}
 
     <main class="error-page">
         <div class="error-container">

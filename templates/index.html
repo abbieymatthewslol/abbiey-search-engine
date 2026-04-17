@@ -21,7 +21,6 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=deploy_hash) }}">
     <meta name="deploy-hash" content="{{ deploy_hash }}">
     {% include 'includes/google_site_verification.html' %}
-    {% include 'includes/google_analytics.html' %}
     {% include 'includes/google_adsense_head.html' %}
     <!-- Vercel Speed Insights -->
     <script nonce="{{ csp_nonce }}">
@@ -175,6 +174,7 @@
             {% include 'includes/header_dev_link.html' %}
         </div>
     </header>
+    {% include 'includes/google_analytics.html' %}
     <div class="settings-overlay" id="settings-overlay" hidden>
         <div class="settings-modal" id="settings-modal" role="dialog" aria-label="Settings">
             <div class="settings-modal-header">

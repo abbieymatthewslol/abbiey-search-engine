@@ -6,7 +6,6 @@
     <title>abbieysearch — About</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=deploy_hash) }}">
     {% include 'includes/google_site_verification.html' %}
-    {% include 'includes/google_analytics.html' %}
     <script nonce="{{ csp_nonce }}">
         window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
     </script>
@@ -28,6 +27,7 @@
         <a href="/search" class="logo">abbiey<span>search</span></a>
         <a href="/search" class="header-btn landing-cta">Open search</a>
     </header>
+    {% include 'includes/google_analytics.html' %}
     <main class="landing-main about-main">
         <h1>About abbieysearch</h1>
         <p class="landing-lead">

@@ -193,7 +193,7 @@ def _load_google_site_verification() -> str:
 _GOOGLE_SITE_VERIFICATION = _load_google_site_verification()
 
 # Google Analytics 4 (gtag.js). If GOOGLE_ANALYTICS_ID is unset, the tag is omitted.
-_GOOGLE_ANALYTICS_ID = os.environ.get("GOOGLE_ANALYTICS_ID", "").strip()
+_GOOGLE_ANALYTICS_ID = os.environ.get("GOOGLE_ANALYTICS_ID", "G-FG3G7DRBW1").strip()
 
 # Google AdSense (optional). Set GOOGLE_ADSENSE_CLIENT=ca-pub-... and create ad units in AdSense;
 # set slot IDs for fixed placements. If only the client is set, Auto Ads can be enabled in AdSense.
