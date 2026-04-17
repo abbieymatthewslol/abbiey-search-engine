@@ -44,6 +44,15 @@ Before considering work “done”, try to ensure:
 - Prefer one PR per fix/feature.
 - If multiple “copilot/*” or “task-definition-needed/*” branches exist, do **not** merge blindly—summarize differences and recommend the safest merge/cherry-pick.
 
+## If the task text is blank or vague
+- Treat prompts like "idk what to put here" as an undefined automation task.
+- Default to low-risk docs maintenance:
+  - verify `AUTOMATION_TASK_TEMPLATE.md` exists and is current
+  - verify `.github/agents/TASK_DEFINITION_TEMPLATE.md` exists and is current
+  - verify `README.md` points to both templates
+- If all guidance already exists, make at most one focused docs-quality improvement (clarity/examples), not speculative feature work.
+- Prefer docs-only edits unless there is an obvious repository-health blocker.
+
 # How to respond
 - Be direct and practical.
 - Provide commands ready for **PowerShell** on Windows when relevant.
