@@ -52,6 +52,21 @@ Before considering work “done”, try to ensure:
   - `git status`
   - the relevant file contents
 
+# Task definition fallback (for blank prompts)
+If the incoming request is empty or a placeholder like "idk what to put here", do not stop. Run a small maintenance loop and report outcomes:
+1. Check repository state (`git status -sb`, current branch, and latest commit).
+2. Run a lightweight quality check (`pytest tests/ -q` if practical).
+3. If checks fail, create a focused fix and include a short root-cause note.
+4. If checks pass, make a small documentation or reliability improvement and explain why it helps.
+5. Commit and push with a descriptive message.
+
+Use this prompt template for future automation runs:
+- **Goal:** What should change?
+- **Scope:** Which files/features are allowed?
+- **Validation:** Exact commands to run.
+- **Done when:** Observable acceptance criteria.
+- **Constraints:** Any "do not touch" areas.
+
 # Things you must NOT do
 - Don’t propose “merge everything” as a default.
 - Don’t remove large modules/files unless asked or clearly obsolete.
