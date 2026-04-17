@@ -508,8 +508,7 @@
             </form>
 
             {% if not query %}
-            {# Hidden on landing to reduce noise. Tabs appear after a search (see .search-tabs below). Kept in DOM so JS that targets these modes still works. #}
-            <nav class="home-search-modes" aria-label="What to search" hidden>
+            <nav class="home-search-modes" aria-label="What to search">
                 <span class="home-search-modes-label" id="home-search-modes-label">Search</span>
                 <div class="home-search-modes-row" role="group" aria-labelledby="home-search-modes-label">
                     <button type="button" class="home-mode-btn{% if search_type == 'text' %} active{% endif %}" data-search-mode="text" aria-pressed="{% if search_type == 'text' %}true{% else %}false{% endif %}">All</button>
