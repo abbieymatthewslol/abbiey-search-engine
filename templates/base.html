@@ -11,6 +11,7 @@
     <meta name="deploy-hash" content="{{ deploy_hash }}">
     {% include 'includes/google_site_verification.html' %}
     {% include 'includes/google_analytics.html' %}
+    {% include 'includes/google_adsense_head.html' %}
     {% block canonical %}
     <link rel="canonical" href="{{ site_base_url }}{{ request.path }}">
     {% endblock %}
@@ -377,6 +378,10 @@
             <a href="/privacy">Privacy Policy</a>
             &nbsp;&middot;&nbsp;
             <a href="/terms">Terms of Service</a>
+            {% if support_url %}
+            &nbsp;&middot;&nbsp;
+            <a href="{{ support_url }}" target="_blank" rel="noopener noreferrer">Support</a>
+            {% endif %}
         </p>
     </footer>
 

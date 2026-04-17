@@ -1,0 +1,15 @@
+{# Expects: google_adsense_client, adsense_slot (from {% with %}), csp_nonce #}
+{% if google_adsense_client and adsense_slot %}
+<aside class="abbiey-ad-wrap" aria-label="Advertisement">
+    <span class="abbiey-ad-label">Ad</span>
+    <ins class="adsbygoogle"
+         style="display:block"
+         data-ad-client="{{ google_adsense_client }}"
+         data-ad-slot="{{ adsense_slot }}"
+         data-ad-format="auto"
+         data-full-width-responsive="true"></ins>
+    <script nonce="{{ csp_nonce }}">
+        (adsbygoogle = window.adsbygoogle || []).push({});
+    </script>
+</aside>
+{% endif %}

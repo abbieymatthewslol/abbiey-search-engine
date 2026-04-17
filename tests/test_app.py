@@ -88,6 +88,53 @@ class TestRoutes:
         assert resp.status_code == 200
         assert b"googletagmanager.com/gtag/js" not in resp.data
 
+    def test_google_adsense_script_when_configured(self, client):
+        import app as app_module
+
+        with patch.object(app_module, "_GOOGLE_ADSENSE_CLIENT", "ca-pub-test123"):
+            resp = client.get("/search?q=")
+        assert resp.status_code == 200
+        assert b"pagead2.googlesyndication.com/pagead/js/adsbygoogle.js" in resp.data
+        assert b"ca-pub-test123" in resp.data
+
+    def test_google_adsense_omitted_when_disabled(self, client):
+        import app as app_module
+
+        with patch.object(app_module, "_GOOGLE_ADSENSE_CLIENT", ""):
+            resp = client.get("/search?q=")
+        assert resp.status_code == 200
+        assert b"pagead2.googlesyndication.com" not in resp.data
+
+    def test_google_adsense_responsive_unit_when_slot_configured(self, client):
+        import app as app_module
+
+        with patch.object(app_module, "_GOOGLE_ADSENSE_CLIENT", "ca-pub-test123"), patch.object(
+            app_module, "_GOOGLE_ADSENSE_SLOT_HOME", "1111222233334444"
+        ):
+            resp = client.get("/search?q=")
+        assert resp.status_code == 200
+        assert b"adsbygoogle" in resp.data
+        assert b"data-ad-slot=\"1111222233334444\"" in resp.data
+
+    def test_support_footer_link_when_configured(self, client):
+        import app as app_module
+
+        with patch.object(app_module, "_SUPPORT_URL", "https://example.com/support"):
+            resp = client.get("/search?q=")
+        assert resp.status_code == 200
+        assert b"https://example.com/support" in resp.data
+        assert b">Support</a>" in resp.data
+
+    def test_csp_allows_adsense_frames_when_adsense_configured(self, client):
+        import app as app_module
+
+        with patch.object(app_module, "_GOOGLE_ADSENSE_CLIENT", "ca-pub-test123"):
+            resp = client.get("/search?q=")
+        assert resp.status_code == 200
+        csp = resp.headers.get("Content-Security-Policy", "")
+        assert "tpc.googlesyndication.com" in csp
+        assert "pagead2.googlesyndication.com" in csp
+
     def test_search_empty_query_shows_index(self, client):
         resp = client.get("/search?q=")
         assert resp.status_code == 200
@@ -151,6 +198,16 @@ class TestRoutes:
     def test_search_images(self, client, mock_ddg):
         resp = client.get("/search?q=cats&type=images")
         assert resp.status_code == 200
+
+    def test_image_search_skips_text_serp_query_rewrite(self, client, mock_ddg):
+        """Image tab must not use build_backend_search_query tutorial/local rewrites (unrelated thumbnails)."""
+        resp = client.get("/search?q=how+to+tie+a+tie&type=images")
+        assert resp.status_code == 200
+        assert mock_ddg.images.called
+        q_passed = mock_ddg.images.call_args[0][0]
+        assert "guide tutorial" not in q_passed.lower()
+        assert "step by step" not in q_passed.lower()
+        assert "nearest near me" not in q_passed.lower()
 
     def test_images_advanced_search_panel(self, client, mock_ddg):
         """Advanced image UI + img_adv=1 still returns results."""

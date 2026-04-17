@@ -22,6 +22,7 @@
     <meta name="deploy-hash" content="{{ deploy_hash }}">
     {% include 'includes/google_site_verification.html' %}
     {% include 'includes/google_analytics.html' %}
+    {% include 'includes/google_adsense_head.html' %}
     <!-- Vercel Speed Insights -->
     <script nonce="{{ csp_nonce }}">
         window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
@@ -527,6 +528,9 @@
                 <div id="recent-searches-home" class="recent-searches-home"></div>
             </div>
             <p class="home-creator-credit" aria-hidden="true">abbiey matthews</p>
+            {% with adsense_slot=google_adsense_slot_home %}
+            {% include 'includes/google_adsense_unit.html' %}
+            {% endwith %}
             {% endif %}
 
             {% if query %}
@@ -560,10 +564,16 @@
                     <div class="tab-more-menu" id="tab-more-menu" hidden>
                         <a href="/search?q={{ query|urlencode }}&type=onion{% if region %}&region={{ region }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab-more-item {% if search_type == 'onion' %}active{% endif %}">Deep Web</a>
                         <a href="/search?q={{ query|urlencode }}&type=saved{% if cleanweb %}&cleanweb=1{% endif %}" class="tab-more-item {% if search_type == 'saved' %}active{% endif %}">Saved <span class="bookmark-count-badge" id="bookmark-count-badge"></span></a>
-                        <a href="/profile#search-bots" class="tab-more-item">Custom bots</a>
+                        <a href="/profile#search-bots" class="tab-more-item">Your bots</a>
                     </div>
                 </div>
             </nav>
+            {% if query and search_type == 'mybot' %}
+            <p class="mybot-context-hint" role="status">
+                Custom bot search{% if mybot_name %}: <strong>{{ mybot_name }}</strong>{% endif %}.
+                <a href="/profile#search-bots">Manage in Profile</a>
+            </p>
+            {% endif %}
             {% if query and query_ui.local_intent and search_type == 'text' %}
             <div class="local-search-hint" id="local-search-hint" role="status">
                 Local search: results are re-ranked using map and listing signals. Exact distance per result is not available from the web index.
@@ -1203,6 +1213,11 @@
                     <noscript><p class="no-results">Saved bookmarks require JavaScript.</p></noscript>
                 </div>
             {% elif results %}
+                {% if query and search_type in ('text', 'news') %}
+                {% with adsense_slot=google_adsense_slot_results %}
+                {% include 'includes/google_adsense_unit.html' %}
+                {% endwith %}
+                {% endif %}
                 {% for r in results %}
                     {% if search_type == 'images' %}
                     <div class="image-card" data-full="{{ r.image or r.thumbnail }}" data-title="{{ r.title }}" data-source="{{ r.source or '' }}" data-url="{{ r.url }}" data-license="{{ r.license or '' }}" role="button" tabindex="0" aria-label="Open image result: {{ r.title }}">
@@ -1298,7 +1313,7 @@
                 {% elif search_type == 'mybot' %}
                 <div class="no-results-inclusive">
                     <p class="no-results">No pages in this bot matched your keywords.</p>
-                    <p class="no-results-hint">Run a crawl from <a href="/profile#search-bots">Profile → Custom search bots</a>, widen your query, or clear filters.</p>
+                    <p class="no-results-hint">Update your bot’s index from <a href="/profile#search-bots">Profile → Custom bots</a>, try a broader query, or clear filters.</p>
                 </div>
                 {% else %}
                 <div class="no-results-inclusive">
@@ -1471,6 +1486,10 @@
             <a href="/terms">Terms of Service</a>
             &nbsp;&middot;&nbsp;
             <a href="/about">About</a>
+            {% if support_url %}
+            &nbsp;&middot;&nbsp;
+            <a href="{{ support_url }}" target="_blank" rel="noopener noreferrer">Support</a>
+            {% endif %}
         </p>
         {% if not query %}
         <p class="home-about-blurb" id="what-is-abbieysearch">

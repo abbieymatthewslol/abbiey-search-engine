@@ -195,6 +195,15 @@ _GOOGLE_SITE_VERIFICATION = _load_google_site_verification()
 # Google Analytics 4 (gtag.js). If GOOGLE_ANALYTICS_ID is unset, the tag is omitted.
 _GOOGLE_ANALYTICS_ID = os.environ.get("GOOGLE_ANALYTICS_ID", "").strip()
 
+# Google AdSense (optional). Set GOOGLE_ADSENSE_CLIENT=ca-pub-... and create ad units in AdSense;
+# set slot IDs for fixed placements. If only the client is set, Auto Ads can be enabled in AdSense.
+_GOOGLE_ADSENSE_CLIENT = os.environ.get("GOOGLE_ADSENSE_CLIENT", "").strip()
+_GOOGLE_ADSENSE_SLOT_HOME = os.environ.get("GOOGLE_ADSENSE_SLOT_HOME", "").strip()
+_GOOGLE_ADSENSE_SLOT_RESULTS = os.environ.get("GOOGLE_ADSENSE_SLOT_RESULTS", "").strip()
+
+# Optional "Support" / tip link (Ko-fi, Patreon, etc.) — shown in the footer when set.
+_SUPPORT_URL = os.environ.get("SUPPORT_URL", "").strip()
+
 # On Vercel the filesystem is read-only except /tmp; use /tmp when running there.
 _DB_DIR       = "/tmp" if os.environ.get("VERCEL") else os.path.dirname(__file__)
 _WAITLIST_DB  = os.path.join(_DB_DIR, "waitlist.db")
@@ -1818,6 +1827,10 @@ def _inject_current_user():
         "deploy_hash": DEPLOY_HASH,
         "google_site_verification": _GOOGLE_SITE_VERIFICATION,
         "google_analytics_id": _GOOGLE_ANALYTICS_ID,
+        "google_adsense_client": _GOOGLE_ADSENSE_CLIENT,
+        "google_adsense_slot_home": _GOOGLE_ADSENSE_SLOT_HOME,
+        "google_adsense_slot_results": _GOOGLE_ADSENSE_SLOT_RESULTS,
+        "support_url": _SUPPORT_URL,
         "site_base_url": _site_base_url(),
         "supabase_auth": _SUPABASE_AUTH_ENABLED,
         "supabase_url": _SUPABASE_URL if _SUPABASE_AUTH_ENABLED else "",
@@ -2288,14 +2301,27 @@ def _security_headers(response):
             "camera=(), microphone=(), geolocation=(), payment=()",
         )
         nonce = getattr(g, "csp_nonce", "")
+        ads_script = ""
+        ads_frames = ""
+        if _GOOGLE_ADSENSE_CLIENT:
+            ads_script = (
+                "https://pagead2.googlesyndication.com https://www.googletagservices.com "
+                "https://www.google.com https://www.gstatic.com "
+            )
+            ads_frames = (
+                "https://googleads.g.doubleclick.net https://tpc.googlesyndication.com "
+                "https://pagead2.googlesyndication.com https://www.google.com "
+            )
         csp = (
             "default-src 'self'; "
             f"script-src 'self' 'nonce-{nonce}' https://cdnjs.cloudflare.com "
-            "https://www.googletagmanager.com https://www.google-analytics.com; "
+            "https://www.googletagmanager.com https://www.google-analytics.com "
+            f"{ads_script}; "
             "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; "
             "img-src 'self' data: https: blob:; "
             "connect-src 'self' https: wss:; "
             "font-src 'self' data:; "
+            f"frame-src 'self' {ads_frames}; "
             "frame-ancestors 'self'; "
             "base-uri 'self'; "
             "form-action 'self'"
@@ -3092,6 +3118,8 @@ _TEMPLATE_DEFAULTS = dict(
     cleanweb=False,
     safeguard={"show_crisis_strip": False, "show_inclusive_hint": False, "chaotic_query": False},
     osint_enabled=True,
+    mybot_id=None,
+    mybot_name=None,
 )
 def should_show_ai_summary(query: str, intent: str) -> bool:
     """Gate AI summary card + /api/ai-summary: block obvious local/transactional queries."""
@@ -3725,7 +3753,7 @@ def search():
                     "error.html",
                     code=400,
                     title="Choose a bot",
-                    message="Open Profile → Custom search bots and use Search on a bot, or add ?bot_id=… to the URL.",
+                    message="Open Profile, open Custom bots, tap Search with this bot, or add ?bot_id=… to the URL.",
                     extra_help=True,
                 ),
                 400,
@@ -3741,6 +3769,18 @@ def search():
                 ),
                 404,
             )
+        mybot_name = None
+        try:
+            _mbn = _users_execute(
+                "SELECT name FROM user_search_bots WHERE id=? AND user_id=? LIMIT 1",
+                [int(mybot_id), int(current_uid)],
+            )
+            if _mbn:
+                mybot_name = str((_mbn[0] or {}).get("name") or "").strip() or None
+        except Exception:
+            mybot_name = None
+    else:
+        mybot_name = None
 
     cleanweb = request.args.get("cleanweb", "").strip().lower() in ("1", "true", "yes", "on")
     anti_template = bool(cleanweb and search_type == "text")
@@ -3834,6 +3874,8 @@ def search():
             cleanweb=False,
             safeguard={"show_crisis_strip": False, "show_inclusive_hint": False, "chaotic_query": False},
             osint_enabled=_abbiey_osint_enabled(),
+            mybot_id=None,
+            mybot_name=None,
         )
     if len(query) > MAX_QUERY_LENGTH:
         return render_template(
@@ -3874,6 +3916,12 @@ def search():
         anchor_geo = _reverse_geocode_label(user_lat, user_lon)
     loc_ctx = resolve_location_for_search(prep, user_lat, user_lon, anchor_geo)
     backend_query = build_backend_search_query(clean_query, prep, loc_ctx)
+    if search_type == "images" and not img_rev_key:
+        # Image backends need literal keywords. Text-SERP rewrites from
+        # build_backend_search_query (how-to expansions, "near me" + GPS, etc.)
+        # produce unrelated thumbnails. Reverse-image flows use img_rev_key and
+        # bypass the query entirely inside _fetch_results.
+        backend_query = (prep.normalized or clean_query or "").strip()
     local_rank_context = loc_ctx if search_type == "text" and loc_ctx.get("has_local_intent") else None
 
     # Entity detection
@@ -4094,6 +4142,7 @@ def search():
         safeguard=safeguard,
         osint_enabled=_abbiey_osint_enabled(),
         mybot_id=mybot_id,
+        mybot_name=mybot_name,
         img_rev_key=img_rev_key,
     )
 @app.route("/api/suggestions")
@@ -9549,14 +9598,16 @@ def api_user_search_bots_create():
     max_depth = max(0, min(max_depth, 2))
     max_pages = max(5, min(max_pages, 30))
     if not name:
-        return jsonify({"error": "Name is required."}), 400
+        return jsonify({"error": "Please enter a name for this bot."}), 400
     if not allow_hosts:
-        return jsonify({"error": "allow_hosts must be a non-empty JSON array of hostnames."}), 400
+        return jsonify({"error": "Add at least one website domain (for example example.com)."}), 400
     if not seed_urls:
-        return jsonify({"error": "seed_urls must be a non-empty JSON array of http(s) URLs."}), 400
+        return jsonify({"error": "Add at least one full web address starting with https://."}), 400
     for su in seed_urls:
         if not normalize_http_seed(su, allow_hosts):
-            return jsonify({"error": f"Invalid or disallowed seed URL: {su[:120]}"}), 400
+            return jsonify(
+                {"error": f"This starting page doesn’t match your allowed websites (check the address): {su[:120]}"}
+            ), 400
     try:
         nrows = _users_execute("SELECT COUNT(*) AS n FROM user_search_bots WHERE user_id=?", [uid])
         n = int((nrows or [{}])[0].get("n") or 0)
