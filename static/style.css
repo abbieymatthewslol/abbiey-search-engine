@@ -5668,3 +5668,166 @@ footer {
   color: var(--accent);
   margin-left: 0.25rem;
 }
+
+/* ===== Profile/People/Email/Business cards ===== */
+
+.profile-result {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1rem 1.15rem;
+  background: var(--bg-surface);
+  margin-bottom: 0.85rem;
+  transition: border-color .15s ease, background .15s ease;
+}
+.profile-result:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-surface-2);
+}
+.profile-result.profile-warn {
+  border-color: color-mix(in srgb, #f97316 40%, var(--border));
+  background: color-mix(in srgb, #f97316 6%, var(--bg-surface));
+}
+
+.profile-result-head {
+  display: flex;
+  gap: 0.9rem;
+  align-items: flex-start;
+  margin-bottom: 0.6rem;
+}
+
+.profile-avatar {
+  flex: 0 0 auto;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim);
+  font-weight: 600;
+  font-size: 1.4rem;
+  flex-shrink: 0;
+}
+.profile-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.profile-avatar-placeholder {
+  text-transform: uppercase;
+  background: linear-gradient(135deg, var(--bg-surface-2), var(--bg-hover));
+}
+
+.profile-business .profile-avatar {
+  border-radius: 8px;
+  background: #fff;
+}
+
+.profile-result-main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.profile-name {
+  display: block;
+  font-size: 1.08rem;
+  font-weight: 600;
+  color: var(--text);
+  text-decoration: none;
+  line-height: 1.25;
+  margin-bottom: 0.2rem;
+}
+.profile-name:hover { text-decoration: underline; }
+.profile-subtitle {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  line-height: 1.35;
+  margin: 0.05rem 0 0.35rem;
+}
+.profile-source-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+.profile-source-row .result-favicon {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+}
+.profile-source-row .result-url {
+  color: var(--url-color);
+  font-size: 0.78rem;
+}
+.profile-source-chip {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--bg-hover);
+  color: var(--text-dim);
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  border: 1px solid var(--border-subtle);
+}
+.profile-chip-warn {
+  background: color-mix(in srgb, #f97316 18%, transparent);
+  color: #fb923c;
+  border-color: color-mix(in srgb, #f97316 35%, transparent);
+}
+
+.profile-bio {
+  color: var(--text-dim);
+  font-size: 0.92rem;
+  line-height: 1.5;
+  margin: 0.45rem 0 0.55rem;
+}
+
+.profile-facts {
+  list-style: none;
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  padding: 0;
+  margin: 0.35rem 0 0.55rem;
+}
+.profile-fact {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.72rem;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--bg-surface-2);
+  color: var(--text-dim);
+  border: 1px solid var(--border-subtle);
+}
+
+.profile-accounts {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.7rem;
+  padding: 0.4rem 0 0.1rem;
+  margin: 0;
+}
+.profile-accounts li a {
+  color: var(--url-color);
+  font-size: 0.82rem;
+  text-decoration: none;
+}
+.profile-accounts li a:hover { text-decoration: underline; }
+
+.profile-link-result {
+  border-left: 2px solid var(--border);
+  padding-left: 0.85rem;
+}
+
+@media (max-width: 600px) {
+  .profile-result-head { gap: 0.65rem; }
+  .profile-avatar { width: 44px; height: 44px; font-size: 1.15rem; }
+  .profile-name { font-size: 1rem; }
+}

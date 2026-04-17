@@ -2230,7 +2230,7 @@ def domain_filter(url):
 RESULTS_PER_PAGE = 20
 MAX_PAGE = 50
 MAX_QUERY_LENGTH = _max_query_length()
-ALLOWED_TYPES = {"text", "images", "news", "videos", "code", "onion", "saved", "prices", "alts", "mybot"}
+ALLOWED_TYPES = {"text", "images", "news", "videos", "code", "onion", "saved", "prices", "alts", "mybot", "people", "email", "business"}
 _MAX_USER_SEARCH_BOTS = 8
 _MAX_BOT_HOSTS = 12
 _MAX_BOT_SEEDS = 8
@@ -7914,6 +7914,750 @@ def _deduplicate(results):
     return unique
 
 
+# ---------------------------------------------------------------------------
+# People / Email / Business search backends
+#
+# All helpers below use ONLY free, public APIs that require no API key:
+#   * Wikipedia REST + MediaWiki + Wikidata    (bio + structured data)
+#   * GitHub search/users                      (developer profiles)
+#   * Gravatar public profile JSON             (email → profile)
+#   * OpenCorporates v0.4 search               (global company registry)
+#   * SEC EDGAR full-text search + tickers     (US public filings)
+#   * Clearbit Logo CDN                        (domain → logo, no key)
+#   * DuckDuckGo text search w/ site: filters  (social profiles + business pages)
+# Each helper returns either [] (on error) or a list of result dicts whose
+# shape matches the rest of the engine: { title, url, body, source, ... }.
+# ---------------------------------------------------------------------------
+
+_PEOPLE_PROFILE_SITES = [
+    "linkedin.com/in",
+    "twitter.com",
+    "x.com",
+    "instagram.com",
+    "facebook.com",
+    "github.com",
+    "threads.net",
+    "youtube.com",
+    "mastodon.social",
+    "about.me",
+    "muckrack.com",
+    "crunchbase.com/person",
+]
+
+_BUSINESS_SITES = [
+    "linkedin.com/company",
+    "crunchbase.com/organization",
+    "bloomberg.com/profile/company",
+    "bbb.org",
+    "opencorporates.com/companies",
+    "sec.gov/cgi-bin/browse-edgar",
+    "wikipedia.org/wiki",
+    "glassdoor.com/Overview",
+]
+
+# Small, offline top-list of disposable email domains. Good enough to flag the
+# most common throwaway services; full list would bloat the repo.
+_DISPOSABLE_EMAIL_DOMAINS = frozenset({
+    "mailinator.com", "guerrillamail.com", "10minutemail.com", "tempmail.com",
+    "temp-mail.org", "yopmail.com", "throwawaymail.com", "maildrop.cc",
+    "trashmail.com", "getnada.com", "dispostable.com", "fakeinbox.com",
+    "mailnesia.com", "sharklasers.com", "mohmal.com", "tempr.email",
+    "moakt.com", "inboxkitten.com", "smailpro.com", "emailondeck.com",
+    "mail.tm", "tempail.com", "mytemp.email", "tempmailaddress.com",
+    "20minutemail.com", "mintemail.com", "burnermail.io", "spamgourmet.com",
+})
+
+
+def _person_fetch_worker(query, max_results):
+    """Used by the retry ThreadPoolExecutor; never raises."""
+    try:
+        return _try_ddg(query, max_results, "text", safesearch="off")
+    except Exception:
+        return []
+
+
+_ABBIEY_UA = (
+    "abbiey-search/1.0 (+https://search-engine-pp3x4kl60-abbieys-projects.vercel.app; "
+    "research) python-httpx"
+)
+
+
+def _public_api_headers():
+    """Shared headers for public, free APIs (Wikipedia, Gravatar, etc.)."""
+    return {
+        "User-Agent": _ABBIEY_UA,
+        "Accept": "application/json",
+        "Accept-Language": "en",
+    }
+
+
+def _try_wikidata_person(query, max_results=5):
+    """Query Wikidata for person entities (instance of human, Q5)."""
+    results = []
+    try:
+        search_resp = _get_http().get(
+            "https://www.wikidata.org/w/api.php",
+            params={
+                "action": "wbsearchentities",
+                "search": query,
+                "language": "en",
+                "format": "json",
+                "type": "item",
+                "limit": str(min(max_results, 10)),
+            },
+            headers=_public_api_headers(),
+            timeout=6,
+        )
+        search_resp.raise_for_status()
+        hits = search_resp.json().get("search") or []
+        if not hits:
+            return []
+        ids = [h.get("id") for h in hits if h.get("id")]
+        if not ids:
+            return []
+        ent_resp = _get_http().get(
+            "https://www.wikidata.org/w/api.php",
+            params={
+                "action": "wbgetentities",
+                "ids": "|".join(ids[:10]),
+                "props": "labels|descriptions|claims|sitelinks",
+                "languages": "en",
+                "sitefilter": "enwiki",
+                "format": "json",
+            },
+            headers=_public_api_headers(),
+            timeout=6,
+        )
+        ent_resp.raise_for_status()
+        entities = (ent_resp.json() or {}).get("entities") or {}
+        for qid in ids:
+            ent = entities.get(qid) or {}
+            claims = ent.get("claims") or {}
+            # P31 instance-of — only keep Q5 (human)
+            inst = claims.get("P31") or []
+            is_human = False
+            for c in inst:
+                try:
+                    if (c["mainsnak"]["datavalue"]["value"]["id"]) == "Q5":
+                        is_human = True
+                        break
+                except Exception:
+                    continue
+            if not is_human:
+                continue
+            label = (ent.get("labels", {}).get("en", {}) or {}).get("value", "")
+            desc = (ent.get("descriptions", {}).get("en", {}) or {}).get("value", "")
+            if not label:
+                continue
+            sitelink = (ent.get("sitelinks", {}).get("enwiki", {}) or {}).get("title")
+            url = (
+                f"https://en.wikipedia.org/wiki/{sitelink.replace(' ', '_')}"
+                if sitelink
+                else f"https://www.wikidata.org/wiki/{qid}"
+            )
+            # Occupation (P106) — grab up to 3 labels
+            occ_ids = []
+            for c in (claims.get("P106") or [])[:3]:
+                try:
+                    occ_ids.append(c["mainsnak"]["datavalue"]["value"]["id"])
+                except Exception:
+                    continue
+            occ_labels = []
+            if occ_ids:
+                try:
+                    occ_resp = _get_http().get(
+                        "https://www.wikidata.org/w/api.php",
+                        params={
+                            "action": "wbgetentities",
+                            "ids": "|".join(occ_ids),
+                            "props": "labels",
+                            "languages": "en",
+                            "format": "json",
+                        },
+                        headers=_public_api_headers(),
+                        timeout=4,
+                    )
+                    occ_resp.raise_for_status()
+                    occ_ent = (occ_resp.json() or {}).get("entities") or {}
+                    for oid in occ_ids:
+                        lbl = (((occ_ent.get(oid) or {}).get("labels") or {}).get("en") or {}).get("value")
+                        if lbl:
+                            occ_labels.append(lbl)
+                except Exception:
+                    pass
+            # Image (P18) → commons URL
+            image_url = ""
+            try:
+                img_name = claims["P18"][0]["mainsnak"]["datavalue"]["value"]
+                safe = img_name.replace(" ", "_")
+                md5 = hashlib.md5(safe.encode("utf-8")).hexdigest()
+                image_url = (
+                    f"https://upload.wikimedia.org/wikipedia/commons/thumb/"
+                    f"{md5[0]}/{md5[:2]}/{safe}/256px-{safe}"
+                )
+            except Exception:
+                image_url = ""
+            results.append({
+                "title": label,
+                "url": url,
+                "body": desc or "",
+                "subtitle": ", ".join(occ_labels) if occ_labels else (desc or ""),
+                "thumbnail": image_url,
+                "avatar": image_url,
+                "source": "Wikidata",
+                "source_type": "person",
+                "profile_card": True,
+            })
+        if results:
+            logger.info("Wikidata person: %d results", len(results))
+    except Exception:
+        logger.warning("Wikidata person search failed", exc_info=True)
+    return results
+
+
+def _try_wikipedia_person(query):
+    """Pull Wikipedia REST summary for a person-like query."""
+    try:
+        resp = _get_http().get(
+            "https://en.wikipedia.org/api/rest_v1/page/summary/" + query.replace(" ", "_"),
+            timeout=5,
+            headers=_public_api_headers(),
+        )
+        if resp.status_code != 200:
+            return []
+        data = resp.json() or {}
+        if data.get("type") == "disambiguation":
+            return []
+        title = data.get("title") or ""
+        desc = data.get("description") or ""
+        extract = data.get("extract") or ""
+        url = (data.get("content_urls") or {}).get("desktop", {}).get("page") or \
+              f"https://en.wikipedia.org/wiki/{title.replace(' ', '_')}"
+        thumb = (data.get("thumbnail") or {}).get("source") or ""
+        return [{
+            "title": title,
+            "url": url,
+            "body": extract,
+            "subtitle": desc,
+            "thumbnail": thumb,
+            "avatar": thumb,
+            "source": "Wikipedia",
+            "source_type": "person",
+            "profile_card": True,
+        }]
+    except Exception:
+        logger.warning("Wikipedia person summary failed", exc_info=True)
+        return []
+
+
+def _try_github_users(query, max_results=8):
+    """Search GitHub for users matching the query."""
+    results = []
+    try:
+        resp = _get_http().get(
+            "https://api.github.com/search/users",
+            params={"q": query, "per_page": str(min(max_results, 10))},
+            headers={
+                "Accept": "application/vnd.github.v3+json",
+                "User-Agent": _ABBIEY_UA,
+            },
+            timeout=6,
+        )
+        resp.raise_for_status()
+        for u in (resp.json() or {}).get("items", [])[:max_results]:
+            login = u.get("login") or ""
+            if not login:
+                continue
+            # Enrich with full profile for bio/name/company/location
+            name = login
+            bio = ""
+            company = ""
+            location = ""
+            try:
+                pr = _get_http().get(
+                    f"https://api.github.com/users/{login}",
+                    headers={
+                        "Accept": "application/vnd.github.v3+json",
+                        "User-Agent": _ABBIEY_UA,
+                    },
+                    timeout=4,
+                )
+                if pr.status_code == 200:
+                    pd = pr.json() or {}
+                    name = pd.get("name") or login
+                    bio = pd.get("bio") or ""
+                    company = pd.get("company") or ""
+                    location = pd.get("location") or ""
+            except Exception:
+                pass
+            subtitle_bits = [f"GitHub: @{login}"]
+            if company:
+                subtitle_bits.append(company)
+            if location:
+                subtitle_bits.append(location)
+            results.append({
+                "title": name,
+                "url": u.get("html_url") or f"https://github.com/{login}",
+                "body": bio,
+                "subtitle": " · ".join(subtitle_bits),
+                "thumbnail": u.get("avatar_url") or "",
+                "avatar": u.get("avatar_url") or "",
+                "source": "GitHub",
+                "source_type": "person",
+                "profile_card": True,
+            })
+        if results:
+            logger.info("GitHub users search: %d results", len(results))
+    except Exception:
+        logger.warning("GitHub users search failed", exc_info=True)
+    return results
+
+
+def _try_ddg_profiles(query, max_results=30):
+    """DDG text search filtered to social/profile sites, tagged per platform."""
+    sites = " OR ".join(f"site:{s}" for s in _PEOPLE_PROFILE_SITES)
+    q = f"{query} ({sites})"
+    out = []
+    try:
+        raw = _try_ddg(q, max_results, "text", safesearch="off")
+        for r in raw:
+            url = (r.get("url") or "").lower()
+            plat = ""
+            if "linkedin.com/in" in url:
+                plat = "LinkedIn"
+            elif "twitter.com" in url or "x.com" in url:
+                plat = "X (Twitter)"
+            elif "instagram.com" in url:
+                plat = "Instagram"
+            elif "facebook.com" in url:
+                plat = "Facebook"
+            elif "github.com" in url:
+                plat = "GitHub"
+            elif "threads.net" in url:
+                plat = "Threads"
+            elif "youtube.com" in url:
+                plat = "YouTube"
+            elif "mastodon" in url:
+                plat = "Mastodon"
+            elif "about.me" in url:
+                plat = "About.me"
+            elif "muckrack.com" in url:
+                plat = "Muck Rack"
+            elif "crunchbase.com/person" in url:
+                plat = "Crunchbase"
+            out.append({
+                "title": r.get("title") or "",
+                "url": r.get("url") or "",
+                "body": r.get("body") or "",
+                "source": plat or "Web",
+                "source_type": "person",
+            })
+        if out:
+            logger.info("DDG profile search: %d results", len(out))
+    except Exception:
+        logger.warning("DDG profile search failed", exc_info=True)
+    return out
+
+
+def _try_gravatar_email(email):
+    """Query Gravatar's public JSON profile endpoint by md5(email)."""
+    try:
+        norm = (email or "").strip().lower()
+        if "@" not in norm:
+            return []
+        md5 = hashlib.md5(norm.encode("utf-8")).hexdigest()
+        avatar_url = f"https://www.gravatar.com/avatar/{md5}?s=256&d=404"
+        profile_url = f"https://www.gravatar.com/{md5}"
+        # Try JSON profile — public profiles only, returns 404 otherwise
+        name = ""
+        bio = ""
+        display = ""
+        accounts = []
+        try:
+            pr = _get_http().get(
+                f"https://www.gravatar.com/{md5}.json",
+                timeout=5,
+                headers=_public_api_headers(),
+            )
+            if pr.status_code == 200:
+                entries = (pr.json() or {}).get("entry") or []
+                if entries:
+                    e = entries[0]
+                    display = e.get("displayName") or ""
+                    name = ((e.get("name") or {}).get("formatted")) or display
+                    bio = e.get("aboutMe") or ""
+                    for a in (e.get("accounts") or [])[:8]:
+                        if a.get("url"):
+                            accounts.append({
+                                "name": a.get("shortname") or a.get("domain") or "",
+                                "url": a.get("url"),
+                            })
+        except Exception:
+            pass
+        # Avatar HEAD check (if no profile and no avatar, don't surface)
+        has_avatar = False
+        try:
+            head = _get_http().get(
+                avatar_url,
+                timeout=4,
+                headers={"User-Agent": _ABBIEY_UA},
+            )
+            has_avatar = head.status_code == 200
+        except Exception:
+            pass
+        if not (name or bio or accounts or has_avatar):
+            return []
+        subtitle_bits = []
+        if display and display != name:
+            subtitle_bits.append(display)
+        if accounts:
+            subtitle_bits.append(
+                "Linked: " + ", ".join(a["name"] for a in accounts[:3] if a.get("name"))
+            )
+        return [{
+            "title": name or norm,
+            "url": profile_url,
+            "body": bio or "Public Gravatar profile associated with this email hash.",
+            "subtitle": " · ".join(subtitle_bits) if subtitle_bits else "Gravatar profile",
+            "thumbnail": avatar_url if has_avatar else "",
+            "avatar": avatar_url if has_avatar else "",
+            "source": "Gravatar",
+            "source_type": "email",
+            "profile_card": True,
+            "accounts": accounts,
+        }]
+    except Exception:
+        logger.warning("Gravatar lookup failed", exc_info=True)
+        return []
+
+
+def _try_email_dns_facts(email):
+    """Run the existing OSINT pipeline on the email's domain and synthesise
+    a compact 'signal card' result."""
+    try:
+        domain = (email or "").strip().lower().rsplit("@", 1)[-1]
+        if not domain or "." not in domain:
+            return []
+        disposable = domain in _DISPOSABLE_EMAIL_DOMAINS
+        try:
+            enriched = _osint_enrich_run(entity_type="email", value=email) or {}
+        except Exception:
+            enriched = {}
+        facts = enriched.get("facts") or []
+        # Group facts into a human-readable blurb
+        keep = []
+        for f in facts:
+            k = (f.get("kind") or "").lower()
+            v = f.get("value")
+            if not v:
+                continue
+            if k in ("mx", "spf", "dmarc", "a", "aaaa", "rdap", "registrar", "ns", "dkim"):
+                if isinstance(v, list):
+                    v = ", ".join(str(x) for x in v[:3])
+                keep.append(f"{k.upper()}: {v}")
+        blurb = " · ".join(keep[:6])
+        subtitle_bits = [f"Domain: {domain}"]
+        if disposable:
+            subtitle_bits.append("⚠ Disposable provider")
+        if keep:
+            subtitle_bits.append(f"{len(keep)} DNS/WHOIS signals")
+        return [{
+            "title": f"Email domain signals — {domain}",
+            "url": f"https://who.is/whois/{domain}",
+            "body": blurb or ("This email is hosted on " + domain + "."),
+            "subtitle": " · ".join(subtitle_bits),
+            "thumbnail": f"https://logo.clearbit.com/{domain}",
+            "avatar": f"https://logo.clearbit.com/{domain}",
+            "source": "DNS/WHOIS",
+            "source_type": "email",
+            "profile_card": True,
+            "disposable": disposable,
+            "facts": keep,
+        }]
+    except Exception:
+        logger.warning("email DNS fact synthesis failed", exc_info=True)
+        return []
+
+
+def _try_email_web(email, max_results=15):
+    """DDG search for mentions of the email string across public web."""
+    try:
+        raw = _try_ddg(f'"{email}"', max_results, "text", safesearch="off") or []
+        out = []
+        for r in raw:
+            out.append({
+                "title": r.get("title") or "",
+                "url": r.get("url") or "",
+                "body": r.get("body") or "",
+                "source": "Web",
+                "source_type": "email",
+            })
+        return out
+    except Exception:
+        return []
+
+
+def _try_opencorporates(query, max_results=10):
+    """Search OpenCorporates. Free tier now needs a key — we read an optional
+    `OPENCORPORATES_API_TOKEN` env var and skip silently when missing."""
+    results = []
+    try:
+        params = {
+            "q": query,
+            "per_page": str(min(max_results, 20)),
+            "format": "json",
+        }
+        api_token = (os.environ.get("OPENCORPORATES_API_TOKEN") or "").strip()
+        if api_token:
+            params["api_token"] = api_token
+        resp = _get_http().get(
+            "https://api.opencorporates.com/v0.4/companies/search",
+            params=params,
+            timeout=6,
+            headers=_public_api_headers(),
+        )
+        if resp.status_code == 401:
+            logger.info("OpenCorporates skipped: no OPENCORPORATES_API_TOKEN set")
+            return []
+        if resp.status_code != 200:
+            return []
+        data = resp.json() or {}
+        companies = ((data.get("results") or {}).get("companies")) or []
+        for c in companies[:max_results]:
+            comp = c.get("company") or {}
+            name = comp.get("name") or ""
+            if not name:
+                continue
+            jurisdiction = comp.get("jurisdiction_code") or ""
+            comp_num = comp.get("company_number") or ""
+            status = comp.get("current_status") or ""
+            inc_date = comp.get("incorporation_date") or ""
+            company_type = comp.get("company_type") or ""
+            addr = (comp.get("registered_address_in_full") or "").strip()
+            url = comp.get("opencorporates_url") or (
+                f"https://opencorporates.com/companies/{jurisdiction}/{comp_num}"
+                if jurisdiction and comp_num else "https://opencorporates.com/"
+            )
+            meta_bits = []
+            if jurisdiction:
+                meta_bits.append(jurisdiction.upper())
+            if company_type:
+                meta_bits.append(company_type)
+            if status:
+                meta_bits.append(status)
+            if inc_date:
+                meta_bits.append(f"Inc. {inc_date}")
+            body_bits = []
+            if addr:
+                body_bits.append(addr)
+            if comp_num:
+                body_bits.append(f"Reg #{comp_num}")
+            results.append({
+                "title": name,
+                "url": url,
+                "body": " · ".join(body_bits) if body_bits else "Company registry record.",
+                "subtitle": " · ".join(meta_bits) if meta_bits else "OpenCorporates",
+                "thumbnail": "",
+                "source": "OpenCorporates",
+                "source_type": "business",
+                "profile_card": True,
+            })
+        if results:
+            logger.info("OpenCorporates search: %d results", len(results))
+    except Exception:
+        logger.warning("OpenCorporates search failed", exc_info=True)
+    return results
+
+
+def _try_sec_edgar(query, max_results=6):
+    """Hit SEC EDGAR full-text search for US public company filings."""
+    results = []
+    try:
+        # SEC requires a contact email in the User-Agent string.
+        # See https://www.sec.gov/os/accessing-edgar-data
+        resp = _get_http().get(
+            "https://efts.sec.gov/LATEST/search-index",
+            params={"q": query, "forms": "10-K"},
+            timeout=6,
+            headers={
+                "Accept": "application/json",
+                "User-Agent": "abbiey-search research ops@abbiey.app",
+                "Accept-Encoding": "gzip, deflate",
+                "Host": "efts.sec.gov",
+            },
+        )
+        if resp.status_code != 200:
+            return []
+        data = resp.json() or {}
+        hits = ((data.get("hits") or {}).get("hits")) or []
+        seen_ciks = set()
+        # Require the company display name to actually contain the query token.
+        # Without this filter SEC returns any 10-K that mentions the word once.
+        q_tokens = [t for t in re.findall(r"\w+", query.lower()) if len(t) > 2]
+        for h in hits:
+            src = h.get("_source") or {}
+            display = (src.get("display_names") or [None])[0] or ""
+            if not display:
+                continue
+            if q_tokens:
+                name_l = display.lower()
+                if not all(t in name_l for t in q_tokens):
+                    continue
+            # e.g. "APPLE INC  (AAPL) (CIK 0000320193)"
+            name = display.split("  (")[0]
+            cik_part = ""
+            try:
+                cik_part = display.split("(CIK ")[-1].rstrip(")")
+            except Exception:
+                pass
+            if cik_part and cik_part in seen_ciks:
+                continue
+            seen_ciks.add(cik_part)
+            form = src.get("form") or ""
+            date = src.get("file_date") or ""
+            adsh = (h.get("_id") or "").split(":", 1)[0]
+            edgar_url = (
+                f"https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK={cik_part}&type=10-K"
+                if cik_part else
+                f"https://efts.sec.gov/LATEST/search-index?q={query}"
+            )
+            subtitle_bits = []
+            if form:
+                subtitle_bits.append(f"Latest {form}")
+            if date:
+                subtitle_bits.append(date)
+            if cik_part:
+                subtitle_bits.append(f"CIK {cik_part}")
+            results.append({
+                "title": name.title() if name.isupper() else name,
+                "url": edgar_url,
+                "body": f"US public company with SEC filings. {display}",
+                "subtitle": " · ".join(subtitle_bits) if subtitle_bits else "SEC EDGAR",
+                "thumbnail": "",
+                "source": "SEC EDGAR",
+                "source_type": "business",
+                "profile_card": True,
+            })
+            if len(results) >= max_results:
+                break
+        if results:
+            logger.info("SEC EDGAR: %d results", len(results))
+    except Exception:
+        logger.warning("SEC EDGAR search failed", exc_info=True)
+    return results
+
+
+def _try_wikipedia_company(query):
+    """Pull Wikipedia REST summary; useful for notable brands/organisations."""
+    try:
+        resp = _get_http().get(
+            "https://en.wikipedia.org/api/rest_v1/page/summary/" + query.replace(" ", "_"),
+            timeout=5,
+            headers=_public_api_headers(),
+        )
+        if resp.status_code != 200:
+            return []
+        data = resp.json() or {}
+        if data.get("type") == "disambiguation":
+            return []
+        title = data.get("title") or ""
+        desc = data.get("description") or ""
+        extract = data.get("extract") or ""
+        url = (data.get("content_urls") or {}).get("desktop", {}).get("page") or \
+              f"https://en.wikipedia.org/wiki/{title.replace(' ', '_')}"
+        thumb = (data.get("thumbnail") or {}).get("source") or ""
+        return [{
+            "title": title,
+            "url": url,
+            "body": extract,
+            "subtitle": desc or "Wikipedia article",
+            "thumbnail": thumb,
+            "source": "Wikipedia",
+            "source_type": "business",
+            "profile_card": True,
+        }]
+    except Exception:
+        return []
+
+
+def _try_ddg_business(query, max_results=25):
+    """DDG text search filtered to business/registry sites."""
+    sites = " OR ".join(f"site:{s}" for s in _BUSINESS_SITES)
+    q = f"{query} ({sites})"
+    out = []
+    try:
+        raw = _try_ddg(q, max_results, "text", safesearch="off") or []
+        for r in raw:
+            url = (r.get("url") or "").lower()
+            plat = "Web"
+            if "linkedin.com/company" in url:
+                plat = "LinkedIn"
+            elif "crunchbase.com" in url:
+                plat = "Crunchbase"
+            elif "bloomberg.com" in url:
+                plat = "Bloomberg"
+            elif "bbb.org" in url:
+                plat = "BBB"
+            elif "opencorporates.com" in url:
+                plat = "OpenCorporates"
+            elif "sec.gov" in url:
+                plat = "SEC EDGAR"
+            elif "wikipedia.org" in url:
+                plat = "Wikipedia"
+            elif "glassdoor.com" in url:
+                plat = "Glassdoor"
+            out.append({
+                "title": r.get("title") or "",
+                "url": r.get("url") or "",
+                "body": r.get("body") or "",
+                "source": plat,
+                "source_type": "business",
+            })
+        if out:
+            logger.info("DDG business search: %d results", len(out))
+    except Exception:
+        logger.warning("DDG business search failed", exc_info=True)
+    return out
+
+
+def _try_clearbit_logo_for_query(query):
+    """If the query looks like a domain, return a logo-first business card."""
+    try:
+        q = (query or "").strip().lower()
+        m = re.match(r"^([a-z0-9-]+(?:\.[a-z0-9-]+)+)$", q)
+        if not m:
+            return []
+        domain = m.group(1)
+        return [{
+            "title": domain,
+            "url": f"https://{domain}",
+            "body": f"Website at {domain}. Logo fetched via Clearbit public CDN.",
+            "subtitle": f"Domain: {domain}",
+            "thumbnail": f"https://logo.clearbit.com/{domain}",
+            "source": "Clearbit Logo",
+            "source_type": "business",
+            "profile_card": True,
+        }]
+    except Exception:
+        return []
+
+
+def _dedupe_results_by_url(lists):
+    """Interleave several ranked lists and drop duplicates by URL."""
+    seen = set()
+    out = []
+    for batch in zip_longest(*lists):
+        for r in batch:
+            if not r:
+                continue
+            u = (r.get("url") or "").strip()
+            if not u or u in seen:
+                continue
+            seen.add(u)
+            out.append(r)
+    return out
+
+
 # ---- Onion / Deep Web backends ----
 
 def _try_ahmia(query, max_results=30):
@@ -8178,6 +8922,66 @@ def _fetch_results(
             results = []
         else:
             results = _mybot_hits_for_cache(int(mybot_user_id), int(mybot_id), query, max_results)
+    elif search_type == "people":
+        logger.info("People search: Wikidata + Wikipedia + GitHub + DDG social filter")
+        with ThreadPoolExecutor(max_workers=5) as _p_pool:
+            _wd_fut = _p_pool.submit(_try_wikidata_person, effective_query, 5)
+            _wp_fut = _p_pool.submit(_try_wikipedia_person, effective_query)
+            _gh_fut = _p_pool.submit(_try_github_users, effective_query, 6)
+            _ia_fut = _p_pool.submit(_try_ddg_instant, effective_query)
+            _dd_fut = _p_pool.submit(_try_ddg_profiles, effective_query, max_results)
+            wd = _wd_fut.result(timeout=8) or []
+            wp = _wp_fut.result(timeout=6) or []
+            gh = _gh_fut.result(timeout=8) or []
+            ia = _ia_fut.result(timeout=6) or []
+            dd = _dd_fut.result(timeout=10) or []
+        # Force the profile-style hits to the front, then interleave social links
+        top_cards = []
+        for _c in (wp + wd + gh):
+            if _c not in top_cards:
+                top_cards.append(_c)
+        merged = _dedupe_results_by_url([top_cards, dd, ia])
+        results = merged[:max_results]
+        if not results:
+            # Last-ditch fallback — at least return organic DDG web hits for the name
+            results = _try_ddg(effective_query, max_results, "text", safesearch="off") or []
+    elif search_type == "email":
+        em = effective_query.strip()
+        # Extract a plausible address if the user pasted a sentence
+        m = re.search(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", em)
+        addr = m.group(0) if m else em
+        logger.info("Email search: Gravatar + DNS facts + web mentions (email=%s)", addr)
+        with ThreadPoolExecutor(max_workers=3) as _e_pool:
+            _gr_fut = _e_pool.submit(_try_gravatar_email, addr)
+            _dn_fut = _e_pool.submit(_try_email_dns_facts, addr)
+            _wb_fut = _e_pool.submit(_try_email_web, addr, max_results)
+            gr = _gr_fut.result(timeout=8) or []
+            dn = _dn_fut.result(timeout=10) or []
+            wb = _wb_fut.result(timeout=10) or []
+        cards = gr + dn
+        results = _dedupe_results_by_url([cards, wb])[:max_results]
+        if not results:
+            results = _try_ddg(f'"{addr}"', max_results, "text", safesearch="off") or []
+    elif search_type == "business":
+        logger.info("Business search: OpenCorporates + SEC + Wikipedia + DDG business filter")
+        with ThreadPoolExecutor(max_workers=5) as _b_pool:
+            _oc_fut = _b_pool.submit(_try_opencorporates, effective_query, 12)
+            _sc_fut = _b_pool.submit(_try_sec_edgar, effective_query, 6)
+            _wp_fut = _b_pool.submit(_try_wikipedia_company, effective_query)
+            _cl_fut = _b_pool.submit(_try_clearbit_logo_for_query, effective_query)
+            _dd_fut = _b_pool.submit(_try_ddg_business, effective_query, max_results)
+            oc = _oc_fut.result(timeout=8) or []
+            sc = _sc_fut.result(timeout=8) or []
+            wp = _wp_fut.result(timeout=6) or []
+            cl = _cl_fut.result(timeout=4) or []
+            dd = _dd_fut.result(timeout=10) or []
+        top_cards = []
+        for _c in (wp + cl + sc + oc):
+            if _c not in top_cards:
+                top_cards.append(_c)
+        results = _dedupe_results_by_url([top_cards, dd])[:max_results]
+        if not results:
+            results = _try_ddg(effective_query, max_results, "text", safesearch="off") or []
     else:
         results = []
         skip_ddg = False

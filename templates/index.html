@@ -508,13 +508,17 @@
             </form>
 
             {% if not query %}
-            <nav class="home-search-modes" aria-label="What to search">
+            {# Hidden on landing to reduce noise. Tabs appear after a search (see .search-tabs below). Kept in DOM so JS that targets these modes still works. #}
+            <nav class="home-search-modes" aria-label="What to search" hidden>
                 <span class="home-search-modes-label" id="home-search-modes-label">Search</span>
                 <div class="home-search-modes-row" role="group" aria-labelledby="home-search-modes-label">
                     <button type="button" class="home-mode-btn{% if search_type == 'text' %} active{% endif %}" data-search-mode="text" aria-pressed="{% if search_type == 'text' %}true{% else %}false{% endif %}">All</button>
                     <button type="button" class="home-mode-btn{% if search_type == 'images' %} active{% endif %}" data-search-mode="images" aria-pressed="{% if search_type == 'images' %}true{% else %}false{% endif %}">Images</button>
                     <button type="button" class="home-mode-btn{% if search_type == 'news' %} active{% endif %}" data-search-mode="news" aria-pressed="{% if search_type == 'news' %}true{% else %}false{% endif %}">News</button>
                     <button type="button" class="home-mode-btn{% if search_type == 'videos' %} active{% endif %}" data-search-mode="videos" aria-pressed="{% if search_type == 'videos' %}true{% else %}false{% endif %}">Videos</button>
+                    <button type="button" class="home-mode-btn{% if search_type == 'people' %} active{% endif %}" data-search-mode="people" aria-pressed="{% if search_type == 'people' %}true{% else %}false{% endif %}">People</button>
+                    <button type="button" class="home-mode-btn{% if search_type == 'email' %} active{% endif %}" data-search-mode="email" aria-pressed="{% if search_type == 'email' %}true{% else %}false{% endif %}">Email</button>
+                    <button type="button" class="home-mode-btn{% if search_type == 'business' %} active{% endif %}" data-search-mode="business" aria-pressed="{% if search_type == 'business' %}true{% else %}false{% endif %}">Business</button>
                 </div>
             </nav>
             <p class="home-message-sub" aria-label="Search positioning">Direct answers. Sources. No fluff.</p>
@@ -548,6 +552,9 @@
                 <a href="/search?q={{ query|urlencode }}&type=news{% if region %}&region={{ region }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab {% if search_type == 'news' %}active{% endif %}">News</a>
                 <a href="/search?q={{ query|urlencode }}&type=videos{% if region %}&region={{ region }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab {% if search_type == 'videos' %}active{% endif %}">Videos</a>
                 <a href="/search?q={{ query|urlencode }}&type=code{% if region %}&region={{ region }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab {% if search_type == 'code' %}active{% endif %}">Code</a>
+                <a href="/search?q={{ query|urlencode }}&type=people{% if region %}&region={{ region }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab {% if search_type == 'people' %}active{% endif %}">People</a>
+                <a href="/search?q={{ query|urlencode }}&type=email{% if region %}&region={{ region }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab {% if search_type == 'email' %}active{% endif %}">Email</a>
+                <a href="/search?q={{ query|urlencode }}&type=business{% if region %}&region={{ region }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab {% if search_type == 'business' %}active{% endif %}">Business</a>
                 </div>
                 <div class="tab-more-wrap {% if search_type in ('onion', 'saved', 'mybot') %}has-active{% endif %}" id="tab-more-wrap">
                     <button type="button" class="tab tab-more-btn {% if search_type in ('onion', 'saved', 'mybot') %}active{% endif %}" id="tab-more-btn" aria-haspopup="true" aria-expanded="false" aria-controls="tab-more-menu">
@@ -1276,6 +1283,63 @@
                             <button type="button" class="result-action-btn feedback-btn" data-rating="down">Not relevant</button>
                         </div>
                     </article>
+                    {% elif search_type in ('people', 'email', 'business') %}
+                    {% if r.profile_card %}
+                    <article class="result profile-result profile-{{ search_type }}{% if r.disposable %} profile-warn{% endif %}" data-url="{{ r.url }}" data-rank="{{ loop.index0 }}">
+                        <div class="profile-result-head">
+                            {% if r.avatar or r.thumbnail %}
+                            <div class="profile-avatar">
+                                <img src="{{ r.avatar or r.thumbnail }}" alt="" loading="lazy" onerror="this.style.display='none'">
+                            </div>
+                            {% else %}
+                            <div class="profile-avatar profile-avatar-placeholder" aria-hidden="true">
+                                {{ r.title[0]|upper if r.title else '?' }}
+                            </div>
+                            {% endif %}
+                            <div class="profile-result-main">
+                                <a href="{{ r.url }}" target="_blank" rel="noopener" class="result-title profile-name">{{ r.title }}</a>
+                                {% if r.subtitle %}<p class="profile-subtitle">{{ r.subtitle }}</p>{% endif %}
+                                <div class="profile-source-row">
+                                    {% if r.source %}<span class="profile-source-chip">{{ r.source }}</span>{% endif %}
+                                    {% if r.disposable %}<span class="profile-source-chip profile-chip-warn">Disposable</span>{% endif %}
+                                    <img class="result-favicon" src="https://icons.duckduckgo.com/ip3/{{ r.url|domain }}/favicon.ico" onerror="this.style.display='none'" alt="" loading="lazy">
+                                    <cite class="result-url">{{ r.url|domain }}</cite>
+                                </div>
+                            </div>
+                        </div>
+                        {% if r.body %}<p class="result-snippet profile-bio">{{ r.body }}</p>{% endif %}
+                        {% if r.facts %}
+                        <ul class="profile-facts" role="list">
+                            {% for f in r.facts %}<li class="profile-fact">{{ f }}</li>{% endfor %}
+                        </ul>
+                        {% endif %}
+                        {% if r.accounts %}
+                        <ul class="profile-accounts" role="list">
+                            {% for a in r.accounts %}
+                            <li><a href="{{ a.url }}" target="_blank" rel="noopener">{{ a.name or a.url|domain }}</a></li>
+                            {% endfor %}
+                        </ul>
+                        {% endif %}
+                        <div class="result-actions" data-feedback="1">
+                            <button type="button" class="result-action-btn feedback-btn" data-rating="up">Helpful</button>
+                            <button type="button" class="result-action-btn feedback-btn" data-rating="down">Not relevant</button>
+                        </div>
+                    </article>
+                    {% else %}
+                    <article class="result profile-link-result" data-url="{{ r.url }}" data-rank="{{ loop.index0 }}">
+                        <div class="result-domain-row">
+                            <img class="result-favicon" src="https://icons.duckduckgo.com/ip3/{{ r.url|domain }}/favicon.ico" onerror="this.style.display='none'" alt="" loading="lazy">
+                            <span class="result-domain">{{ r.url|domain }}</span>
+                            {% if r.source %}<span class="profile-source-chip">{{ r.source }}</span>{% endif %}
+                        </div>
+                        <a href="{{ r.url }}" target="_blank" rel="noopener" class="result-title">{{ r.title }}</a>
+                        <p class="result-snippet">{{ r.body }}</p>
+                        <div class="result-actions" data-feedback="1">
+                            <button type="button" class="result-action-btn feedback-btn" data-rating="up">Helpful</button>
+                            <button type="button" class="result-action-btn feedback-btn" data-rating="down">Not relevant</button>
+                        </div>
+                    </article>
+                    {% endif %}
                     {% else %}
                     <article class="result" data-url="{{ r.url }}" data-source-type="{{ r.source_type or '' }}" data-rank="{{ loop.index0 }}">
                         <button class="bookmark-btn" data-url="{{ r.url }}" data-title="{{ r.title|e }}" data-snippet="{{ r.body|e }}" aria-label="Save result" title="Save">
@@ -1349,7 +1413,7 @@
     </main>
 
     {# ===== RESULT PREVIEW PANEL ===== #}
-    {% if query and search_type in ('text', 'news', 'code', 'onion', 'videos', 'images', 'saved', 'prices', 'alts', 'mybot') %}
+    {% if query and search_type in ('text', 'news', 'code', 'onion', 'videos', 'images', 'saved', 'prices', 'alts', 'mybot', 'people', 'email', 'business') %}
     <div class="layout-gutter-preview" id="layout-gutter-preview" role="separator" aria-orientation="vertical" aria-label="Resize preview panel" tabindex="0"></div>
     <aside class="preview-panel" id="preview-panel">
         <div class="preview-header">
@@ -1545,6 +1609,9 @@
                     <button class="welcome-chip" data-type="images">Images</button>
                     <button class="welcome-chip" data-type="code">Code</button>
                     <button class="welcome-chip" data-type="videos">Videos</button>
+                    <button class="welcome-chip" data-type="people">People</button>
+                    <button class="welcome-chip" data-type="email">Email</button>
+                    <button class="welcome-chip" data-type="business">Business</button>
                     <button class="welcome-chip" data-type="onion">Deep web</button>
                 </div>
                 <p style="margin:1rem 0 0;text-align:center"><a href="/search" class="welcome-skip">Skip</a></p>
