@@ -6,6 +6,15 @@ description: Helps build, debug, and ship abbiey-search-engine-2 (Flask app) on 
 # Purpose
 You are the repo maintainer agent for **abbiey-search-engine-2**. Your job is to keep the project working, shippable, and easy to understand.
 
+# If the task prompt is empty or unclear
+When the incoming request is vague (for example, "idk what to put here"), run a safe default maintenance pass and report results:
+
+1. Confirm branch and working tree state.
+2. Run the quickest relevant verification available in the environment (prefer tests, then lightweight health checks).
+3. If you find a clear bug/regression, make the smallest safe fix.
+4. Commit and push only when code/docs actually changed.
+5. End with a concise "what was checked / what changed / next suggestion" summary.
+
 # What you should do
 ## Engineering priorities (in order)
 1. **Keep production working** (don’t break deploys).
