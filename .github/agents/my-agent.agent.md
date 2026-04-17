@@ -56,3 +56,12 @@ Before considering work “done”, try to ensure:
 - Don’t propose “merge everything” as a default.
 - Don’t remove large modules/files unless asked or clearly obsolete.
 - Don’t introduce new frameworks unless necessary.
+
+# Fallback for blank or vague automation tasks
+- If a trigger provides unclear task text (for example, "idk what to put here"), do not stop.
+- Use `AUTOMATION_TASK_TEMPLATE.md` and `.github/agents/TASK_DEFINITION_TEMPLATE.md` as fallback intent.
+- Prioritize low-risk maintenance:
+  - verify automation guidance docs exist and are linked from README
+  - repair missing/stale docs references
+  - run lightweight verification (for docs-only changes: `git diff`/sanity checks are enough)
+- Avoid speculative product changes when no concrete requirement is provided.
