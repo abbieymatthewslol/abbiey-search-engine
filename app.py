@@ -3181,6 +3181,12 @@ def about():
     return render_template("about.html")
 
 
+@app.route("/bots")
+def bots():
+    """Landing page explaining custom search bots and prompting sign-up."""
+    return render_template("bots.html")
+
+
 @app.route("/landing")
 def landing():
     """Backward-compatible redirect for the old about URL."""

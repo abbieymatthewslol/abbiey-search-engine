@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" data-density="default">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>abbieysearch — Custom Bots</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=deploy_hash) }}">
+    {% include 'includes/google_site_verification.html' %}
+    <script nonce="{{ csp_nonce }}">
+        window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
+    </script>
+    <script defer src="/_vercel/speed-insights/script.js"></script>
+    <meta name="description" content="Create custom search bots on abbieysearch — sign up for a free account to get started.">
+    <link rel="canonical" href="{{ site_base_url }}/bots">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="abbieysearch">
+    <meta property="og:title" content="abbieysearch — Custom Bots">
+    <meta property="og:description" content="Build your own search bots on abbieysearch. Sign up to get started.">
+    <meta property="og:url" content="{{ site_base_url }}/bots">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="abbieysearch — Custom Bots">
+    <meta name="twitter:description" content="Build your own search bots on abbieysearch. Sign up to get started.">
+    <style nonce="{{ csp_nonce }}">
+        .bots-gate {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 60vh;
+            text-align: center;
+            gap: 1.25rem;
+            padding: 2rem 1rem;
+        }
+        .bots-gate-icon {
+            font-size: 3rem;
+            line-height: 1;
+            opacity: .75;
+        }
+        .bots-gate h1 {
+            font-size: 1.6rem;
+            font-weight: 700;
+            margin: 0;
+        }
+        .bots-gate p {
+            max-width: 38ch;
+            opacity: .75;
+            font-size: 1.05rem;
+            margin: 0;
+            line-height: 1.55;
+        }
+        .bots-gate-actions {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: .6rem;
+            margin-top: .5rem;
+        }
+        .bots-gate-actions .btn-primary {
+            display: inline-block;
+            padding: .65rem 1.6rem;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            text-decoration: none;
+            background: var(--accent, #7c6cfc);
+            color: #fff;
+            transition: opacity .15s;
+        }
+        .bots-gate-actions .btn-primary:hover {
+            opacity: .88;
+        }
+        .bots-gate-actions .btn-secondary {
+            font-size: .9rem;
+            opacity: .6;
+            text-decoration: none;
+            color: inherit;
+        }
+        .bots-gate-actions .btn-secondary:hover {
+            opacity: .9;
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <header class="landing-header">
+        <a href="/search" class="logo">abbiey<span>search</span></a>
+        <a href="/search" class="header-btn landing-cta">Open search</a>
+    </header>
+    {% include 'includes/google_analytics.html' %}
+    <main class="landing-main">
+        <div class="bots-gate">
+            <div class="bots-gate-icon" aria-hidden="true">🤖</div>
+            <h1>Custom search bots</h1>
+            <p>
+                To create and manage custom search bots you need a free abbieysearch account.
+                Bots let you point the search engine at your own set of pages and get focused,
+                sourced answers from exactly the content you choose.
+            </p>
+            <div class="bots-gate-actions">
+                <a href="/signup" class="btn-primary">Continue to sign up</a>
+                <a href="/login" class="btn-secondary">Already have an account? Log in</a>
+            </div>
+        </div>
+    </main>
+    <footer class="landing-footer">
+        <p class="footer-links">
+            <a href="/privacy">Privacy Policy</a>
+            &nbsp;&middot;&nbsp;
+            <a href="/terms">Terms of Service</a>
+            &nbsp;&middot;&nbsp;
+            <a href="/search">Search</a>
+        </p>
+    </footer>
+</body>
+</html>
