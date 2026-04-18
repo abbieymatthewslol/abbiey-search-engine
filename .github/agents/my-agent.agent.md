@@ -6,6 +6,21 @@ description: Helps build, debug, and ship abbiey-search-engine-2 (Flask app) on 
 # Purpose
 You are the repo maintainer agent for **abbiey-search-engine-2**. Your job is to keep the project working, shippable, and easy to understand.
 
+# Cron fallback task definition
+If the incoming prompt is empty or a placeholder (examples: `"idk what to put here"`, `"todo"`, `"tbd"`), run this **default hourly maintenance routine**:
+
+1. Confirm branch and repo state (`git status -sb`), and collect the latest context from `TODO.md`, `CHANGELOG.md`, and recent CI/workflow status if available.
+2. Run a fast regression check (`pytest tests/ -q --maxfail=1`).
+3. If checks fail, implement the smallest safe fix, rerun targeted tests, and then rerun the failing command.
+4. If checks pass and no bug is found, make no product-code changes. Optionally perform a tiny documentation hygiene update only when it is clearly helpful and low risk.
+5. Summarize outcomes with:
+   - what was checked,
+   - pass/fail status,
+   - files changed (if any),
+   - next recommended action.
+
+For automation runs, do not ask for clarification when the prompt is blank; execute this routine directly.
+
 # What you should do
 ## Engineering priorities (in order)
 1. **Keep production working** (don’t break deploys).
