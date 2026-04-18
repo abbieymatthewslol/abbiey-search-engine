@@ -77,9 +77,26 @@
             outline: 2px solid var(--accent, #7c6cfc);
             outline-offset: 2px;
         }
-        .chatbot-card-icon {
-            font-size: 2rem;
-            line-height: 1;
+        .chatbot-card-icon-wrap {
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 10px;
+            border: 1px solid rgba(255,255,255,.07);
+            background: rgba(255,255,255,.04);
+            flex-shrink: 0;
+            color: var(--text-muted, rgba(255,255,255,.5));
+        }
+        .chatbot-card-icon-wrap svg {
+            width: 18px;
+            height: 18px;
+            stroke: currentColor;
+            stroke-width: 1.75;
+            fill: none;
+            stroke-linecap: round;
+            stroke-linejoin: round;
         }
         .chatbot-card-name {
             font-size: 1rem;
@@ -136,8 +153,25 @@
             gap: .5rem;
         }
         .chatbot-chat-bot-icon {
-            font-size: 1.3rem;
-            line-height: 1;
+            width: 28px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,.07);
+            background: rgba(255,255,255,.04);
+            flex-shrink: 0;
+            color: var(--text-muted, rgba(255,255,255,.5));
+        }
+        .chatbot-chat-bot-icon svg {
+            width: 15px;
+            height: 15px;
+            stroke: currentColor;
+            stroke-width: 1.75;
+            fill: none;
+            stroke-linecap: round;
+            stroke-linejoin: round;
         }
         .chatbot-chat-bot-name {
             font-size: 1.05rem;
@@ -274,7 +308,35 @@
                      data-bot-name="{{ bot.name }}"
                      data-bot-icon="{{ bot.icon }}"
                      aria-label="Open {{ bot.name }} chatbot">
-                    <span class="chatbot-card-icon" aria-hidden="true">{{ bot.icon }}</span>
+                    <div class="chatbot-card-icon-wrap" aria-hidden="true">
+                        {% if bot.id == 'osint' %}
+                        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                        {% elif bot.id == 'research' %}
+                        <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+                        {% elif bot.id == 'code' %}
+                        <svg viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                        {% elif bot.id == 'cyber' %}
+                        <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                        {% elif bot.id == 'legal' %}
+                        <svg viewBox="0 0 24 24"><line x1="12" y1="2" x2="12" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+                        {% elif bot.id == 'finance' %}
+                        <svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                        {% elif bot.id == 'malware' %}
+                        <svg viewBox="0 0 24 24"><path d="M12 8a4 4 0 014 4v4a4 4 0 01-8 0v-4a4 4 0 014-4z"/><path d="M8 2l1.5 1.5"/><path d="M14.5 3.5L16 2"/><path d="M9 13H5"/><path d="M19 13h-4"/><path d="M12 20v2"/></svg>
+                        {% elif bot.id == 'forensics' %}
+                        <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                        {% elif bot.id == 'underground' %}
+                        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
+                        {% elif bot.id == 'surveillance' %}
+                        <svg viewBox="0 0 24 24"><path d="M5 12.55a11 11 0 0114.08 0"/><path d="M1.42 9a16 16 0 0121.16 0"/><path d="M8.53 16.11a6 6 0 016.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+                        {% elif bot.id == 'autonomous' %}
+                        <svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></svg>
+                        {% elif bot.id == 'darknet' %}
+                        <svg viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+                        {% else %}
+                        <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                        {% endif %}
+                    </div>
                     <p class="chatbot-card-name">{{ bot.name }}</p>
                     <p class="chatbot-card-desc">{{ bot.description }}</p>
                 </div>
@@ -332,6 +394,27 @@
         var activeBotId = null;
         var chatHistory = [];
 
+        // ── SVG icon paths per bot (Lucide, stroke-based) ──
+        var BOT_ICONS = {
+            osint:       '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>',
+            research:    '<path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>',
+            code:        '<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>',
+            cyber:       '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
+            legal:       '<line x1="12" y1="2" x2="12" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>',
+            finance:     '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
+            malware:     '<path d="M12 8a4 4 0 014 4v4a4 4 0 01-8 0v-4a4 4 0 014-4z"/><path d="M8 2l1.5 1.5"/><path d="M14.5 3.5L16 2"/><path d="M9 13H5"/><path d="M19 13h-4"/><path d="M12 20v2"/>',
+            forensics:   '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>',
+            underground: '<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/>',
+            surveillance:'<path d="M5 12.55a11 11 0 0114.08 0"/><path d="M1.42 9a16 16 0 0121.16 0"/><path d="M8.53 16.11a6 6 0 016.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/>',
+            autonomous:  '<rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/>',
+            darknet:     '<path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>'
+        };
+
+        function _botSvg(botId) {
+            var paths = BOT_ICONS[botId] || '<path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>';
+            return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">' + paths + '</svg>';
+        }
+
         // ── Elements ──
         var gridSection  = document.getElementById('chatbots-grid-section');
         var chatSection  = document.getElementById('chatbot-chat-view');
@@ -357,7 +440,7 @@
             chatHistory = [];
 
             botNameEl.textContent = botName;
-            botIconEl.textContent = botIcon;
+            botIconEl.innerHTML = _botSvg(botId);
             welcomeMsg.textContent = 'Hello! I am your ' + botName + ' agent. How can I help you?';
 
             // Clear previous messages except welcome
