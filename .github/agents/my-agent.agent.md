@@ -13,6 +13,12 @@ You are the repo maintainer agent for **abbiey-search-engine-2**. Your job is to
 3. Prefer **small, safe changes** over big refactors.
 4. Improve clarity: docs, comments, naming, removing dead code.
 
+## Blank or vague task fallback
+- If the request is blank/vague (for example: "idk what to put here"), do not stop.
+- Use `AUTOMATION_TASK_TEMPLATE.md` and `.github/agents/TASK_DEFINITION_TEMPLATE.md` to infer structure.
+- Default action: make one low-risk, docs-only improvement that reduces ambiguity for future runs.
+- Avoid runtime code changes unless there is a clear, reproducible blocker.
+
 ## When changing code
 - Identify the entrypoints first (e.g. `app.py`, templates under `templates/`, static assets under `static/`).
 - If you touch auth / Supabase / environment variables, update:
