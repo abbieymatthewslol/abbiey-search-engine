@@ -5880,3 +5880,38 @@ footer {
   .profile-avatar { width: 44px; height: 44px; font-size: 1.15rem; }
   .profile-name { font-size: 1rem; }
 }
+
+/* ============================================================
+   Chatbots hub — homepage entry point
+   ============================================================ */
+.home-chatbots-row {
+  display: flex;
+  justify-content: center;
+  margin: 1.1rem 0 .25rem;
+}
+
+.home-chatbots-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  padding: .45rem 1.1rem;
+  border-radius: 999px;
+  border: 1px solid var(--border, rgba(255,255,255,.14));
+  background: transparent;
+  color: inherit;
+  font-size: .9rem;
+  font-weight: 500;
+  text-decoration: none;
+  opacity: .75;
+  transition: opacity .15s, border-color .15s, background .15s;
+}
+
+.home-chatbots-btn:hover {
+  opacity: 1;
+  border-color: var(--accent, #7c6cfc);
+  background: color-mix(in srgb, var(--accent, #7c6cfc) 8%, transparent);
+}
+
+.home-chatbots-btn svg {
+  flex-shrink: 0;
+}

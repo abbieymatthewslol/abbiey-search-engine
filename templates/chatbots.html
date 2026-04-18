@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>abbieysearch — AI Chatbots</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=deploy_hash) }}">
+    {% include 'includes/google_site_verification.html' %}
+    <script nonce="{{ csp_nonce }}">
+        window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
+    </script>
+    <script defer src="/_vercel/speed-insights/script.js"></script>
+    <meta name="description" content="Specialized AI chatbots on abbieysearch — OSINT analysis, research, code, cybersecurity, legal, and financial intelligence.">
+    <link rel="canonical" href="{{ site_base_url }}/chatbots">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="abbieysearch">
+    <meta property="og:title" content="abbieysearch — AI Chatbots">
+    <meta property="og:description" content="Specialized AI chat agents: OSINT analysis, research, code, cybersecurity, legal, and financial intelligence.">
+    <meta property="og:url" content="{{ site_base_url }}/chatbots">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="abbieysearch — AI Chatbots">
+    <meta name="twitter:description" content="Specialized AI chat agents on abbieysearch.">
+    <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png">
+    <link rel="shortcut icon" href="/favicon.ico">
+    <style nonce="{{ csp_nonce }}">
+        /* ── Page shell ── */
+        .chatbots-page {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .chatbots-main {
+            flex: 1;
+            max-width: 900px;
+            width: 100%;
+            margin: 0 auto;
+            padding: 2.5rem 1.25rem 3rem;
+        }
+
+        /* ── Grid view ── */
+        .chatbots-header {
+            margin-bottom: 2rem;
+        }
+        .chatbots-title {
+            font-size: 1.7rem;
+            font-weight: 700;
+            margin: 0 0 .4rem;
+        }
+        .chatbots-subtitle {
+            font-size: 1rem;
+            opacity: .65;
+            margin: 0;
+        }
+        .chatbots-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 1rem;
+        }
+        .chatbot-card {
+            display: flex;
+            flex-direction: column;
+            gap: .55rem;
+            padding: 1.4rem 1.2rem 1.3rem;
+            border-radius: 16px;
+            border: 1px solid var(--border, rgba(255,255,255,.12));
+            background: var(--card-bg, rgba(255,255,255,.03));
+            cursor: pointer;
+            transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+            user-select: none;
+        }
+        .chatbot-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 24px rgba(0,0,0,.25);
+            border-color: var(--accent, #7c6cfc);
+        }
+        .chatbot-card:focus-visible {
+            outline: 2px solid var(--accent, #7c6cfc);
+            outline-offset: 2px;
+        }
+        .chatbot-card-icon {
+            font-size: 2rem;
+            line-height: 1;
+        }
+        .chatbot-card-name {
+            font-size: 1rem;
+            font-weight: 650;
+            margin: 0;
+        }
+        .chatbot-card-desc {
+            font-size: .82rem;
+            opacity: .6;
+            margin: 0;
+            line-height: 1.45;
+        }
+
+        /* ── Chat view ── */
+        .chatbot-chat-view {
+            display: none;
+            flex-direction: column;
+            height: calc(100vh - 120px);
+            max-height: 780px;
+        }
+        .chatbot-chat-view.active {
+            display: flex;
+        }
+        .chatbot-chat-header {
+            display: flex;
+            align-items: center;
+            gap: .75rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border, rgba(255,255,255,.12));
+            margin-bottom: 0;
+            flex-shrink: 0;
+        }
+        .chatbot-back-btn {
+            background: none;
+            border: 1px solid var(--border, rgba(255,255,255,.12));
+            border-radius: 8px;
+            padding: .35rem .55rem;
+            cursor: pointer;
+            color: inherit;
+            display: flex;
+            align-items: center;
+            gap: .3rem;
+            font-size: .85rem;
+            opacity: .75;
+            transition: opacity .15s;
+            flex-shrink: 0;
+        }
+        .chatbot-back-btn:hover {
+            opacity: 1;
+        }
+        .chatbot-chat-bot-info {
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+        }
+        .chatbot-chat-bot-icon {
+            font-size: 1.3rem;
+            line-height: 1;
+        }
+        .chatbot-chat-bot-name {
+            font-size: 1.05rem;
+            font-weight: 650;
+        }
+        .chatbot-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1rem 0;
+            display: flex;
+            flex-direction: column;
+            gap: .75rem;
+            scroll-behavior: smooth;
+        }
+        .chatbot-msg {
+            max-width: 75%;
+            padding: .7rem 1rem;
+            border-radius: 14px;
+            font-size: .92rem;
+            line-height: 1.55;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .chatbot-msg.user {
+            align-self: flex-end;
+            background: var(--accent, #7c6cfc);
+            color: #fff;
+            border-bottom-right-radius: 4px;
+        }
+        .chatbot-msg.assistant {
+            align-self: flex-start;
+            background: var(--card-bg, rgba(255,255,255,.06));
+            border: 1px solid var(--border, rgba(255,255,255,.1));
+            border-bottom-left-radius: 4px;
+        }
+        .chatbot-msg.typing {
+            opacity: .55;
+            font-style: italic;
+        }
+        .chatbot-welcome-msg {
+            align-self: flex-start;
+            font-size: .9rem;
+            opacity: .6;
+            padding: .5rem 0;
+        }
+        .chatbot-input-area {
+            padding-top: .85rem;
+            border-top: 1px solid var(--border, rgba(255,255,255,.12));
+            flex-shrink: 0;
+        }
+        .chatbot-input-row {
+            display: flex;
+            gap: .6rem;
+            align-items: flex-end;
+        }
+        .chatbot-input {
+            flex: 1;
+            background: var(--input-bg, rgba(255,255,255,.06));
+            border: 1px solid var(--border, rgba(255,255,255,.14));
+            border-radius: 10px;
+            padding: .65rem .9rem;
+            font-size: .95rem;
+            color: inherit;
+            font-family: inherit;
+            resize: none;
+            min-height: 44px;
+            max-height: 140px;
+            outline: none;
+            transition: border-color .15s;
+            line-height: 1.45;
+        }
+        .chatbot-input:focus {
+            border-color: var(--accent, #7c6cfc);
+        }
+        .chatbot-send-btn {
+            background: var(--accent, #7c6cfc);
+            color: #fff;
+            border: none;
+            border-radius: 10px;
+            width: 42px;
+            height: 42px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            flex-shrink: 0;
+            transition: opacity .15s;
+        }
+        .chatbot-send-btn:hover:not(:disabled) {
+            opacity: .85;
+        }
+        .chatbot-send-btn:disabled {
+            opacity: .4;
+            cursor: not-allowed;
+        }
+
+        /* ── Grid hidden while chat is open ── */
+        .chatbots-grid-section {
+            display: block;
+        }
+        .chatbots-grid-section.hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body class="chatbots-page">
+    <header class="landing-header">
+        <a href="/search" class="logo">abbiey<span>search</span></a>
+        <div style="display:flex;align-items:center;gap:.75rem;">
+            {% if current_user %}
+            <a href="/profile" class="header-btn landing-cta" style="font-size:.88rem;">{{ (current_user.display_name or current_user.username)[0]|upper }} {{ current_user.display_name or current_user.username }}</a>
+            {% else %}
+            <a href="/login" class="header-btn" style="font-size:.88rem;opacity:.7;">Sign in</a>
+            {% endif %}
+            <a href="/search" class="header-btn landing-cta">Open search</a>
+        </div>
+    </header>
+    {% include 'includes/google_analytics.html' %}
+
+    <main class="chatbots-main">
+
+        {# ── Grid view ── #}
+        <section class="chatbots-grid-section" id="chatbots-grid-section" aria-label="Available chatbots">
+            <div class="chatbots-header">
+                <h1 class="chatbots-title">AI Chatbots</h1>
+                <p class="chatbots-subtitle">Choose a specialist agent to start a conversation.</p>
+            </div>
+            <div class="chatbots-grid" id="chatbots-grid">
+                {% for bot in bots %}
+                <div class="chatbot-card"
+                     role="button"
+                     tabindex="0"
+                     data-bot-id="{{ bot.id }}"
+                     data-bot-name="{{ bot.name }}"
+                     data-bot-icon="{{ bot.icon }}"
+                     aria-label="Open {{ bot.name }} chatbot">
+                    <span class="chatbot-card-icon" aria-hidden="true">{{ bot.icon }}</span>
+                    <p class="chatbot-card-name">{{ bot.name }}</p>
+                    <p class="chatbot-card-desc">{{ bot.description }}</p>
+                </div>
+                {% endfor %}
+            </div>
+        </section>
+
+        {# ── Chat view ── #}
+        <section class="chatbot-chat-view" id="chatbot-chat-view" aria-label="Chat interface" aria-live="polite">
+            <div class="chatbot-chat-header">
+                <button class="chatbot-back-btn" id="chatbot-back-btn" aria-label="Back to chatbots list">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+                    Back
+                </button>
+                <div class="chatbot-chat-bot-info">
+                    <span class="chatbot-chat-bot-icon" id="chat-bot-icon" aria-hidden="true"></span>
+                    <span class="chatbot-chat-bot-name" id="chat-bot-name"></span>
+                </div>
+            </div>
+            <div class="chatbot-messages" id="chatbot-messages">
+                <p class="chatbot-welcome-msg" id="chatbot-welcome-msg"></p>
+            </div>
+            <div class="chatbot-input-area">
+                <div class="chatbot-input-row">
+                    <textarea class="chatbot-input"
+                              id="chatbot-input"
+                              rows="1"
+                              placeholder="Type a message…"
+                              aria-label="Chat message"
+                              maxlength="4000"></textarea>
+                    <button class="chatbot-send-btn" id="chatbot-send-btn" aria-label="Send message" disabled>
+                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4z"/></svg>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <footer class="landing-footer">
+        <p class="footer-links">
+            <a href="/privacy">Privacy Policy</a>
+            &nbsp;&middot;&nbsp;
+            <a href="/terms">Terms of Service</a>
+            &nbsp;&middot;&nbsp;
+            <a href="/search">Search</a>
+        </p>
+    </footer>
+
+    <script nonce="{{ csp_nonce }}">
+    (function () {
+        'use strict';
+
+        // ── State ──
+        var activeBotId = null;
+        var chatHistory = [];
+
+        // ── Elements ──
+        var gridSection  = document.getElementById('chatbots-grid-section');
+        var chatSection  = document.getElementById('chatbot-chat-view');
+        var botNameEl    = document.getElementById('chat-bot-name');
+        var botIconEl    = document.getElementById('chat-bot-icon');
+        var welcomeMsg   = document.getElementById('chatbot-welcome-msg');
+        var messagesEl   = document.getElementById('chatbot-messages');
+        var inputEl      = document.getElementById('chatbot-input');
+        var sendBtn      = document.getElementById('chatbot-send-btn');
+        var backBtn      = document.getElementById('chatbot-back-btn');
+
+        // ── Theme sync ──
+        (function syncTheme() {
+            var t = localStorage.getItem('theme') || 'dark';
+            document.documentElement.setAttribute('data-theme', t);
+            var a = localStorage.getItem('accent-color') || localStorage.getItem('accentColor');
+            if (a) document.documentElement.style.setProperty('--accent', a);
+        })();
+
+        // ── Open a bot chat ──
+        function openChat(botId, botName, botIcon) {
+            activeBotId = botId;
+            chatHistory = [];
+
+            botNameEl.textContent = botName;
+            botIconEl.textContent = botIcon;
+            welcomeMsg.textContent = 'Hello! I am your ' + botName + ' agent. How can I help you?';
+
+            // Clear previous messages except welcome
+            var msgs = messagesEl.querySelectorAll('.chatbot-msg');
+            msgs.forEach(function (m) { m.remove(); });
+
+            gridSection.classList.add('hidden');
+            chatSection.classList.add('active');
+            inputEl.focus();
+        }
+
+        // ── Return to grid ──
+        function showGrid() {
+            chatSection.classList.remove('active');
+            gridSection.classList.remove('hidden');
+            activeBotId = null;
+            chatHistory = [];
+        }
+
+        // ── Render a message bubble ──
+        function appendMessage(role, text) {
+            var div = document.createElement('div');
+            div.className = 'chatbot-msg ' + role;
+            div.textContent = text;
+            messagesEl.appendChild(div);
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+            return div;
+        }
+
+        // ── Send message ──
+        function sendMessage() {
+            var text = inputEl.value.trim();
+            if (!text || !activeBotId) return;
+
+            inputEl.value = '';
+            autoResizeInput();
+            sendBtn.disabled = true;
+
+            appendMessage('user', text);
+
+            var typingEl = appendMessage('assistant typing', 'Thinking…');
+
+            fetch('/api/chatbot-chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    bot_id: activeBotId,
+                    message: text,
+                    history: chatHistory.slice()
+                })
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                typingEl.remove();
+                if (data.error) {
+                    appendMessage('assistant', 'Error: ' + data.error);
+                } else {
+                    var reply = data.response || '';
+                    chatHistory.push({ role: 'user', content: text });
+                    chatHistory.push({ role: 'assistant', content: reply });
+                    appendMessage('assistant', reply);
+                }
+            })
+            .catch(function () {
+                typingEl.remove();
+                appendMessage('assistant', 'Network error — please try again.');
+            })
+            .finally(function () {
+                sendBtn.disabled = inputEl.value.trim().length === 0;
+                inputEl.focus();
+            });
+        }
+
+        // ── Auto-grow textarea ──
+        function autoResizeInput() {
+            inputEl.style.height = 'auto';
+            inputEl.style.height = Math.min(inputEl.scrollHeight, 140) + 'px';
+        }
+
+        // ── Wire up card clicks ──
+        document.getElementById('chatbots-grid').addEventListener('click', function (e) {
+            var card = e.target.closest('.chatbot-card');
+            if (!card) return;
+            openChat(card.dataset.botId, card.dataset.botName, card.dataset.botIcon);
+        });
+
+        document.getElementById('chatbots-grid').addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+                var card = e.target.closest('.chatbot-card');
+                if (card) {
+                    e.preventDefault();
+                    openChat(card.dataset.botId, card.dataset.botName, card.dataset.botIcon);
+                }
+            }
+        });
+
+        // ── Back button ──
+        backBtn.addEventListener('click', showGrid);
+
+        // ── Send button ──
+        sendBtn.addEventListener('click', sendMessage);
+
+        // ── Textarea events ──
+        inputEl.addEventListener('input', function () {
+            autoResizeInput();
+            sendBtn.disabled = inputEl.value.trim().length === 0;
+        });
+
+        inputEl.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                if (!sendBtn.disabled) sendMessage();
+            }
+        });
+    })();
+    </script>
+</body>
+</html>
