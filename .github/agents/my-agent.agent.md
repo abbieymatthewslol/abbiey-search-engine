@@ -13,6 +13,24 @@ You are the repo maintainer agent for **abbiey-search-engine-2**. Your job is to
 3. Prefer **small, safe changes** over big refactors.
 4. Improve clarity: docs, comments, naming, removing dead code.
 
+## Default cron task (when trigger text is empty/placeholder)
+If the incoming task text is empty or vague (for example: `"idk what to put here"`), run this default hourly maintenance loop:
+
+1. **Read state first**
+   - Check current branch and `git status`.
+   - Scan recent workflow failures (if any) and changed files relevant to breakage.
+2. **Run fast safety checks**
+   - `python scripts/verify_production_env.py`
+   - `pytest tests/ -q --maxfail=1`
+3. **Take the smallest safe action**
+   - If checks pass: do not invent changes; report “no action needed”.
+   - If checks fail and a small fix is obvious: implement the fix, re-run impacted tests, and summarize risk.
+4. **Ship cleanly**
+   - Commit only intentional changes with a clear message.
+   - Push branch updates and provide a short run summary (what was checked, what failed/passed, what changed).
+
+If a failure depends on missing secrets or external credentials, do not guess values. Report the exact missing input and continue with all checks that do not require secrets.
+
 ## When changing code
 - Identify the entrypoints first (e.g. `app.py`, templates under `templates/`, static assets under `static/`).
 - If you touch auth / Supabase / environment variables, update:
