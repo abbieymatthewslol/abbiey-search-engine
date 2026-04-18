@@ -602,25 +602,54 @@ document.addEventListener("DOMContentLoaded", () => {
     return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
   }
 
+  // Wrap URL paths in a span so CSS can hide just the path, leaving the domain visible
+  function applyDomainUrlStyle() {
+    document.querySelectorAll("cite.result-url").forEach(el => {
+      if (el.dataset.urlProcessed) return;
+      el.dataset.urlProcessed = "1";
+      const raw = el.textContent.trim();
+      try {
+        const u = new URL(raw.startsWith("http") ? raw : "https://" + raw);
+        const domain = u.protocol + "//" + u.host;
+        const path   = u.pathname + u.search + u.hash;
+        if (path && path !== "/") {
+          el.innerHTML = "";
+          el.appendChild(document.createTextNode(domain));
+          const pathSpan = document.createElement("span");
+          pathSpan.className = "result-url-path";
+          pathSpan.textContent = path;
+          el.appendChild(pathSpan);
+        }
+      } catch {}
+    });
+  }
+
   // Theme settings popover
   // ===== Settings Modal =====
   const _S = {
-    theme:         { key: "theme",                 def: "dark"   },
-    accent:        { key: "accent-color",          def: "#e7e5e4"},
-    density:       { key: "density",               def: "default"},
-    fontSize:      { key: "abbiey_font_size",      def: "medium" },
-    fontFamily:    { key: "abbiey_font_family",    def: "system" },
-    safesearch:    { key: "abbiey_safesearch",     def: "off"    },
-    newTab:        { key: "abbiey_new_tab",        def: "true"   },
-    defaultTab:    { key: "abbiey_default_tab",    def: "text"   },
-    aiSummary:     { key: "abbiey_ai_summary",     def: "true"   },
-    autocomplete:  { key: "abbiey_autocomplete",   def: "true"   },
-    persistRegion: { key: "abbiey_region_persist", def: "false"  },
-    history:       { key: "abbiey_history",        def: "false"  },
-    incognito:     { key: "abbiey_incognito",      def: "false"  },
-    showCards:     { key: "abbiey_show_cards",     def: "true"   },
-    showFavicons:  { key: "abbiey_show_favicons",  def: "true"   },
-    showDates:     { key: "abbiey_show_dates",     def: "true"   },
+    theme:         { key: "theme",                 def: "dark"    },
+    accent:        { key: "accent-color",          def: "#e7e5e4" },
+    density:       { key: "density",               def: "default" },
+    fontSize:      { key: "abbiey_font_size",      def: "medium"  },
+    fontFamily:    { key: "abbiey_font_family",    def: "system"  },
+    safesearch:    { key: "abbiey_safesearch",     def: "off"     },
+    newTab:        { key: "abbiey_new_tab",        def: "true"    },
+    defaultTab:    { key: "abbiey_default_tab",    def: "text"    },
+    aiSummary:     { key: "abbiey_ai_summary",     def: "true"    },
+    autocomplete:  { key: "abbiey_autocomplete",   def: "true"    },
+    persistRegion: { key: "abbiey_region_persist", def: "false"   },
+    history:       { key: "abbiey_history",        def: "false"   },
+    incognito:     { key: "abbiey_incognito",      def: "false"   },
+    showCards:     { key: "abbiey_show_cards",     def: "true"    },
+    showFavicons:  { key: "abbiey_show_favicons",  def: "true"    },
+    showDates:     { key: "abbiey_show_dates",     def: "true"    },
+    // New customisation settings
+    radius:        { key: "abbiey_radius",         def: "default" },
+    motion:        { key: "abbiey_motion",         def: "full"    },
+    width:         { key: "abbiey_width",          def: "default" },
+    urlStyle:      { key: "abbiey_url_style",      def: "full"    },
+    snippetStyle:  { key: "abbiey_snippet_style",  def: "full"    },
+    searchBar:     { key: "abbiey_searchbar",      def: "default" },
   };
   function gs(name) { return localStorage.getItem(_S[name].key) ?? _S[name].def; }
   function ss(name, val) { localStorage.setItem(_S[name].key, val); }
@@ -766,6 +795,33 @@ document.addEventListener("DOMContentLoaded", () => {
         if (_alr) _alr.hidden = false;
       }
     }
+
+    // Corner radius
+    const _radius = gs("radius");
+    if (_radius !== "default") html.setAttribute("data-radius", _radius);
+
+    // Animation speed
+    const _motion = gs("motion");
+    if (_motion !== "full") html.setAttribute("data-motion", _motion);
+
+    // Results width
+    const _width = gs("width");
+    if (_width !== "default") html.setAttribute("data-width", _width);
+
+    // URL display
+    const _urlStyle = gs("urlStyle");
+    if (_urlStyle !== "full") {
+      html.setAttribute("data-url-style", _urlStyle);
+      if (_urlStyle === "domain") applyDomainUrlStyle();
+    }
+
+    // Snippet style
+    const _snippetStyle = gs("snippetStyle");
+    if (_snippetStyle !== "full") html.setAttribute("data-snippet-style", _snippetStyle);
+
+    // Search bar style
+    const _searchBar = gs("searchBar");
+    if (_searchBar !== "default") html.setAttribute("data-searchbar", _searchBar);
   }
 
   applyAllSettings();
@@ -937,11 +993,17 @@ document.addEventListener("DOMContentLoaded", () => {
     syncBtnGroup("safesearch-group",   gs("safesearch"));
     syncBtnGroup("default-tab-group",  gs("defaultTab"));
     syncBtnGroup("newtab-group",       gs("newTab"));
+    syncBtnGroup("radius-group",       gs("radius"));
+    syncBtnGroup("motion-group",       gs("motion"));
+    syncBtnGroup("width-group",        gs("width"));
+    syncBtnGroup("url-style-group",    gs("urlStyle"));
+    syncBtnGroup("snippet-style-group",gs("snippetStyle"));
+    syncBtnGroup("searchbar-group",    gs("searchBar"));
     syncToggle("ai-summary-toggle",    gs("aiSummary")     === "true");
     syncToggle("autocomplete-toggle",  gs("autocomplete")  === "true");
     syncToggle("persist-region-toggle",gs("persistRegion") === "true");
     syncToggle("history-toggle",       gs("history")       === "true");
-    syncToggle("incognito-toggle",   gs("incognito")     === "true");
+    syncToggle("incognito-toggle",     gs("incognito")     === "true");
     syncToggle("cards-toggle",         gs("showCards")     === "true");
     syncToggle("favicons-toggle",      gs("showFavicons")  === "true");
     syncToggle("dates-toggle",         gs("showDates")     === "true");
@@ -1008,6 +1070,25 @@ document.addEventListener("DOMContentLoaded", () => {
       if (val === "true") a.setAttribute("target", "_blank");
       else a.removeAttribute("target");
     });
+  });
+  wireBtnGroup("radius-group", "radius", (val) => {
+    html.setAttribute("data-radius", val);
+  });
+  wireBtnGroup("motion-group", "motion", (val) => {
+    html.setAttribute("data-motion", val);
+  });
+  wireBtnGroup("width-group", "width", (val) => {
+    html.setAttribute("data-width", val);
+  });
+  wireBtnGroup("url-style-group", "urlStyle", (val) => {
+    html.setAttribute("data-url-style", val);
+    if (val === "domain") applyDomainUrlStyle();
+  });
+  wireBtnGroup("snippet-style-group", "snippetStyle", (val) => {
+    html.setAttribute("data-snippet-style", val);
+  });
+  wireBtnGroup("searchbar-group", "searchBar", (val) => {
+    html.setAttribute("data-searchbar", val);
   });
 
   wireToggle("ai-summary-toggle", "aiSummary", (checked) => {

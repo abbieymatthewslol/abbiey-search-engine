@@ -6,16 +6,29 @@
     <title>{% if query %}{{ query }} — abbieysearch{% else %}abbieysearch — unfiltered answers with receipts{% endif %}</title>
     <script nonce="{{ csp_nonce }}">
         (function() {
-            var t = localStorage.getItem('theme') || 'dark';
-            var d = localStorage.getItem('density') || 'default';
-            var a = localStorage.getItem('accent-color') || localStorage.getItem('accentColor');
+            var t  = localStorage.getItem('theme') || 'dark';
+            var d  = localStorage.getItem('density') || 'default';
+            var a  = localStorage.getItem('accent-color') || localStorage.getItem('accentColor');
             var fs = localStorage.getItem('abbiey_font_size');
             var ff = localStorage.getItem('abbiey_font_family');
-            document.documentElement.setAttribute('data-theme', t);
-            document.documentElement.setAttribute('data-density', d);
-            if (a) document.documentElement.style.setProperty('--accent', a);
-            if (fs) document.documentElement.setAttribute('data-font-size', fs);
-            if (ff) document.documentElement.setAttribute('data-font', ff);
+            var r  = localStorage.getItem('abbiey_radius');
+            var w  = localStorage.getItem('abbiey_width');
+            var m  = localStorage.getItem('abbiey_motion');
+            var us = localStorage.getItem('abbiey_url_style');
+            var ss = localStorage.getItem('abbiey_snippet_style');
+            var sb = localStorage.getItem('abbiey_searchbar');
+            var el = document.documentElement;
+            el.setAttribute('data-theme', t);
+            el.setAttribute('data-density', d);
+            if (a)  el.style.setProperty('--accent', a);
+            if (fs) el.setAttribute('data-font-size', fs);
+            if (ff) el.setAttribute('data-font', ff);
+            if (r)  el.setAttribute('data-radius', r);
+            if (w)  el.setAttribute('data-width', w);
+            if (m)  el.setAttribute('data-motion', m);
+            if (us) el.setAttribute('data-url-style', us);
+            if (ss) el.setAttribute('data-snippet-style', ss);
+            if (sb) el.setAttribute('data-searchbar', sb);
         })();
     </script>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=deploy_hash) }}">
@@ -202,6 +215,10 @@
                                 <button type="button" class="color-swatch" data-color="#15803d" style="background:#15803d" title="Green"></button>
                                 <button type="button" class="color-swatch" data-color="#2563eb" style="background:#2563eb" title="Blue"></button>
                                 <button type="button" class="color-swatch" data-color="#7c3aed" style="background:#7c3aed" title="Violet"></button>
+                                <button type="button" class="color-swatch" data-color="#c026d3" style="background:#c026d3" title="Fuchsia"></button>
+                                <button type="button" class="color-swatch" data-color="#e11d48" style="background:#e11d48" title="Rose"></button>
+                                <button type="button" class="color-swatch" data-color="#d97706" style="background:#d97706" title="Amber"></button>
+                                <button type="button" class="color-swatch" data-color="#0891b2" style="background:#0891b2" title="Cyan"></button>
                             </div>
                             <input type="color" id="custom-color" value="#e7e5e4" title="Custom color" class="settings-color-picker">
                         </div>
@@ -229,6 +246,31 @@
                             <button type="button" class="settings-seg-btn" data-val="compact">Compact</button>
                             <button type="button" class="settings-seg-btn" data-val="default">Default</button>
                             <button type="button" class="settings-seg-btn" data-val="comfortable">Comfortable</button>
+                        </div>
+                    </div>
+                    <div class="settings-row">
+                        <span class="settings-row-label">Corner radius</span>
+                        <div class="settings-btn-group" id="radius-group">
+                            <button type="button" class="settings-seg-btn" data-val="sharp">Sharp</button>
+                            <button type="button" class="settings-seg-btn" data-val="default">Default</button>
+                            <button type="button" class="settings-seg-btn" data-val="rounded">Rounded</button>
+                            <button type="button" class="settings-seg-btn" data-val="pill">Pill</button>
+                        </div>
+                    </div>
+                    <div class="settings-row">
+                        <span class="settings-row-label">Animations</span>
+                        <div class="settings-btn-group" id="motion-group">
+                            <button type="button" class="settings-seg-btn" data-val="full">Full</button>
+                            <button type="button" class="settings-seg-btn" data-val="reduced">Reduced</button>
+                            <button type="button" class="settings-seg-btn" data-val="none">Off</button>
+                        </div>
+                    </div>
+                    <div class="settings-row">
+                        <span class="settings-row-label">Search bar style</span>
+                        <div class="settings-btn-group" id="searchbar-group">
+                            <button type="button" class="settings-seg-btn" data-val="default">Default</button>
+                            <button type="button" class="settings-seg-btn" data-val="minimal">Minimal</button>
+                            <button type="button" class="settings-seg-btn" data-val="bordered">Bordered</button>
                         </div>
                     </div>
                 </section>
@@ -307,6 +349,31 @@
                 {# ===== LAYOUT ===== #}
                 <section class="settings-section">
                     <h3 class="settings-section-title">Layout</h3>
+                    <div class="settings-row">
+                        <span class="settings-row-label">Results width</span>
+                        <div class="settings-btn-group" id="width-group">
+                            <button type="button" class="settings-seg-btn" data-val="narrow">Narrow</button>
+                            <button type="button" class="settings-seg-btn" data-val="default">Default</button>
+                            <button type="button" class="settings-seg-btn" data-val="wide">Wide</button>
+                            <button type="button" class="settings-seg-btn" data-val="full">Full</button>
+                        </div>
+                    </div>
+                    <div class="settings-row">
+                        <span class="settings-row-label">URL display</span>
+                        <div class="settings-btn-group" id="url-style-group">
+                            <button type="button" class="settings-seg-btn" data-val="full">Full</button>
+                            <button type="button" class="settings-seg-btn" data-val="domain">Domain</button>
+                            <button type="button" class="settings-seg-btn" data-val="none">Hide</button>
+                        </div>
+                    </div>
+                    <div class="settings-row">
+                        <span class="settings-row-label">Snippet length</span>
+                        <div class="settings-btn-group" id="snippet-style-group">
+                            <button type="button" class="settings-seg-btn" data-val="full">Full</button>
+                            <button type="button" class="settings-seg-btn" data-val="short">Short</button>
+                            <button type="button" class="settings-seg-btn" data-val="none">Hide</button>
+                        </div>
+                    </div>
                     <div class="settings-row">
                         <span class="settings-row-label">Answer cards</span>
                         <label class="settings-toggle">
