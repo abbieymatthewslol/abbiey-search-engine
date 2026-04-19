@@ -3,6 +3,7 @@ abbiey.search - A privacy-respecting, non-judgmental search engine.
 No tracking. No filtering. No logs. Just results.
 """
 
+import base64
 import hashlib
 import hmac
 import json
@@ -28,6 +29,7 @@ import httpx
 import phonenumbers
 from phonenumbers import NumberParseException
 from cachetools import TTLCache
+from cryptography.fernet import Fernet, InvalidToken
 from ddgs import DDGS
 from flask import (
     Flask,
@@ -270,12 +272,25 @@ OLLAMA_MODEL    = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+CHATBOT_KEYS_MASTER_KEY_ENV = "CHATBOT_KEYS_MASTER_KEY"
 
 _OPENAI_KEY_ENV_CANDIDATES = {
     "research_chat": ("OPENAI_API_KEY_RESEARCH_CHAT", "OPENAI_API_KEY_CHAT", "OPENAI_API_KEY"),
     "admin_chat": ("OPENAI_API_KEY_ADMIN_CHAT", "OPENAI_API_KEY"),
     "default": ("OPENAI_API_KEY",),
 }
+_OPENAI_KEY_SLOT_CANDIDATES = {
+    "research_chat": ("research_chat", "chat", "default"),
+    "admin_chat": ("admin_chat", "default"),
+    "default": ("default",),
+}
+_OPENAI_KEY_SLOT_ENV = {
+    "research_chat": ("OPENAI_API_KEY_RESEARCH_CHAT",),
+    "chat": ("OPENAI_API_KEY_CHAT",),
+    "admin_chat": ("OPENAI_API_KEY_ADMIN_CHAT",),
+    "default": ("OPENAI_API_KEY",),
+}
+
 _OPENAI_BASE_ENV_CANDIDATES = {
     "research_chat": ("OPENAI_BASE_URL_RESEARCH_CHAT", "OPENAI_BASE_URL_CHAT", "OPENAI_BASE_URL"),
     "admin_chat": ("OPENAI_BASE_URL_ADMIN_CHAT", "OPENAI_BASE_URL"),
@@ -286,6 +301,11 @@ _OPENAI_MODEL_ENV_CANDIDATES = {
     "admin_chat": ("OPENAI_MODEL_ADMIN_CHAT", "OPENAI_MODEL"),
     "default": ("OPENAI_MODEL",),
 }
+
+_CHATBOT_KEY_FERNET: Fernet | None = None
+_CHATBOT_KEY_FERNET_SEED = ""
+_OPENAI_KEY_BOOTSTRAPPED = False
+_CHATBOT_KEY_LOCK = threading.Lock()
 
 # ---------------------------------------------------------------------------
 # Feature gates — config-driven, no-redeploy toggles
@@ -810,7 +830,19 @@ def _init_pg_tables():
             revoked_at    TIMESTAMPTZ
         );
         CREATE INDEX IF NOT EXISTS idx_api_keys_user ON api_keys(user_id);
-
+        CREATE TABLE IF NOT EXISTS encrypted_service_secrets (
+            id              SERIAL PRIMARY KEY,
+            service         TEXT NOT NULL,
+            slot            TEXT NOT NULL,
+            encrypted_value TEXT NOT NULL,
+            key_hash        TEXT NOT NULL,
+            key_last_four   TEXT NOT NULL,
+            source          TEXT DEFAULT '',
+            created_at      TIMESTAMPTZ DEFAULT NOW(),
+            updated_at      TIMESTAMPTZ DEFAULT NOW(),
+            UNIQUE(service, slot)
+        );
+        CREATE INDEX IF NOT EXISTS idx_ess_service_slot ON encrypted_service_secrets(service, slot);
         CREATE TABLE IF NOT EXISTS search_unlocks (
             id           SERIAL PRIMARY KEY,
             user_id      INTEGER REFERENCES users(id) ON DELETE CASCADE,
@@ -1206,6 +1238,19 @@ def _init_users_db():
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
             );
             CREATE INDEX IF NOT EXISTS idx_api_keys_user ON api_keys(user_id);
+            CREATE TABLE IF NOT EXISTS encrypted_service_secrets (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                service         TEXT NOT NULL,
+                slot            TEXT NOT NULL,
+                encrypted_value TEXT NOT NULL,
+                key_hash        TEXT NOT NULL,
+                key_last_four   TEXT NOT NULL,
+                source          TEXT DEFAULT '',
+                created_at      TEXT DEFAULT (datetime('now')),
+                updated_at      TEXT DEFAULT (datetime('now')),
+                UNIQUE(service, slot)
+            );
+            CREATE INDEX IF NOT EXISTS idx_ess_service_slot ON encrypted_service_secrets(service, slot);
             CREATE TABLE IF NOT EXISTS search_unlocks (
                 id           INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id      INTEGER,
@@ -1348,7 +1393,51 @@ def _migrate_users_phone_column():
             logging.warning("PG users phone migration: %s", exc)
 
 
+def _migrate_chatbot_keys_columns():
+    """Ensure encrypted chatbot key vault table exists across DB backends."""
+    if _SUPABASE_DB_URL and _SUPABASE_DB_READY:
+        _users_execute(
+            """
+            CREATE TABLE IF NOT EXISTS encrypted_service_secrets (
+                id SERIAL PRIMARY KEY,
+                service TEXT NOT NULL,
+                slot TEXT NOT NULL,
+                encrypted_value TEXT NOT NULL,
+                key_hash TEXT NOT NULL,
+                key_last_four TEXT NOT NULL,
+                source TEXT DEFAULT '',
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ DEFAULT NOW(),
+                UNIQUE(service, slot)
+            )
+            """,
+            [],
+        )
+        return
+    with sqlite3.connect(_USERS_DB) as con:
+        con.execute(
+            "CREATE TABLE IF NOT EXISTS encrypted_service_secrets ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            "service TEXT NOT NULL,"
+            "slot TEXT NOT NULL,"
+            "encrypted_value TEXT NOT NULL,"
+            "key_hash TEXT NOT NULL,"
+            "key_last_four TEXT NOT NULL,"
+            "source TEXT DEFAULT '',"
+            "created_at TEXT DEFAULT (datetime('now')),"
+            "updated_at TEXT DEFAULT (datetime('now')),"
+            "UNIQUE(service, slot)"
+            ")"
+        )
+
+
 _migrate_users_phone_column()
+
+# Chatbot key vault migration
+try:
+    _migrate_chatbot_keys_columns()
+except Exception as _chatbot_key_mig_err:
+    logging.warning("chatbot key migration skipped: %s", _chatbot_key_mig_err)
 
 # Avatar column migration — SQLite only (PG schema already includes it)
 if not _SUPABASE_DB_URL:
@@ -4896,16 +4985,129 @@ def _first_nonempty_env(var_names: tuple[str, ...]) -> str:
     return ""
 
 
+def _normalize_fernet_key(raw: str) -> bytes:
+    """Return a valid 32-byte urlsafe-base64 Fernet key from env text."""
+    s = (raw or "").strip()
+    if not s:
+        raise ValueError("empty")
+    if len(s) == 44 and all(ch in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_=+" for ch in s):
+        try:
+            decoded = base64.urlsafe_b64decode(s.encode("ascii"))
+            if len(decoded) == 32:
+                return s.encode("ascii")
+        except Exception:
+            pass
+    digest = hashlib.sha256(s.encode("utf-8", errors="ignore")).digest()
+    return base64.urlsafe_b64encode(digest)
+
+
+def _chatbot_key_fernet() -> Fernet:
+    """Singleton Fernet for chatbot key encryption."""
+    global _CHATBOT_KEY_FERNET, _CHATBOT_KEY_FERNET_SEED
+    seed = (os.environ.get(CHATBOT_KEYS_MASTER_KEY_ENV) or app.config.get("SECRET_KEY") or "").strip()
+    if not seed:
+        raise RuntimeError(f"Missing {CHATBOT_KEYS_MASTER_KEY_ENV} or SECRET_KEY for chatbot key encryption")
+    if _CHATBOT_KEY_FERNET is None or seed != _CHATBOT_KEY_FERNET_SEED:
+        _CHATBOT_KEY_FERNET = Fernet(_normalize_fernet_key(seed))
+        _CHATBOT_KEY_FERNET_SEED = seed
+    return _CHATBOT_KEY_FERNET
+
+
+def _encrypt_chatbot_secret(secret_value: str) -> str:
+    token = _chatbot_key_fernet().encrypt((secret_value or "").encode("utf-8"))
+    return token.decode("utf-8")
+
+
+def _decrypt_chatbot_secret(token: str) -> str:
+    try:
+        plain = _chatbot_key_fernet().decrypt((token or "").encode("utf-8"))
+    except InvalidToken as e:
+        raise RuntimeError("Invalid encrypted chatbot key token") from e
+    return plain.decode("utf-8", errors="ignore")
+
+
+def _upsert_encrypted_chatbot_key(slot: str, key_value: str, source_env: str = "") -> None:
+    """Persist encrypted chatbot key in DB; plaintext never stored."""
+    clean_slot = (slot or "").strip().lower()
+    clean_key = (key_value or "").strip()
+    if not clean_slot or not clean_key:
+        return
+    last_four = clean_key[-4:] if len(clean_key) >= 4 else clean_key
+    key_hash = hashlib.sha256(clean_key.encode("utf-8")).hexdigest()
+    encrypted_key = _encrypt_chatbot_secret(clean_key)
+    source = (source_env or "").strip()[:80]
+    if _SUPABASE_DB_URL and _SUPABASE_DB_READY:
+        _users_execute(
+            "INSERT INTO encrypted_service_secrets (service, slot, encrypted_value, key_hash, key_last_four, source) "
+            "VALUES (?,?,?,?,?,?) "
+            "ON CONFLICT (service, slot) DO UPDATE SET "
+            "encrypted_value=EXCLUDED.encrypted_value, "
+            "key_hash=EXCLUDED.key_hash, "
+            "key_last_four=EXCLUDED.key_last_four, "
+            "source=EXCLUDED.source, "
+            "updated_at=NOW()",
+            ["openai_chatbot", clean_slot, encrypted_key, key_hash, last_four, source],
+        )
+        return
+    _users_execute(
+        "INSERT OR REPLACE INTO encrypted_service_secrets "
+        "(service, slot, encrypted_value, key_hash, key_last_four, source, updated_at) "
+        "VALUES (?,?,?,?,?,?,datetime('now'))",
+        ["openai_chatbot", clean_slot, encrypted_key, key_hash, last_four, source],
+    )
+
+
+def _fetch_decrypted_chatbot_key(slot: str) -> str:
+    clean_slot = (slot or "").strip().lower()
+    if not clean_slot:
+        return ""
+    rows = _users_execute(
+        "SELECT encrypted_value FROM encrypted_service_secrets "
+        "WHERE service=? AND slot=? LIMIT 1",
+        ["openai_chatbot", clean_slot],
+    )
+    if not rows:
+        return ""
+    token = (rows[0].get("encrypted_value") or "").strip()
+    if not token:
+        return ""
+    try:
+        return _decrypt_chatbot_secret(token).strip()
+    except Exception:
+        logger.warning("Encrypted chatbot key decrypt failed for slot=%s", clean_slot)
+        return ""
+
+
+def _bootstrap_openai_chatbot_keys_from_env() -> None:
+    """One-time import from env vars into encrypted persistent store."""
+    global _OPENAI_KEY_BOOTSTRAPPED
+    if _OPENAI_KEY_BOOTSTRAPPED:
+        return
+    for slot, env_names in _OPENAI_KEY_SLOT_ENV.items():
+        key_value = _first_nonempty_env(env_names)
+        if key_value:
+            _upsert_encrypted_chatbot_key(slot, key_value, source_env=env_names[0])
+    _OPENAI_KEY_BOOTSTRAPPED = True
+
+
 def _resolve_openai_chat_config(chatbot: str = "default") -> dict[str, str] | None:
     """Resolve OpenAI key/base/model for a specific chatbot name."""
     bot = (chatbot or "default").strip().lower()
-    key_candidates = _OPENAI_KEY_ENV_CANDIDATES.get(bot, _OPENAI_KEY_ENV_CANDIDATES["default"])
+    _bootstrap_openai_chatbot_keys_from_env()
+    key_slots = _OPENAI_KEY_SLOT_CANDIDATES.get(bot, _OPENAI_KEY_SLOT_CANDIDATES["default"])
     base_candidates = _OPENAI_BASE_ENV_CANDIDATES.get(bot, _OPENAI_BASE_ENV_CANDIDATES["default"])
     model_candidates = _OPENAI_MODEL_ENV_CANDIDATES.get(bot, _OPENAI_MODEL_ENV_CANDIDATES["default"])
-
-    api_key = _first_nonempty_env(key_candidates)
+    api_key = ""
+    for slot in key_slots:
+        api_key = _fetch_decrypted_chatbot_key(slot)
+        if api_key:
+            break
     if not api_key:
-        return None
+        # Backwards-compatible fallback for environments without encrypted store.
+        key_candidates = _OPENAI_KEY_ENV_CANDIDATES.get(bot, _OPENAI_KEY_ENV_CANDIDATES["default"])
+        api_key = _first_nonempty_env(key_candidates)
+        if not api_key:
+            return None
 
     base_url = (_first_nonempty_env(base_candidates) or OPENAI_BASE_URL).rstrip("/")
     model = _first_nonempty_env(model_candidates) or OPENAI_MODEL

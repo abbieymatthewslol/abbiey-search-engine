@@ -49,3 +49,51 @@ def test_admin_chat_falls_back_to_builtin(client, monkeypatch):
         data = resp.get_json()
         assert data["source"] == "builtin"
         assert data["reply"] == "builtin reply"
+
+
+def test_chatbot_secret_encrypt_decrypt_roundtrip():
+    import app as app_module
+
+    raw = "sk-proj-test-secret-12345"
+    token = app_module._encrypt_chatbot_secret(raw)
+    assert token
+    assert token != raw
+    assert app_module._decrypt_chatbot_secret(token) == raw
+
+
+def test_chatbot_secret_persistence_roundtrip(monkeypatch):
+    import app as app_module
+
+    app_module._OPENAI_KEY_BOOTSTRAPPED = False
+    app_module._upsert_encrypted_chatbot_key(
+        "research_chat",
+        "sk-proj-persist-research-0001",
+        source_env="pytest",
+    )
+    app_module._upsert_encrypted_chatbot_key(
+        "admin_chat",
+        "sk-proj-persist-admin-0002",
+        source_env="pytest",
+    )
+    app_module._OPENAI_KEY_BOOTSTRAPPED = True
+
+    cfg_research = app_module._resolve_openai_chat_config("research_chat")
+    cfg_admin = app_module._resolve_openai_chat_config("admin_chat")
+    assert cfg_research is not None
+    assert cfg_admin is not None
+    assert cfg_research["api_key"] == "sk-proj-persist-research-0001"
+    assert cfg_admin["api_key"] == "sk-proj-persist-admin-0002"
+
+
+def test_chatbot_secret_bootstrap_from_env(monkeypatch):
+    import app as app_module
+
+    monkeypatch.setenv("OPENAI_API_KEY_RESEARCH_CHAT", "sk-proj-env-research-0099")
+    monkeypatch.delenv("OPENAI_API_KEY_ADMIN_CHAT", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY_CHAT", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    app_module._OPENAI_KEY_BOOTSTRAPPED = False
+
+    cfg = app_module._resolve_openai_chat_config("research_chat")
+    assert cfg is not None
+    assert cfg["api_key"] == "sk-proj-env-research-0099"
