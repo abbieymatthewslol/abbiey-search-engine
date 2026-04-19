@@ -599,13 +599,14 @@ class TestChatAPI:
     def test_chat_total_failure_returns_503(self, client, mock_ddg, mock_chat):
         """When both AI chat and extractive fallback fail, returns 503."""
         mock_chat.side_effect = Exception("Service down")
-        with patch("app._extractive_research", side_effect=Exception("fallback broken")):
-            resp = client.post("/api/chat", json={
-                "query": "test",
-                "message": "hello",
-                "history": [],
-            })
-            assert resp.status_code == 503
+        with patch("app._openai_chat", side_effect=Exception("OpenAI down")):
+            with patch("app._extractive_research", side_effect=Exception("fallback broken")):
+                resp = client.post("/api/chat", json={
+                    "query": "test",
+                    "message": "hello",
+                    "history": [],
+                })
+                assert resp.status_code == 503
 
     def test_chat_uses_openai_fallback_before_extractive(self, client, mock_ddg, mock_chat):
         """When Ollama fails but OpenAI works, endpoint should return OpenAI response."""
