@@ -1485,6 +1485,7 @@ class TestOnionFallbackNotice:
             "has_more": False,
             "page": 1,
             "notice": "Ahmia is temporarily unavailable, so these results come from a web fallback and may reference onion sites rather than link to them directly.",
+            "sources": ["DuckDuckGo intel fallback"],
         }
         with patch("app._fetch_results", return_value=fallback_payload):
             resp = client.get("/search?q=test&type=onion")

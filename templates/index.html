@@ -495,6 +495,7 @@
                     <p class="reverse-image-foot">Matching uses Microsoft Bing&rsquo;s image index. Page links and thumbnails are third-party sites.</p>
                 </div>
                 <input type="hidden" name="type" id="search-type-input" value="{{ search_type or 'text' }}">
+                <input type="hidden" name="onion_mode" id="onion-mode-input" value="{{ onion_mode or 'balanced' }}">
                 <input type="hidden" name="region" id="region-input" value="{{ region or '' }}">
                 <input type="hidden" name="lang" id="lang-input" value="{{ lang or '' }}">
                 <input type="hidden" name="df" id="df-input" value="{{ time_filter or '' }}">
@@ -512,6 +513,7 @@
                     <button type="button" class="home-mode-btn{% if search_type == 'images' %} active{% endif %}" data-search-mode="images" aria-pressed="{% if search_type == 'images' %}true{% else %}false{% endif %}">Images</button>
                     <button type="button" class="home-mode-btn{% if search_type == 'news' %} active{% endif %}" data-search-mode="news" aria-pressed="{% if search_type == 'news' %}true{% else %}false{% endif %}">News</button>
                     <button type="button" class="home-mode-btn{% if search_type == 'videos' %} active{% endif %}" data-search-mode="videos" aria-pressed="{% if search_type == 'videos' %}true{% else %}false{% endif %}">Videos</button>
+                    <button type="button" class="home-mode-btn{% if search_type == 'onion' %} active{% endif %}" data-search-mode="onion" aria-pressed="{% if search_type == 'onion' %}true{% else %}false{% endif %}">Deep web</button>
                 </div>
             </nav>
             <div class="home-message" aria-label="Search positioning">
@@ -547,14 +549,14 @@
                 <a href="/search?q={{ query|urlencode }}&type=news{% if region %}&region={{ region }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab {% if search_type == 'news' %}active{% endif %}">News</a>
                 <a href="/search?q={{ query|urlencode }}&type=videos{% if region %}&region={{ region }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab {% if search_type == 'videos' %}active{% endif %}">Videos</a>
                 <a href="/search?q={{ query|urlencode }}&type=code{% if region %}&region={{ region }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab {% if search_type == 'code' %}active{% endif %}">Code</a>
+                <a href="/search?q={{ query|urlencode }}&type=onion{% if region %}&region={{ region }}{% endif %}{% if onion_mode %}&onion_mode={{ onion_mode }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab {% if search_type == 'onion' %}active{% endif %}">Deep Web</a>
                 </div>
-                <div class="tab-more-wrap {% if search_type in ('onion', 'saved', 'mybot') %}has-active{% endif %}" id="tab-more-wrap">
-                    <button type="button" class="tab tab-more-btn {% if search_type in ('onion', 'saved', 'mybot') %}active{% endif %}" id="tab-more-btn" aria-haspopup="true" aria-expanded="false" aria-controls="tab-more-menu">
-                        {% if search_type == 'onion' %}Deep Web{% elif search_type == 'saved' %}Saved{% elif search_type == 'mybot' %}Custom bot{% else %}More{% endif %}
+                <div class="tab-more-wrap {% if search_type in ('saved', 'mybot') %}has-active{% endif %}" id="tab-more-wrap">
+                    <button type="button" class="tab tab-more-btn {% if search_type in ('saved', 'mybot') %}active{% endif %}" id="tab-more-btn" aria-haspopup="true" aria-expanded="false" aria-controls="tab-more-menu">
+                        {% if search_type == 'saved' %}Saved{% elif search_type == 'mybot' %}Custom bot{% else %}More{% endif %}
                         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
                     </button>
                     <div class="tab-more-menu" id="tab-more-menu" hidden>
-                        <a href="/search?q={{ query|urlencode }}&type=onion{% if region %}&region={{ region }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab-more-item {% if search_type == 'onion' %}active{% endif %}">Deep Web</a>
                         <a href="/search?q={{ query|urlencode }}&type=saved{% if cleanweb %}&cleanweb=1{% endif %}" class="tab-more-item {% if search_type == 'saved' %}active{% endif %}">Saved <span class="bookmark-count-badge" id="bookmark-count-badge"></span></a>
                         <a href="/profile#search-bots" class="tab-more-item">Custom bots</a>
                     </div>
@@ -615,6 +617,17 @@
                 <button type="button" class="filter-pill filter-pill-toggle{% if cleanweb %} active{% endif %}" id="cleanweb-pill" title="Re-rank results: fewer listicles and affiliate-style pages, more diverse domains" aria-pressed="{% if cleanweb %}true{% else %}false{% endif %}">Original web</button>
                 {% endif %}
             </div>
+            {% if search_type == 'onion' %}
+            <div class="onion-scope-bar" id="onion-scope-bar" role="group" aria-label="Deep web search mode">
+                <span class="onion-scope-label">Deep web mode</span>
+                <button type="button" class="onion-scope-btn{% if onion_mode == 'strict' %} active{% endif %}" data-onion-mode="strict" aria-pressed="{% if onion_mode == 'strict' %}true{% else %}false{% endif %}">Onion only</button>
+                <button type="button" class="onion-scope-btn{% if onion_mode == 'balanced' %} active{% endif %}" data-onion-mode="balanced" aria-pressed="{% if onion_mode == 'balanced' %}true{% else %}false{% endif %}">Balanced</button>
+                <button type="button" class="onion-scope-btn{% if onion_mode == 'extended' %} active{% endif %}" data-onion-mode="extended" aria-pressed="{% if onion_mode == 'extended' %}true{% else %}false{% endif %}">Research</button>
+                {% if onion_sources %}
+                <span class="onion-scope-sources">Sources: {{ onion_sources|join(' + ') }}</span>
+                {% endif %}
+            </div>
+            {% endif %}
             {# Filter extras — shown when Filters button is toggled #}
             <div class="filter-extras" id="filter-extras" {% if not (operators and ('filetype' in operators or 'site' in operators)) %}hidden{% endif %}>
                 <div class="filter-pills" id="filter-pills">
@@ -1149,7 +1162,7 @@
             {% if search_type == 'onion' %}
             <div class="onion-warning">
                 <span class="onion-warning-icon">&#9888;&#65039;</span>
-                <span>Deep web results contain <strong>.onion links</strong> that require the <a href="https://www.torproject.org/download/" target="_blank" rel="noopener">Tor Browser</a> to access. Browse safely.</span>
+                <span>Deep web results can include <strong>.onion links</strong> that require the <a href="https://www.torproject.org/download/" target="_blank" rel="noopener">Tor Browser</a>. Use the mode toggle above to switch between direct onion-only links and broader intelligence results.</span>
             </div>
             {% endif %}
             {% if search_notice %}
@@ -1256,6 +1269,12 @@
                         <div class="onion-result-header">
                             <a href="{{ r.url }}" target="_blank" rel="noopener" class="result-title">{{ r.title }}</a>
                             {% if r.onion or '.onion' in r.url %}<span class="onion-badge">.onion</span>{% endif %}
+                            {% if not (r.onion or '.onion' in r.url) %}<span class="onion-badge onion-badge-ref">reference</span>{% endif %}
+                        </div>
+                        <div class="onion-meta-row">
+                            {% if r.source_label %}<span class="onion-meta-chip">{{ r.source_label }}</span>{% endif %}
+                            {% if r.access == 'clearnet' %}<span class="onion-meta-chip onion-meta-chip-clearnet">Clearnet</span>{% endif %}
+                            {% if r.access == 'tor' %}<span class="onion-meta-chip onion-meta-chip-tor">Tor</span>{% endif %}
                         </div>
                         <cite class="result-url">{{ r.url }}</cite>
                         <p class="result-snippet">{{ r.body }}</p>
@@ -1321,7 +1340,7 @@
         <div id="trending-searches" class="trending-searches" style="display:none"></div>
 
         {% if has_more %}
-        <div id="scroll-sentinel" data-page="1" data-query="{{ query }}" data-type="{{ search_type }}" data-has-more="true" data-img-extra="{{ img_scroll_extras or '' }}" data-img-rev-key="{{ img_rev_key or '' }}" data-cleanweb="{% if cleanweb %}1{% endif %}" data-lat="{% if search_lat is not none %}{{ search_lat }}{% endif %}" data-lon="{% if search_lon is not none %}{{ search_lon }}{% endif %}"{% if search_type == 'mybot' and mybot_id %} data-bot-id="{{ mybot_id }}"{% endif %}>
+        <div id="scroll-sentinel" data-page="1" data-query="{{ query }}" data-type="{{ search_type }}" data-has-more="true" data-img-extra="{{ img_scroll_extras or '' }}" data-img-rev-key="{{ img_rev_key or '' }}" data-cleanweb="{% if cleanweb %}1{% endif %}" data-lat="{% if search_lat is not none %}{{ search_lat }}{% endif %}" data-lon="{% if search_lon is not none %}{{ search_lon }}{% endif %}"{% if search_type == 'onion' %} data-onion-mode="{{ onion_mode }}"{% endif %}{% if search_type == 'mybot' and mybot_id %} data-bot-id="{{ mybot_id }}"{% endif %}>
             <div class="scroll-loader">
                 <div class="spinner"></div>
             </div>
@@ -1330,7 +1349,13 @@
 
         {% if query and search_type == 'onion' and not has_more and results %}
         <div class="onion-end-notice">
+            {% if onion_mode == 'strict' %}
+            <p>Showing all available direct onion matches. Switch to Balanced or Research mode if you want additional clearnet intelligence references.</p>
+            {% elif onion_mode == 'extended' %}
+            <p>Showing all available deep web + intelligence results for this query blend.</p>
+            {% else %}
             <p>Showing all available deep web results. Ahmia indexes a limited subset of .onion sites.</p>
+            {% endif %}
         </div>
         {% endif %}
         {% endif %}
@@ -1482,6 +1507,7 @@
         window.__currentUserHasPaidAccess = {{ current_user_has_paid_access|tojson }};
         window.__searchQuery = {{ query|tojson }};
         window.__searchType = {{ search_type|tojson }};
+        window.__onionMode = {{ onion_mode|tojson }};
         window.__queryUi = {{ query_ui|tojson }};
         window.__showAnswerLayer = {{ show_answer_layer_block|tojson }};
         window.__osintEnabled = {{ osint_enabled|tojson }};

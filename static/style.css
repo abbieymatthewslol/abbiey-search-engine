@@ -931,6 +931,14 @@ body.has-results .search-btn.search-btn-icon {
   padding-left: 1rem;
 }
 
+.tab-onion {
+  color: color-mix(in srgb, var(--text-muted) 78%, #a855f7 22%);
+}
+.tab-onion:hover,
+.tab-onion.active {
+  color: color-mix(in srgb, var(--text) 78%, #c084fc 22%);
+}
+
 .bookmark-count-badge {
   display: inline-flex;
   align-items: center;
@@ -1368,6 +1376,84 @@ article.result.code-result { font-size: .9rem; }
 }
 .onion-warning-icon { font-size: 1.1rem; flex-shrink: 0; }
 .onion-warning a { color: var(--accent); text-decoration: underline; }
+.onion-scope-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .5rem;
+  margin: 0 0 .85rem;
+}
+.onion-scope-label {
+  font-size: .74rem;
+  color: var(--text-muted);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+.onion-scope-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: .76rem;
+  font-weight: 500;
+  border-radius: 999px;
+  padding: .3rem .62rem;
+  cursor: pointer;
+  border: 1px solid var(--border);
+}
+.onion-scope-btn.active {
+  background: var(--bg-hover);
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+.onion-scope-sources {
+  margin-left: .25rem;
+  color: var(--text-muted);
+  font-size: .74rem;
+}
+.onion-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .35rem;
+  margin-top: .42rem;
+}
+.onion-meta-chip {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  font-size: .67rem;
+  color: var(--text-muted);
+  padding: .14rem .45rem;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+}
+.onion-meta-chip-tor {
+  border-color: color-mix(in srgb, #22c55e 35%, var(--border-subtle));
+  color: color-mix(in srgb, #22c55e 80%, var(--text-muted));
+}
+.onion-meta-chip-clearnet,
+.onion-access-badge-clearnet {
+  border-color: color-mix(in srgb, #f59e0b 35%, var(--border-subtle));
+  color: color-mix(in srgb, #f59e0b 82%, var(--text-muted));
+}
+.onion-badge-ref {
+  border-color: color-mix(in srgb, #f59e0b 35%, var(--border-subtle));
+  color: color-mix(in srgb, #f59e0b 82%, var(--text-muted));
+}
+.onion-source-badge,
+.onion-access-badge,
+.onion-meta-source {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  font-size: .67rem;
+  color: var(--text-muted);
+  padding: .14rem .45rem;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+}
 .search-status-banner {
   margin: 0 0 1rem;
   padding: .85rem 1rem;
