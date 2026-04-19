@@ -35,12 +35,21 @@ validate_patch() {
 
 validate_series() {
 	# Quick repository-level smoke check for Python syntax errors.
+	python_bin=
 	if command -v python >/dev/null 2>&1
 	then
-		python -m compileall -q app.py engine retrieval osint scripts >/dev/null 2>&1 ||
+		python_bin=python
+	elif command -v python3 >/dev/null 2>&1
+	then
+		python_bin=python3
+	fi
+
+	if test -n "$python_bin"
+	then
+		"$python_bin" -m compileall -q app.py engine retrieval osint scripts >/dev/null 2>&1 ||
 			fail "python compile smoke check failed"
 	else
-		printf '%s\n' "sendemail-validate: warning: python not found; skipping compile smoke check" >&2
+		printf '%s\n' "sendemail-validate: warning: python/python3 not found; skipping compile smoke check" >&2
 	fi
 }
 
