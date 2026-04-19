@@ -1,19 +1,71 @@
-# Repository Guidelines
+# AGENTS.md
 
-## Project Structure & Module Organization
-`app.py` is the main Flask entrypoint and wires routes, auth, and rendering. Core search logic lives in `engine/`, retrieval and ranking stages live in `retrieval/`, and OSINT enrichment lives in `osint/`. HTML templates are in `templates/`, browser assets are in `static/`, and public metadata files such as `robots.txt` are in `public/`. Tests live in `tests/`; helper and verification scripts live in `scripts/`. Vercel uses `api/index.py` as the serverless entrypoint.
+## Purpose
+This repository is a privacy-focused search engine built with Flask. Use this file as the default operating guide for AI/code agents working on the codebase.
 
-## Build, Test, and Development Commands
-Create an environment and install dependencies with `python -m venv .venv` and `pip install -r requirements.txt`. Run the app locally with `python app.py` and open `http://127.0.0.1:8000`. Run the main test suite with `pytest tests/ -v`; CI uses the same command. Run the standalone settings test with `node tests/test_settings_persistence.js`. For environment or deployment checks, use `python scripts/health_check.py`, `python scripts/verify_production_env.py`, or PowerShell helpers such as `.\verify.ps1`.
+## Project map
+- `app.py`: primary Flask app, routes, APIs, security headers, auth glue.
+- `api/index.py`: Vercel serverless entrypoint.
+- `engine/`: core search orchestration and provider integration.
+- `retrieval/`: retrieval/ranking pipeline pieces.
+- `osint/`: enrichment and OSINT helpers.
+- `templates/`: Jinja templates.
+- `static/`: frontend JS/CSS assets.
+- `tests/`: pytest suites and manual QA notes.
+- `scripts/`: environment validation and deployment helper scripts.
 
-## Coding Style & Naming Conventions
-Follow existing Python style: 4-space indentation, `snake_case` for functions and modules, `UPPER_SNAKE_CASE` for constants, and short docstrings where behavior is non-obvious. Keep Flask handlers and search helpers explicit rather than overly abstract. Frontend code is plain JavaScript in `static/script.js`; use consistent semicolons and descriptive DOM IDs/classes. Match the current Jinja template structure instead of introducing a framework.
+## Local setup and run
+- Create env: `python -m venv .venv`
+- Install deps: `pip install -r requirements.txt`
+- Start app: `python app.py`
+- Default URL: `http://127.0.0.1:8000`
 
-## Testing Guidelines
-Add or update `pytest` coverage for every route, search behavior, auth change, or retrieval rule you modify. Name Python tests `tests/test_<feature>.py` and keep assertions user-visible where possible. If you touch persistent UI settings, update `tests/test_settings_persistence.js`. Prefer focused fixtures in `tests/conftest.py` over ad hoc setup inside each test.
+## Testing workflow (required)
+Run the smallest high-signal tests for touched areas:
+- Core/backend changes: `pytest tests/ -v` or targeted `pytest tests/test_<feature>.py -v`
+- UI settings persistence changes: `node tests/test_settings_persistence.js`
+- Environment/deploy checks when relevant:
+  - `python scripts/health_check.py`
+  - `python scripts/verify_production_env.py`
+  - `python scripts/verify_supabase_connection.py`
 
-## Commit & Pull Request Guidelines
-Recent history uses short imperative subjects, often with prefixes like `feat:`, `fix(auth):`, `fix(ci):`, and `chore:`. Keep commits scoped to one change. PRs should include a concise summary, test evidence (`pytest`, Node test, or manual verification), and screenshots for template or CSS updates. If you enable the local hook, run `git config core.hooksPath .githooks`; the pre-push hook enforces the canonical GitHub origin.
+For template/CSS/JS UI edits, perform manual browser validation and include screenshot/video evidence in PRs.
 
-## Security & Configuration Tips
-Never commit real secrets from `.env`, `.env.local`, or Vercel. Treat local SQLite artifacts such as `analytics.db`, `users.db`, and `waitlist.db` as disposable development data unless a migration explicitly requires them.
+## Critical guardrails
+
+### CSP nonce rule (do not break)
+The app uses strict CSP and blocks inline scripts unless nonce-tagged.
+- Inline scripts **must** use: `<script nonce="{{ csp_nonce }}">`
+- `g.csp_nonce` is generated per request and injected through a context processor.
+- Any new inline script without the nonce will fail silently in production.
+
+### Data and auth expectations
+- Production persistence is Supabase/Postgres, not local SQLite.
+- Keep `SUPABASE_DB_URL` (or `DATABASE_URL`) aligned with Supabase transaction pooler config.
+- Supabase Auth features require valid `SUPABASE_URL` and `SUPABASE_ANON_KEY`.
+
+## Code style
+- Python: 4-space indentation, `snake_case` names, `UPPER_SNAKE_CASE` constants.
+- Prefer explicit Flask handlers/helpers over unnecessary abstractions.
+- Frontend JS is plain JavaScript in `static/script.js`; keep semicolon usage and naming conventions consistent with existing code.
+- Match existing Jinja patterns in templates; do not introduce new frontend frameworks.
+
+## Change and test expectations
+- Add/update tests for routes, auth behavior, retrieval logic, and ranking logic you modify.
+- Name tests as `tests/test_<feature>.py`.
+- Prefer fixtures in `tests/conftest.py` over repeated per-test setup.
+- Keep diffs focused and avoid unrelated refactors.
+
+## Git and PR conventions
+- Keep commits small and scoped; use imperative subjects (`feat:`, `fix:`, `chore:` patterns are common).
+- PRs should include:
+  - concise summary,
+  - test evidence (commands + outcomes),
+  - screenshots/videos for UI-impacting changes.
+- Optional local hook enforcement:
+  - `git config core.hooksPath .githooks`
+
+## Security and privacy
+- Never commit real secrets from `.env`, `.env.local`, Vercel env exports, or API key files.
+- Treat local DB files (`analytics.db`, `users.db`, `waitlist.db`) as disposable unless a migration explicitly needs them.
+- Preserve privacy posture: avoid introducing server-side query logging or third-party trackers.
