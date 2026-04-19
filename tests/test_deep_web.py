@@ -223,6 +223,20 @@ class TestTryOnionDdg:
         call_args = mock_ddgs.text.call_args
         assert ".onion" in call_args[0][0]
 
+    def test_extended_mode_uses_multiple_query_variants(self):
+        """Extended mode should issue multiple DDG variant queries for deeper intel coverage."""
+        from app import _try_onion_ddg
+
+        mock_ddgs = MagicMock()
+        mock_ddgs.__enter__ = lambda s: s
+        mock_ddgs.__exit__ = MagicMock(return_value=False)
+        mock_ddgs.text.return_value = []
+
+        with patch("app.DDGS", return_value=mock_ddgs):
+            _try_onion_ddg("market", mode="extended")
+
+        assert mock_ddgs.text.call_count >= 2
+
 
 # ---------------------------------------------------------------------------
 # Full /search?type=onion endpoint tests
@@ -295,3 +309,20 @@ class TestDeepWebEndpoint:
         assert data is not None
         assert "notice" in data
         assert "Ahmia" in (data["notice"] or "")
+
+    def test_extended_mode_blends_onion_and_reference_results(self, client):
+        """Extended mode should blend Ahmia onion hits with DDG intel hits."""
+        ahmia_results = [
+            {"title": "Hidden A", "url": "http://aaaaaa.onion/", "body": "Snippet A", "onion": True, "source": "ahmia"},
+        ]
+        ddg_results = [
+            {"title": "Reference", "url": "https://example.com/ref", "body": "Ref", "onion": False, "source": "ddg-onion-intel"},
+        ]
+        with patch("app._try_ahmia", return_value=ahmia_results), \
+             patch("app._try_onion_ddg", return_value=ddg_results):
+            resp = client.get("/search?q=market&type=onion&onion_mode=extended")
+
+        assert resp.status_code == 200
+        body = resp.data.decode()
+        assert "Hidden A" in body
+        assert "Reference" in body

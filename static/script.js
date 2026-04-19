@@ -1999,6 +1999,26 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     }
 
+    // Deep web mode toggles
+    const onionScopeBar = document.getElementById("onion-scope-bar");
+    const onionModeInput = document.getElementById("onion-mode-input");
+    if (onionScopeBar && onionModeInput && filterForm) {
+      const modeBtns = onionScopeBar.querySelectorAll(".onion-scope-btn");
+      onionScopeBar.addEventListener("click", (e) => {
+        const btn = e.target.closest(".onion-scope-btn");
+        if (!btn || !onionScopeBar.contains(btn)) return;
+        const mode = (btn.dataset.onionMode || "").trim();
+        if (!mode || mode === onionModeInput.value) return;
+        onionModeInput.value = mode;
+        modeBtns.forEach((b) => {
+          const active = b === btn;
+          b.classList.toggle("active", active);
+          b.setAttribute("aria-pressed", active ? "true" : "false");
+        });
+        applyFilter();
+      });
+    }
+
     // Site filter
     const siteInput = document.getElementById("filter-site");
     if (siteInput) {
@@ -2075,6 +2095,9 @@ document.addEventListener("DOMContentLoaded", () => {
     if (type === "images" && sentinel.dataset.imgRevKey) {
       scrollUrl += `&img_rev_key=${encodeURIComponent(sentinel.dataset.imgRevKey)}`;
     }
+    if (type === "onion" && sentinel.dataset.onionMode) {
+      scrollUrl += `&onion_mode=${encodeURIComponent(sentinel.dataset.onionMode)}`;
+    }
     let geoSuf = geoQuerySuffix();
     if (!geoSuf && sentinel.dataset.lat && sentinel.dataset.lon) {
       geoSuf = `&lat=${encodeURIComponent(sentinel.dataset.lat)}&lon=${encodeURIComponent(sentinel.dataset.lon)}`;
@@ -2109,7 +2132,11 @@ document.addEventListener("DOMContentLoaded", () => {
           } else if (type === "onion") {
             el.className = "result onion-result";
             const isOnion = r.onion || (r.url && /\.onion(\/|$)/i.test(r.url));
-            el.innerHTML = `<div class="onion-result-header"><a href="${esc(r.url)}" target="_blank" rel="noopener" class="result-title">${esc(r.title)}</a>${isOnion ? '<span class="onion-badge">.onion</span>' : ""}</div><cite class="result-url">${esc(r.url)}</cite><p class="result-snippet">${esc(r.body || "")}</p><div class="result-actions" data-feedback="1"><button type="button" class="result-action-btn feedback-btn" data-rating="up">Helpful</button><button type="button" class="result-action-btn feedback-btn" data-rating="down">Not relevant</button></div>`;
+            const sourceLabel = r.source_label ? `<span class="onion-source-badge">${esc(r.source_label)}</span>` : "";
+            const accessLabel = r.access === "clearnet"
+              ? '<span class="onion-access-badge onion-access-badge-clearnet">Clearnet reference</span>'
+              : '<span class="onion-access-badge">Tor</span>';
+            el.innerHTML = `<div class="onion-result-header"><a href="${esc(r.url)}" target="_blank" rel="noopener" class="result-title">${esc(r.title)}</a>${isOnion ? '<span class="onion-badge">.onion</span>' : ""}${sourceLabel}</div><cite class="result-url">${esc(r.url)}</cite><p class="result-snippet">${esc(r.body || "")}</p><div class="onion-meta-row">${accessLabel}${r.source ? `<span class="onion-meta-source">${esc(String(r.source).replace(/-/g, " "))}</span>` : ""}</div><div class="result-actions" data-feedback="1"><button type="button" class="result-action-btn feedback-btn" data-rating="up">Helpful</button><button type="button" class="result-action-btn feedback-btn" data-rating="down">Not relevant</button></div>`;
           } else if (type === "code") {
             el.className = "result code-result";
             el.innerHTML = `<div class="code-result-header"><a href="${esc(r.url)}" target="_blank" rel="noopener" class="result-title">${esc(r.title)}</a>${r.language ? `<span class="code-lang-badge">${esc(r.language)}</span>` : ""}<span class="code-source-badge">${esc(r.source || "")}</span></div>${faviconImg(r.url)}<cite class="result-url">${esc(r.url)}</cite><p class="result-snippet">${esc(r.body || "")}</p><div class="code-meta">${r.stars ? `<span class="code-stat">&#9733; ${esc(r.stars)}</span>` : ""}${r.forks ? `<span class="code-stat">&#9906; ${esc(r.forks)}</span>` : ""}</div><div class="result-actions" data-feedback="1"><button type="button" class="result-action-btn feedback-btn" data-rating="up">Helpful</button><button type="button" class="result-action-btn feedback-btn" data-rating="down">Not relevant</button></div>`;

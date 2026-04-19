@@ -460,9 +460,17 @@ _ONION_FALLBACK_MSG = (
     "Ahmia is temporarily unavailable, so these results come from a web fallback and may reference "
     "onion sites rather than link to them directly."
 )
+_ONION_BLEND_MSG = (
+    "Showing direct .onion results plus clearnet intelligence references. Switch to Onion only for direct links only."
+)
 _ONION_UNAVAILABLE_MSG = (
     "Deep web search is temporarily degraded. Ahmia could not be reached and the fallback returned no results."
 )
+_ONION_SCOPE_VALUES = {"strict", "balanced", "broad"}
+_ONION_STRICT_EMPTY_MSG = (
+    "Strict onion mode only returns direct .onion listings. Try Broad mode if you also want clearnet references."
+)
+_ONION_MODES = {"balanced", "strict", "extended"}
 _SEARCH_UNLOCK_COOKIE = "abbiey_search_unlock"
 _SEARCH_UNLOCK_COOKIE_MAX_AGE = 315360000
 _WELCOME_COOKIE = "abbiey_welcome_seen"
@@ -3113,6 +3121,9 @@ _TEMPLATE_DEFAULTS = dict(
     show_ai_summary_block=False,
     show_answer_layer_block=False,
     search_notice=None,
+    onion_scope="balanced",
+    onion_mode="balanced",
+    onion_sources=[],
     current_user_has_paid_access=False,
     stripe_search_checkout_url=STRIPE_SEARCH_CHECKOUT_URL,
     cleanweb=False,
@@ -4506,6 +4517,18 @@ def search():
     safesearch = request.args.get("safesearch", "off").strip()
     if safesearch not in {"off", "moderate", "strict"}:
         safesearch = "off"
+    onion_scope_raw = request.args.get("onion_scope", "").strip().lower()
+    onion_mode_raw = request.args.get("onion_mode", "").strip().lower()
+    scope_to_mode = {"strict": "strict", "balanced": "balanced", "broad": "extended"}
+    mode_to_scope = {"strict": "strict", "balanced": "balanced", "extended": "broad"}
+    onion_mode = "balanced"
+    if onion_mode_raw in _ONION_MODES:
+        onion_mode = onion_mode_raw
+    elif onion_mode_raw in {"onion-only", "onion_only"}:
+        onion_mode = "strict"
+    elif onion_scope_raw in scope_to_mode:
+        onion_mode = scope_to_mode[onion_scope_raw]
+    onion_scope = mode_to_scope.get(onion_mode, "balanced")
 
     _raw_img_rev = (request.args.get("img_rev_key") or "").strip()
     img_rev_key = _raw_img_rev if re.fullmatch(r"[A-Za-z0-9_-]{16,128}", _raw_img_rev) else ""
@@ -4597,6 +4620,8 @@ def search():
                 "img_rev_key": img_rev_key,
                 "current_user_has_paid_access": current_user_has_paid_access,
                 "osint_enabled": _abbiey_osint_enabled(),
+                "onion_scope": onion_scope,
+                "onion_mode": onion_mode,
             },
     # Server-side search limit for free-tier users
         )
@@ -4748,6 +4773,7 @@ def search():
             mybot_id=_mb_id,
             mybot_user_id=_mb_uid,
             img_rev_key=img_rev_key or None,
+            onion_mode=onion_mode,
         )
         if results.get("results") and search_type not in ("images", "saved"):
             results["results"] = _rerank_results_with_feedback(query, results["results"])
@@ -4784,6 +4810,7 @@ def search():
         mybot_id=_mb_id,
         mybot_user_id=_mb_uid,
         img_rev_key=img_rev_key or None,
+        onion_mode=onion_mode,
     )
     if results.get("results") and search_type not in ("images", "saved"):
         results["results"] = _rerank_results_with_feedback(query, results["results"])
@@ -4931,6 +4958,9 @@ def search():
         show_ai_summary_block=show_ai_summary_block,
         show_answer_layer_block=show_answer_layer_block,
         search_notice=results.get("notice"),
+        onion_scope=onion_scope,
+        onion_mode=onion_mode,
+        onion_sources=results.get("sources") or [],
         current_user_has_paid_access=current_user_has_paid_access,
         cleanweb=cleanweb,
         safeguard=safeguard,
@@ -9634,6 +9664,10 @@ def _try_ahmia(query, max_results=30):
                     "url": url,
                     "body": body,
                     "onion": True,
+                    "source": "ahmia",
+                    "source_label": "Ahmia",
+                    "source_type": "onion",
+                    "access": "tor",
                 })
 
         if results:
@@ -9643,7 +9677,7 @@ def _try_ahmia(query, max_results=30):
     return results
 
 
-def _try_onion_ddg(query, max_results=30):
+def _try_onion_ddg(query, max_results=30, mode="balanced"):
     """Search DDG for .onion-related results as a fallback.
 
     Regular search engines don't index .onion directly, so this returns
@@ -9651,14 +9685,41 @@ def _try_onion_ddg(query, max_results=30):
     """
     results = []
     try:
+        variant_queries = [f"{query} .onion"]
+        if mode == "extended":
+            variant_queries.extend(
+                [
+                    f"{query} onion mirror",
+                    f"{query} hidden service",
+                    f'"{query}" "onion link"',
+                ]
+            )
+        seen_urls = set()
         with DDGS() as ddgs:
-            for r in ddgs.text(f"{query} .onion", max_results=max_results):
-                results.append({
-                    "title": r.get("title", ""),
-                    "url": r.get("href", ""),
-                    "body": r.get("body", ""),
-                    "onion": False,
-                })
+            per_variant_limit = max(8, min(max_results, 30))
+            for variant in variant_queries:
+                for r in ddgs.text(variant, max_results=per_variant_limit):
+                    url = (r.get("href") or "").strip()
+                    if not url or url in seen_urls:
+                        continue
+                    seen_urls.add(url)
+                    is_onion = bool(re.search(r"\.onion(?:/|$)", url, re.IGNORECASE))
+                    results.append(
+                        {
+                            "title": r.get("title", ""),
+                            "url": url,
+                            "body": r.get("body", ""),
+                            "onion": is_onion,
+                            "source": "ddg-onion-intel" if mode == "extended" else "ddg-onion-fallback",
+                            "source_label": "DuckDuckGo",
+                            "source_type": "onion_ref",
+                            "access": "tor" if is_onion else "clearnet",
+                        }
+                    )
+                    if len(results) >= max_results:
+                        break
+                if len(results) >= max_results:
+                    break
         if results:
             logger.info("DDG onion fallback: %d results", len(results))
     except Exception:
@@ -9684,6 +9745,7 @@ def _fetch_results(
     mybot_id=None,
     mybot_user_id=None,
     img_rev_key=None,
+    onion_mode="balanced",
 ):
     """Fetch results with caching. Returns paginated slice."""
     if search_type == "images" and img_rev_key:
@@ -9716,7 +9778,37 @@ def _fetch_results(
     bot_seg = ""
     if search_type == "mybot" and mybot_id is not None and mybot_user_id is not None:
         bot_seg = f"|mb={int(mybot_id)}|u={int(mybot_user_id)}"
-    cache_key = f"{query}|{search_type}|{region or ''}|{lang or ''}|{ops_str}|{time_filter or ''}|{safesearch or 'off'}{img_seg}{cw_seg}{bot_seg}"
+    onion_seg = ""
+    if search_type == "onion":
+        onion_seg = f"|om={onion_mode}"
+    cache_key = f"{query}|{search_type}|{region or ''}|{lang or ''}|{ops_str}|{time_filter or ''}|{safesearch or 'off'}{img_seg}{cw_seg}{bot_seg}{onion_seg}"
+
+    def _onion_notice(all_results):
+        if search_type != "onion":
+            return None
+        has_onion = any(r.get("onion", False) for r in all_results or [])
+        has_clearnet = any(not r.get("onion", False) for r in all_results or [])
+        if onion_mode == "strict" and not has_onion:
+            return _ONION_STRICT_EMPTY_MSG
+        if has_clearnet and has_onion and onion_mode == "extended":
+            return _ONION_BLEND_MSG
+        if has_clearnet and not has_onion:
+            return _ONION_FALLBACK_MSG
+        if not all_results:
+            return _ONION_UNAVAILABLE_MSG
+        return None
+
+    def _onion_sources(all_results):
+        if search_type != "onion":
+            return []
+        src = []
+        has_ahmia = any((r.get("source") or "") == "ahmia" for r in all_results or [])
+        has_ddg = any((r.get("source") or "").startswith("ddg-") for r in all_results or [])
+        if has_ahmia:
+            src.append("Ahmia")
+        if has_ddg:
+            src.append("DuckDuckGo intel fallback")
+        return src
 
     # Check cache
     with _cache_lock:
@@ -9727,13 +9819,14 @@ def _fetch_results(
         start = RESULTS_PER_PAGE * (page - 1)
         page_results = cached[start : start + RESULTS_PER_PAGE]
         has_more = len(cached) > start + RESULTS_PER_PAGE
-        notice = None
-        if search_type == "onion":
-            if page_results and any(not r.get("onion", False) for r in page_results):
-                notice = _ONION_FALLBACK_MSG
-            elif not cached:
-                notice = _ONION_UNAVAILABLE_MSG
-        return {"results": page_results, "has_more": has_more, "page": page, "notice": notice}
+        notice = _onion_notice(cached)
+        return {
+            "results": page_results,
+            "has_more": has_more,
+            "page": page,
+            "notice": notice,
+            "sources": _onion_sources(cached),
+        }
 
     # In-flight deduplication: if another thread is already fetching the same key, wait for it
     _my_event = None
@@ -9753,13 +9846,14 @@ def _fetch_results(
             start = RESULTS_PER_PAGE * (page - 1)
             page_results = cached[start : start + RESULTS_PER_PAGE]
             has_more = len(cached) > start + RESULTS_PER_PAGE
-            notice = None
-            if search_type == "onion":
-                if page_results and any(not r.get("onion", False) for r in page_results):
-                    notice = _ONION_FALLBACK_MSG
-                elif not cached:
-                    notice = _ONION_UNAVAILABLE_MSG
-            return {"results": page_results, "has_more": has_more, "page": page, "notice": notice}
+            notice = _onion_notice(cached)
+            return {
+                "results": page_results,
+                "has_more": has_more,
+                "page": page,
+                "notice": notice,
+                "sources": _onion_sources(cached),
+            }
         # Primary fetch failed or timed out — fall through and fetch ourselves.
         # Register our own event so subsequent waiters can piggyback on our result.
         _my_event = threading.Event()
@@ -9772,16 +9866,29 @@ def _fetch_results(
     # Onion / Deep Web — dedicated path, skip normal engines
     results = []
     if search_type == "onion":
+        ahmia_results = []
+        ddg_results = []
         try:
-            results = _try_ahmia(effective_query)
+            ahmia_results = _try_ahmia(effective_query, max_results=max_results)
         except Exception:
             logger.warning("_try_ahmia raised unexpectedly; falling through to DDG fallback", exc_info=True)
-        if not results:
-            logger.info("Ahmia empty, trying DDG onion fallback")
+        if onion_mode == "extended":
+            logger.info("Onion extended mode: blending Ahmia + DDG intel")
             try:
-                results = _try_onion_ddg(effective_query)
+                ddg_results = _try_onion_ddg(effective_query, max_results=max_results, mode=onion_mode)
             except Exception:
                 logger.warning("_try_onion_ddg raised unexpectedly", exc_info=True)
+            results = _deduplicate([*ahmia_results, *ddg_results])
+        elif onion_mode == "balanced":
+            results = ahmia_results
+            if not results:
+                logger.info("Ahmia empty, trying DDG onion fallback")
+                try:
+                    results = _try_onion_ddg(effective_query, max_results=max_results, mode=onion_mode)
+                except Exception:
+                    logger.warning("_try_onion_ddg raised unexpectedly", exc_info=True)
+        else:
+            results = ahmia_results
     elif search_type == "code":
         # Code — dedicated path: fetch GitHub, StackOverflow, GitLab, npm in parallel.
         # Never use generic DDG — it returns unrelated web pages styled in code font.
@@ -10113,14 +10220,15 @@ def _fetch_results(
     start = RESULTS_PER_PAGE * (page - 1)
     page_results = results[start : start + RESULTS_PER_PAGE]
     has_more = len(results) > start + RESULTS_PER_PAGE
-    notice = None
-    if search_type == "onion":
-        if page_results and any(not r.get("onion", False) for r in page_results):
-            notice = _ONION_FALLBACK_MSG
-        elif not results:
-            notice = _ONION_UNAVAILABLE_MSG
+    notice = _onion_notice(results)
 
-    return {"results": page_results, "has_more": has_more, "page": page, "notice": notice}
+    return {
+        "results": page_results,
+        "has_more": has_more,
+        "page": page,
+        "notice": notice,
+        "sources": _onion_sources(results),
+    }
 
 
 # ---------------------------------------------------------------------------
