@@ -6317,8 +6317,6 @@ def _abbiey_bot_fallback(msg: str, ctx: str = "") -> str:
 # ---------------------------------------------------------------------------
 
 # ---- Layer 1: DDG multi-backend ----
-    )
-
 def _try_ddg(query, max_results, search_type, region=None, time_filter=None, safesearch="off"):
     """Primary: ddgs library with all backends enabled."""
     ddg = DDGS()
