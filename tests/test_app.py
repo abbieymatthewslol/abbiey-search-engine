@@ -607,6 +607,20 @@ class TestChatAPI:
             })
             assert resp.status_code == 503
 
+    def test_chat_uses_openai_fallback_before_extractive(self, client, mock_ddg, mock_chat):
+        """When Ollama fails but OpenAI works, endpoint should return OpenAI response."""
+        mock_chat.side_effect = Exception("Service down")
+        with patch("app._openai_chat", return_value="OpenAI fallback response") as openai_mock:
+            resp = client.post("/api/chat", json={
+                "query": "test",
+                "message": "hello",
+                "history": [],
+            })
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert data["response"] == "OpenAI fallback response"
+            assert openai_mock.called
+
 
 # =====================================================================
 # CALCULATOR

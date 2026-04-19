@@ -1,7 +1,6 @@
-"""Tests for Ollama-backed AI endpoints: /api/ai-summary and /api/chat."""
+"""Tests for AI endpoints: /api/ai-summary and /api/chat."""
 
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 
 def test_ai_summary_returns_string(client, mock_ddg):
@@ -57,3 +56,14 @@ def test_chat_fallback_on_ollama_failure(client, mock_ddg):
         assert resp.status_code == 200
         data = resp.get_json()
         assert "response" in data
+
+
+def test_chat_uses_openai_when_ollama_fails(client, mock_ddg):
+    with patch("app._ollama_chat", side_effect=RuntimeError("Ollama unavailable")), patch(
+        "app._openai_chat", return_value="OpenAI chat answer."
+    ) as openai_mock:
+        resp = client.post("/api/chat", json={"query": "python", "message": "explain it"})
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["response"] == "OpenAI chat answer."
+        assert openai_mock.called

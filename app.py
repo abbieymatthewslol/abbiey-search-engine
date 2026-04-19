@@ -268,6 +268,24 @@ def _max_query_length() -> int:
 
 OLLAMA_MODEL    = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+
+_OPENAI_KEY_ENV_CANDIDATES = {
+    "research_chat": ("OPENAI_API_KEY_RESEARCH_CHAT", "OPENAI_API_KEY_CHAT", "OPENAI_API_KEY"),
+    "admin_chat": ("OPENAI_API_KEY_ADMIN_CHAT", "OPENAI_API_KEY"),
+    "default": ("OPENAI_API_KEY",),
+}
+_OPENAI_BASE_ENV_CANDIDATES = {
+    "research_chat": ("OPENAI_BASE_URL_RESEARCH_CHAT", "OPENAI_BASE_URL_CHAT", "OPENAI_BASE_URL"),
+    "admin_chat": ("OPENAI_BASE_URL_ADMIN_CHAT", "OPENAI_BASE_URL"),
+    "default": ("OPENAI_BASE_URL",),
+}
+_OPENAI_MODEL_ENV_CANDIDATES = {
+    "research_chat": ("OPENAI_MODEL_RESEARCH_CHAT", "OPENAI_MODEL_CHAT", "OPENAI_MODEL"),
+    "admin_chat": ("OPENAI_MODEL_ADMIN_CHAT", "OPENAI_MODEL"),
+    "default": ("OPENAI_MODEL",),
+}
 
 # ---------------------------------------------------------------------------
 # Feature gates — config-driven, no-redeploy toggles
@@ -4869,6 +4887,68 @@ def _ollama_chat(messages, model=None, timeout=30.0):
         raise RuntimeError(f"Ollama unavailable: {e}") from e
 
 
+def _first_nonempty_env(var_names: tuple[str, ...]) -> str:
+    """Return first non-empty env var value from var_names."""
+    for name in var_names:
+        value = (os.environ.get(name) or "").strip()
+        if value:
+            return value
+    return ""
+
+
+def _resolve_openai_chat_config(chatbot: str = "default") -> dict[str, str] | None:
+    """Resolve OpenAI key/base/model for a specific chatbot name."""
+    bot = (chatbot or "default").strip().lower()
+    key_candidates = _OPENAI_KEY_ENV_CANDIDATES.get(bot, _OPENAI_KEY_ENV_CANDIDATES["default"])
+    base_candidates = _OPENAI_BASE_ENV_CANDIDATES.get(bot, _OPENAI_BASE_ENV_CANDIDATES["default"])
+    model_candidates = _OPENAI_MODEL_ENV_CANDIDATES.get(bot, _OPENAI_MODEL_ENV_CANDIDATES["default"])
+
+    api_key = _first_nonempty_env(key_candidates)
+    if not api_key:
+        return None
+
+    base_url = (_first_nonempty_env(base_candidates) or OPENAI_BASE_URL).rstrip("/")
+    model = _first_nonempty_env(model_candidates) or OPENAI_MODEL
+    return {"api_key": api_key, "base_url": base_url, "model": model}
+
+
+def _openai_chat(messages, chatbot: str = "default", timeout: float = 30.0, max_tokens: int = 1200) -> str:
+    """Call OpenAI-compatible Chat Completions using chatbot-specific credentials."""
+    cfg = _resolve_openai_chat_config(chatbot)
+    if not cfg:
+        raise RuntimeError(f"OpenAI unavailable for chatbot={chatbot}: API key not configured")
+    try:
+        resp = _get_http().post(
+            f"{cfg['base_url']}/chat/completions",
+            headers={"Authorization": f"Bearer {cfg['api_key']}"},
+            json={"model": cfg["model"], "messages": messages, "max_tokens": int(max_tokens)},
+            timeout=float(timeout),
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        choices = data.get("choices") or []
+        message = choices[0].get("message", {}) if choices else {}
+        content = message.get("content", "")
+        if isinstance(content, list):
+            text_chunks = []
+            for chunk in content:
+                if isinstance(chunk, str):
+                    text_chunks.append(chunk)
+                elif isinstance(chunk, dict):
+                    text = chunk.get("text")
+                    if isinstance(text, str):
+                        text_chunks.append(text)
+            content = "\n".join(text_chunks).strip()
+        if not isinstance(content, str):
+            content = str(content or "")
+        content = content.strip()
+        if not content:
+            raise RuntimeError("Empty OpenAI response")
+        return content
+    except Exception as e:
+        raise RuntimeError(f"OpenAI unavailable: {e}") from e
+
+
 # ---- Answer Layer: structured multi-source synthesis (JSON from LLM) ----
 ANSWER_LAYER_MAX_SOURCES = 10
 ANSWER_LAYER_SNIPPET_LEN = 480
@@ -5092,14 +5172,19 @@ def api_chat():
 
     messages.append({"role": "user", "content": message})
 
-    # Try AI chat first, fall back to extractive research
+    # Try AI chat first, then OpenAI-compatible chat, then extractive fallback.
     try:
         response = _ollama_chat(messages)
         if not response:
             raise RuntimeError("Empty AI response")
         return jsonify({"response": response})
     except Exception:
-        logger.warning("AI chat unavailable, using extractive research fallback")
+        logger.warning("AI chat unavailable for /api/chat, trying OpenAI fallback")
+    try:
+        response = _openai_chat(messages, chatbot="research_chat", timeout=35.0, max_tokens=1400)
+        return jsonify({"response": response})
+    except Exception:
+        logger.warning("OpenAI chat unavailable for /api/chat, using extractive fallback")
 
     # Fallback: extractive research from search results
     try:
@@ -6107,38 +6192,19 @@ def admin_chat():
             messages.append({"role": h["role"], "content": h["content"][:2000]})
     messages.append({"role": "user", "content": user_message})
 
-    # Try Ollama first (local/self-hosted)
-    ollama_url = OLLAMA_BASE_URL.rstrip("/")
     try:
-        resp = _get_http().post(
-            f"{ollama_url}/api/chat",
-            json={"model": OLLAMA_MODEL, "messages": messages, "stream": False},
-            timeout=30,
-        )
-        if resp.status_code == 200:
-            reply = resp.json().get("message", {}).get("content", "")
-            if reply:
-                return jsonify({"reply": reply, "source": "ollama"})
+        reply = _ollama_chat(messages, timeout=30.0)
+        if reply:
+            return jsonify({"reply": reply, "source": "ollama"})
     except Exception:
         pass
 
-    # Try OpenAI-compatible API if key set
-    openai_key = os.environ.get("OPENAI_API_KEY", "")
-    openai_base = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
-    openai_model = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
-    if openai_key:
-        try:
-            resp = _get_http().post(
-                f"{openai_base.rstrip('/')}/chat/completions",
-                headers={"Authorization": f"Bearer {openai_key}"},
-                json={"model": openai_model, "messages": messages, "max_tokens": 1200},
-                timeout=30,
-            )
-            if resp.status_code == 200:
-                reply = resp.json()["choices"][0]["message"]["content"]
-                return jsonify({"reply": reply, "source": "openai"})
-        except Exception as exc:
-            logger.warning("OpenAI chat failed: %s", exc)
+    # Try OpenAI-compatible API with chatbot-specific key/model/base settings.
+    try:
+        reply = _openai_chat(messages, chatbot="admin_chat", timeout=30.0, max_tokens=1200)
+        return jsonify({"reply": reply, "source": "openai"})
+    except Exception as exc:
+        logger.warning("OpenAI chat failed: %s", exc)
 
     # Built-in rule-based fallback — always available
     reply = _abbiey_bot_fallback(user_message, dashboard_context)
@@ -6242,7 +6308,10 @@ def _abbiey_bot_fallback(msg: str, ctx: str = "") -> str:
         "- **Growth** — SEO, traffic, marketing\n"
         "- **Errors** — known bugs, fixes, monitoring\n"
         "- **Features** — what to build next\n\n"
-        "For full AI responses, set `OLLAMA_BASE_URL` (local Ollama) or `OPENAI_API_KEY` in Vercel environment variables."
+        "For full AI responses, set `OLLAMA_BASE_URL` (local Ollama) or OpenAI keys "
+        "(`OPENAI_API_KEY`, `OPENAI_API_KEY_CHAT`, `OPENAI_API_KEY_RESEARCH_CHAT`, "
+        "`OPENAI_API_KEY_ADMIN_CHAT`) in environment variables."
+    )
 # ---------------------------------------------------------------------------
 # Fallback infrastructure — every query MUST return results
 # ---------------------------------------------------------------------------
