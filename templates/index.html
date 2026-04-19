@@ -396,6 +396,7 @@
             <span>Unfiltered answers</span>
             <button type="button" class="privacy-popover-close" id="privacy-popover-close" aria-label="Close">{% include 'includes/close_icon.html' %}</button>
         </div>
+        <p class="positioning-popover-tagline">Real answers. Full context. No fluff.</p>
         <p class="positioning-popover-lead">
             Unfiltered means direct, detailed, and honest &mdash; without marketing fluff. We try to separate evidence from interpretation, show tradeoffs, and keep the strongest counterpoint in view.
         </p>
@@ -634,22 +635,6 @@
                 </div>
                 {% endif %}
             </div>
-            {% if query and search_type == 'text' %}
-            <section class="results-positioning-strip" aria-label="Answering approach">
-                <div class="results-positioning-copy">
-                    <span class="results-positioning-title">Real answers. Full context. No fluff.</span>
-                    <p class="results-positioning-subtitle">Direct takes, source-backed evidence, and the strongest counterpoint when the answer is messy.</p>
-                </div>
-                <div class="positioning-mode-chips results-mode-chips" aria-hidden="true">
-                    <span class="positioning-mode-chip">Quick</span>
-                    <span class="positioning-mode-chip">Deep</span>
-                    <span class="positioning-mode-chip">Research</span>
-                    <span class="positioning-mode-chip">Key quotes</span>
-                    <span class="positioning-mode-chip">Balanced</span>
-                </div>
-            </section>
-            {% endif %}
-
             {% if search_type == 'images' %}
             <section class="img-adv-section" aria-label="Advanced image search">
                 <details class="img-adv-details" {% if image_search_advanced %}open{% endif %}>
