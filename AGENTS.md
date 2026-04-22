@@ -1,27 +1,72 @@
-# Repository Guidelines
+# AGENTS.md
 
-## Project Structure & Module Organization
-`app.py` is the main Flask entrypoint and wires routes, auth, and rendering. Core search logic lives in `engine/`, retrieval and ranking stages live in `retrieval/`, and OSINT enrichment lives in `osint/`. HTML templates are in `templates/`, browser assets are in `static/`, and public metadata files such as `robots.txt` are in `public/`. Tests live in `tests/`; helper and verification scripts live in `scripts/`. Vercel uses `api/index.py` as the serverless entrypoint.
+Operational guide for coding agents working on `abbiey-search-engine`.
 
-**Triage:** When something breaks, **assume the cause is in `app.py` until you have evidence it is not** (stack frame, test isolation, or a fix confined to another file). Most request paths and glue still go through that file.
+## 1) Project map
+- `app.py`: main Flask app, route wiring, middleware, headers, auth/session glue.
+- `engine/`: core search orchestration and source adapters.
+- `retrieval/`: ranking, filtering, and retrieval-stage helpers.
+- `osint/`: enrichment helpers and OSINT-related utilities.
+- `templates/`: Jinja templates.
+- `static/`: frontend JavaScript/CSS.
+- `tests/`: pytest coverage + JS settings persistence test.
+- `scripts/`: verification and deployment helper scripts.
+- `api/index.py`: Vercel serverless entrypoint (`from app import app`).
 
-**Deployment:** Before a production deploy, run `python scripts/verify_deployment_config.py` and ensure any new first-party imports are covered in `vercel.json` `includeFiles` with **minimal** added paths (no repo-wide `**`). `vercel.json` already lists explicit root modules plus `engine/**`, `osint/**`, `retrieval/**`, `static/**`, `templates/**`, etc.
+## 2) First-triage rule (critical)
+When behavior breaks (500s, incorrect responses, auth/session problems, timeouts, search regressions), inspect `app.py` first unless you have concrete evidence the fault is elsewhere.
 
-**Checks:** `python scripts/verify_deployment_config.py` runs (1) Vercel includeFiles vs. first-party import graph (seeded from `app.py` plus all `engine/`, `retrieval/`, `osint/`, `api/`), and (2) env/secret heuristics and `.env.example` consistency. It is part of the Python CI workflow. Use `verify_vercel_include_files.py` or `verify_env_drift.py` for individual pieces.
+## 3) Local setup and run
+- Create venv: `python -m venv .venv`
+- Install deps: `pip install -r requirements.txt`
+- Run app: `python app.py`
+- Default URL: `http://127.0.0.1:8000`
 
-## Build, Test, and Development Commands
-Create an environment and install dependencies with `python -m venv .venv` and `pip install -r requirements.txt`. Run the app locally with `python app.py` and open `http://127.0.0.1:8000`. For a **full** run use `pytest tests/ -v`. **CI** runs `python scripts/run_tests_for_changes.py`, which only executes tests related to the current git change set (or the full suite when `app.py`, `conftest.py`, `requirements.txt`, or workflow config changes). Override with `RUN_FULL_TESTS=1 python scripts/run_tests_for_changes.py`. For the standalone settings test use `node tests/test_settings_persistence.js`. For environment or deployment checks, use `python scripts/health_check.py`, `python scripts/verify_production_env.py`, or PowerShell helpers such as `.\verify.ps1`.
+## 4) Testing workflow
+- Fast, change-aware test runner (preferred): `python scripts/run_tests_for_changes.py`
+- Full suite: `pytest tests/ -v`
+- Force full suite through change-aware runner: `RUN_FULL_TESTS=1 python scripts/run_tests_for_changes.py`
+- Settings persistence check: `node tests/test_settings_persistence.js`
 
-## Coding Style & Naming Conventions
-Follow existing Python style: 4-space indentation, `snake_case` for functions and modules, `UPPER_SNAKE_CASE` for constants, and short docstrings where behavior is non-obvious. Keep Flask handlers and search helpers explicit rather than overly abstract. Frontend code is plain JavaScript in `static/script.js`; use consistent semicolons and descriptive DOM IDs/classes. Match the current Jinja template structure instead of introducing a framework.
+When adding or changing behavior, update/add focused tests (`tests/test_<feature>.py`) and run at least the relevant subset.
 
-**Edits to `app.py`:** Keep each fix to **about 30 lines or fewer** in that file; do not refactor or restructure; change only the failing or requested logic; prefer editing existing lines (see [`.cursor/rules/app-py-surgical-patches.mdc`](.cursor/rules/app-py-surgical-patches.mdc) and [`.cursor/rules/pre-deployment.mdc`](.cursor/rules/pre-deployment.mdc)).
+## 5) Editing rules for `app.py`
+- Keep fixes surgical (target about 30 changed lines per logical fix).
+- Avoid unrelated refactors, moves, or style-only churn.
+- Prefer in-place edits of existing code paths.
 
-## Testing Guidelines
-Add or update `pytest` coverage for every route, search behavior, auth change, or retrieval rule you modify. Name Python tests `tests/test_<feature>.py` and keep assertions user-visible where possible. If you touch persistent UI settings, update `tests/test_settings_persistence.js`. Prefer focused fixtures in `tests/conftest.py` over ad hoc setup inside each test.
+## 6) Frontend security gotcha: CSP nonce
+The app uses strict CSP with no inline script allowance. Any inline `<script>` added to templates must include:
 
-## Commit & Pull Request Guidelines
-Recent history uses short imperative subjects, often with prefixes like `feat:`, `fix(auth):`, `fix(ci):`, and `chore:`. Keep commits scoped to one change. PRs should include a concise summary, test evidence (`pytest`, Node test, or manual verification), and screenshots for template or CSS updates. If you enable the local hook, run `git config core.hooksPath .githooks`; the pre-push hook enforces the canonical GitHub origin.
+`nonce="{{ csp_nonce }}"`
 
-## Security & Configuration Tips
-Never commit real secrets from `.env`, `.env.local`, or Vercel. Treat local SQLite artifacts such as `analytics.db`, `users.db`, and `waitlist.db` as disposable development data unless a migration explicitly requires them.
+Otherwise scripts may work locally in some contexts but fail in production.
+
+## 7) Deployment guardrails (required before shipping)
+Run:
+
+`python scripts/verify_deployment_config.py`
+
+This validates:
+1. first-party import coverage for Vercel `includeFiles`
+2. env drift and `.env.example` consistency
+
+If verification reports missing include paths, add only minimal entries to `vercel.json` (`file.py` or `package/**`), never broad wildcards like repo-wide `**/*`.
+
+## 8) Environment and secrets
+- Never commit real secrets or tokens.
+- Keep user-facing/deployment-critical env vars documented in `.env.example`.
+- Supabase:
+  - `SUPABASE_URL` format: `https://<project-ref>.supabase.co`
+  - `SUPABASE_DB_URL` should use transaction pooler (port `6543`) for serverless deploys.
+
+## 9) Git and PR conventions
+- Use short, scoped commits (common prefixes: `feat:`, `fix:`, `chore:`).
+- Keep one logical change per commit.
+- Include test evidence in PR descriptions.
+- For UI-affecting changes, include screenshot/video evidence.
+
+## 10) Canonical deploy model
+- Production uses Vercel Python serverless (`vercel.json`).
+- Durable data belongs in Supabase Postgres, not local SQLite files.
+- Pushes to `master` trigger CI/deploy workflow in this repository.
