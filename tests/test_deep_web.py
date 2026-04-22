@@ -65,20 +65,20 @@ class TestTryAhmia:
         """Ahmia wraps real .onion URLs in a redirect; the parser should unwrap them."""
         from app import _try_ahmia
 
-        http_mock = MagicMock()
         home_resp = MagicMock()
         home_resp.raise_for_status = MagicMock()
         home_resp.text = "<html></html>"
-        http_mock.get.return_value = home_resp
-
-        import httpx
 
         search_resp = MagicMock()
         search_resp.raise_for_status = MagicMock()
         search_resp.text = SAMPLE_AHMIA_HTML
 
-        with patch("app._get_http", return_value=http_mock), \
-             patch("httpx.get", return_value=search_resp):
+        http_mock = MagicMock()
+        http_mock.__enter__ = MagicMock(return_value=http_mock)
+        http_mock.__exit__ = MagicMock(return_value=False)
+        http_mock.get.side_effect = [home_resp, search_resp]
+
+        with patch("app.httpx.Client", return_value=http_mock):
             results = _try_ahmia("hidden wiki")
 
         assert len(results) >= 1
@@ -94,19 +94,20 @@ class TestTryAhmia:
         """Results with a direct .onion href (no redirect wrapper) are kept as-is."""
         from app import _try_ahmia
 
-        http_mock = MagicMock()
         home_resp = MagicMock()
         home_resp.raise_for_status = MagicMock()
         home_resp.text = "<html></html>"
-        http_mock.get.return_value = home_resp
 
-        import httpx
         search_resp = MagicMock()
         search_resp.raise_for_status = MagicMock()
         search_resp.text = SAMPLE_AHMIA_HTML
 
-        with patch("app._get_http", return_value=http_mock), \
-             patch("httpx.get", return_value=search_resp):
+        http_mock = MagicMock()
+        http_mock.__enter__ = MagicMock(return_value=http_mock)
+        http_mock.__exit__ = MagicMock(return_value=False)
+        http_mock.get.side_effect = [home_resp, search_resp]
+
+        with patch("app.httpx.Client", return_value=http_mock):
             results = _try_ahmia("forum")
 
         forum = next((r for r in results if r["title"] == "Forum Title"), None)
@@ -151,19 +152,20 @@ class TestTryAhmia:
         """Each parsed result should carry the <p> text as its body."""
         from app import _try_ahmia
 
-        http_mock = MagicMock()
         home_resp = MagicMock()
         home_resp.raise_for_status = MagicMock()
         home_resp.text = "<html></html>"
-        http_mock.get.return_value = home_resp
 
-        import httpx
         search_resp = MagicMock()
         search_resp.raise_for_status = MagicMock()
         search_resp.text = SAMPLE_AHMIA_HTML
 
-        with patch("app._get_http", return_value=http_mock), \
-             patch("httpx.get", return_value=search_resp):
+        http_mock = MagicMock()
+        http_mock.__enter__ = MagicMock(return_value=http_mock)
+        http_mock.__exit__ = MagicMock(return_value=False)
+        http_mock.get.side_effect = [home_resp, search_resp]
+
+        with patch("app.httpx.Client", return_value=http_mock):
             results = _try_ahmia("wiki")
 
         wiki = next(r for r in results if r["title"] == "Hidden Wiki")
