@@ -53,9 +53,21 @@ _REQUIRED: tuple[Requirement, ...] = (
         "SUPABASE_DB_URL",
         "Postgres pooler URL (port 6543). Required for persistent data.",
     ),
+)
+
+# Recommended envs — warn if missing, but do not fail boot.
+_RECOMMENDED: tuple[Requirement, ...] = (
     Requirement(
         "COMMUNITY_DISCORD_URL",
-        "Shown on /community + footer. Required so users can actually reach us.",
+        "Shown on /community + footer. Add a community link to close the 'no community' finding.",
+    ),
+    Requirement(
+        "COMMUNITY_GITHUB_URL",
+        "Shown on /community + footer.",
+    ),
+    Requirement(
+        "COMMUNITY_MATRIX_URL",
+        "Shown on /community + footer.",
     ),
 )
 
@@ -116,30 +128,46 @@ def assert_production_env(*, strict: bool | None = None) -> None:
 
     if not missing:
         logger.info("startup_checks: all %d required envs present", len(_REQUIRED))
-        return
+    else:
+        banner = "\n".join(f"  - {r.name}: {r.reason}" for r in missing)
+        msg = (
+            f"\n==== abbiey.search startup_checks ====\n"
+            f"Missing {len(missing)} required env var(s) for production:\n{banner}\n"
+            f"Set these in your deployment platform (Vercel dashboard, fly secrets, docker -e, ...)\n"
+            f"and redeploy. To silence temporarily (NOT recommended) set "
+            f"ABBIEY_SKIP_STARTUP_CHECKS=1.\n"
+            f"======================================\n"
+        )
+        if enforce:
+            sys.stderr.write(msg)
+            raise SystemExit(78)  # EX_CONFIG per /usr/include/sysexits.h
+        logger.warning(msg)
 
-    banner = "\n".join(f"  - {r.name}: {r.reason}" for r in missing)
-    msg = (
-        f"\n==== abbiey.search startup_checks ====\n"
-        f"Missing {len(missing)} required env var(s) for production:\n{banner}\n"
-        f"Set these in your deployment platform (Vercel dashboard, fly secrets, docker -e, ...)\n"
-        f"and redeploy. To silence temporarily (NOT recommended) set "
-        f"ABBIEY_SKIP_STARTUP_CHECKS=1.\n"
-        f"======================================\n"
-    )
-    if enforce:
-        sys.stderr.write(msg)
-        raise SystemExit(78)  # EX_CONFIG per /usr/include/sysexits.h
-    logger.warning(msg)
+    # Recommended (warn only, never fatal)
+    missing_recommended = _missing(_RECOMMENDED)
+    if missing_recommended:
+        banner = "\n".join(f"  - {r.name}: {r.reason}" for r in missing_recommended)
+        msg = (
+            f"\n==== abbiey.search startup_checks (recommended) ====\n"
+            f"Missing {len(missing_recommended)} recommended env var(s):\n{banner}\n"
+            f"These are optional, but filling them improves trust signals.\n"
+            f"======================================\n"
+        )
+        logger.warning(msg)
 
 
 def summarize_config() -> dict:
     """Return a non-sensitive summary for /admin/api/health reuse."""
     present = [r.name for r in _REQUIRED if (os.environ.get(r.name) or "").strip()]
     missing = [r.name for r in _missing(_REQUIRED)]
+    recommended_present = [r.name for r in _RECOMMENDED if (os.environ.get(r.name) or "").strip()]
+    recommended_missing = [r.name for r in _missing(_RECOMMENDED)]
     return {
         "required_total": len(_REQUIRED),
         "required_present": len(present),
         "required_missing": missing,
+        "recommended_total": len(_RECOMMENDED),
+        "recommended_present": len(recommended_present),
+        "recommended_missing": recommended_missing,
         "is_production": is_production(),
     }
