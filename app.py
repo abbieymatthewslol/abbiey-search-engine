@@ -6822,6 +6822,7 @@ def _build_health_payload(include_sensitive: bool = False) -> dict:
 
 
 @app.route("/health")
+@app.route("/api/health")
 def health():
     return jsonify(_build_health_payload(include_sensitive=False))
 
