@@ -10,3 +10,10 @@ dist/
 .vercel/*
 !.vercel/project.json
 .env*.local
+
+# Supabase CLI working tree (generated, safe to discard)
+supabase/.temp/
+
+# Ad-hoc local helpers and patch scratchpads
+*.tmp
+verify_log.txt
