@@ -1,8 +1,8 @@
 name: Deploy to Vercel
 
-# Production deploys: Vercel Git integration (push to the branch set as Production in Vercel).
-# On push to master: run tests only. Full CLI deploy runs only when you manually start this workflow.
-# See .github/PLATFORM_INTEGRATIONS.md (Option B).
+# Production from Git: Vercel builds when the connected branch (e.g. main) updates — see sync-main-from-master.yml.
+# This workflow: on push to master, run tests only. The deploy job runs on workflow_dispatch (manual) or add trigger if you want CLI on every push.
+# See .github/PLATFORM_INTEGRATIONS.md
 on:
   push:
     branches:

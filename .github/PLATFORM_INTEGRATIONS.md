@@ -9,15 +9,18 @@ Production for **abbiey.search** is meant to be a **single Vercel project** serv
 | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **Production domain**          | `abbieysearch.com` (canonical). Add `www.abbieysearch.com` only if it redirects to the apex host. |
 | **Git integration**            | Connect this repository; set **Production Branch** to `**main`** if you rely on Vercel’s Git deploys                                                                           |
-| **Project ID** (CLI / Actions) | `prj_hGdLqDsNtQK2A57hWyZNxdZKMi3b` — already referenced in `[.github/workflows/deploy.yml](workflows/deploy.yml)`                                                              |
+| **Project ID** (CLI / Actions) | `prj_hGdLqDsNtQK2A57hWyZNxdZKMi3b` — same id in `[.vercel/project.json](../.vercel/project.json)` and `[.github/workflows/deploy.yml](workflows/deploy.yml)` |
 
+## Local `push-and-notify.ps1` and Vercel
+
+`[scripts/push-and-notify.ps1](../scripts/push-and-notify.ps1)` polls the Vercel API with **`GET /v6/deployments?...&sha=<git HEAD>`** (supported filter; see [List deployments](https://vercel.com/docs/rest-api/reference/endpoints/deployments/list-deployments)) so the deploy is found by commit SHA. Set **`VERCEL_TOKEN`** in your Windows user environment. After a push to **`master`**, a **production** deploy that tracks **`main`** only starts after **[Sync main from master](workflows/sync-main-from-master.yml)** — allow about **a minute** before that SHA shows up in Vercel.
 
 ## GitHub → Vercel
 
 Two patterns work; **pick one** for production to avoid duplicate deploys:
 
-1. **GitHub Actions (this repo’s default)** — On push to `**master`**, `[.github/workflows/deploy.yml](workflows/deploy.yml)` runs `vercel pull` → `vercel build` → `vercel deploy --prebuilt --prod`. Requires repository secret `**VERCEL_TOKEN**` ([Vercel → Account → Tokens](https://vercel.com/account/tokens)). `**VERCEL_ORG_ID**` and `**VERCEL_PROJECT_ID**` are set in the workflow file.
-2. **Vercel Git only** — Disable or delete the deploy workflow if you prefer Vercel to build from `**main`** after every push. Then rely on `[.github/workflows/sync-main-from-master.yml](workflows/sync-main-from-master.yml)`, which fast-forwards `**main**` from `**master**` on each push to `**master**`.
+1. **Vercel Git (typical for abbieysearch.com)** — Vercel builds when your **production branch** (usually `**main**`) updates. Pushes to `**master**` are mirrored to `**main**` by `[.github/workflows/sync-main-from-master.yml](workflows/sync-main-from-master.yml)`.
+2. **Manual CLI deploy (GitHub Actions)** — In `[.github/workflows/deploy.yml](workflows/deploy.yml)`, **Run workflow** in the GitHub **Actions** tab runs `vercel build` and `vercel deploy --prebuilt --prod` (requires secret `**VERCEL_TOKEN**`). Pushes to `**master**` only run **tests** unless you add a separate deploy job.
 
 ## GitHub → branch model
 
