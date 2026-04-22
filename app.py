@@ -8665,380 +8665,6 @@ def _signup_process_post():
     return redirect(url_for("verify_email", **vq))
 
 
-@app.route("/signup", methods=["GET", "POST"])
-@limiter.limit("100/hour")
-def signup():
-    uid = session.get("user_id")
-    if uid:
-        u = _get_user_by_id(uid)
-        if u and _user_is_email_verified(u):
-            return redirect(url_for("profile"))
-        session.pop("user_id", None)
-
-    sb_ctx = {"supabase_url": _SUPABASE_URL, "supabase_anon_key": _SUPABASE_ANON_KEY, "supabase_auth": _SUPABASE_AUTH_ENABLED}
-
-    if request.method == "GET":
-        return render_template("signup.html", **sb_ctx)
-
-    try:
-        return _signup_process_post()
-    except Exception:
-        logger.exception("signup_post_unhandled")
-        return render_template(
-            "signup.html",
-            errors=[
-                "Something went wrong while creating your account. Please try again. "
-                "If you already registered, sign in instead."
-            ],
-            username=(request.form.get("username") or "").strip(),
-            email=(request.form.get("email") or "").strip().lower(),
-            phone=(request.form.get("phone") or "").strip(),
-            **sb_ctx,
-        )
-@app.route("/verify-email", methods=["GET", "POST"])
-@limiter.limit("120/hour")
-def verify_email():
-    token = (request.args.get("token") or "").strip()
-    if request.method == "GET" and token:
-        rows = _users_execute("SELECT * FROM users WHERE verify_token=? LIMIT 1", [token])
-        if not rows:
-            return render_template(
-                "verify_email.html",
-                errors=["That link is invalid or has already been used."],
-            )
-        u = rows[0]
-        if _user_is_email_verified(u):
-            return render_template(
-                "verify_email.html",
-                errors=["That account is already verified. You can sign in."],
-                verified_hint=True,
-            )
-        if not _ts_still_valid(u.get("verify_token_expires")):
-            em = (u.get("email") or "").strip().lower()
-            return render_template(
-                "verify_email.html",
-                errors=["That link has expired. Enter your email below and request a new code."],
-                email=em,
-            )
-        try:
-            uid_ok = int(u["id"])
-        except (TypeError, ValueError):
-            return render_template("verify_email.html", errors=["Something went wrong. Try again."])
-        _mark_email_verified(uid_ok)
-        session.permanent = True
-        session["user_id"] = uid_ok
-        flash("welcome", "welcome")
-        r = redirect(url_for("index") + "?welcome=1")
-        _set_welcome_seen_cookie(r)
-        return r
-
-    if request.method == "POST":
-        email_in = (request.form.get("email") or "").strip().lower()
-        code = (request.form.get("code") or "").strip().replace(" ", "")
-        errors = []
-        if not email_in or "@" not in email_in:
-            errors.append("Enter the email you used to sign up.")
-        if not code or not code.isdigit() or len(code) != 6:
-            errors.append("Enter the 6-digit code from your email.")
-        if errors:
-            return render_template("verify_email.html", errors=errors, email=email_in)
-        rows = _users_execute("SELECT * FROM users WHERE LOWER(email)=LOWER(?) LIMIT 1", [email_in])
-        if not rows:
-            return render_template(
-                "verify_email.html",
-                errors=["No account found for that email. Check the address or sign up again."],
-                email=email_in,
-            )
-        u = rows[0]
-        if _user_is_email_verified(u):
-            return render_template(
-                "verify_email.html",
-                errors=["That email is already verified. You can sign in."],
-                email=email_in,
-                verified_hint=True,
-            )
-        if not _ts_still_valid(u.get("otp_expires")):
-            return render_template(
-                "verify_email.html",
-                errors=["That code has expired. Request a new code below."],
-                email=email_in,
-            )
-        try:
-            uid_ok = int(u["id"])
-        except (TypeError, ValueError):
-            return render_template("verify_email.html", errors=["Something went wrong. Try again."], email=email_in)
-        expect = (u.get("otp_code_hash") or "").strip()
-        if not expect or not hmac.compare_digest(expect, _otp_digest(uid_ok, code)):
-            return render_template(
-                "verify_email.html",
-                errors=["That code is not correct."],
-                email=email_in,
-            )
-        _mark_email_verified(uid_ok)
-        session.permanent = True
-        session["user_id"] = uid_ok
-        flash("welcome", "welcome")
-        r = redirect(url_for("index") + "?welcome=1")
-        _set_welcome_seen_cookie(r)
-        return r
-
-    email_q = (request.args.get("email") or "").strip().lower()
-    return render_template(
-        "verify_email.html",
-        email=email_q,
-        from_signup=(request.args.get("new") == "1"),
-        resent=(request.args.get("resent") == "1"),
-        email_failed=(request.args.get("email_failed") == "1"),
-    )
-@app.route("/verify-email/resend", methods=["POST"])
-@limiter.limit("8/hour")
-def verify_email_resend():
-    email_in = (request.form.get("email") or "").strip().lower()
-    if not email_in or "@" not in email_in:
-        return render_template(
-            "verify_email.html",
-            errors=["Enter your email address."],
-            email=email_in,
-        )
-    rows = _users_execute("SELECT * FROM users WHERE LOWER(email)=LOWER(?) LIMIT 1", [email_in])
-    if not rows or _user_is_email_verified(rows[0]):
-        return redirect(url_for("verify_email", email=email_in, resent="1"))
-    u = rows[0]
-    try:
-        uid_ok = int(u["id"])
-    except (TypeError, ValueError):
-        return redirect(url_for("verify_email", email=email_in, resent="1"))
-    try:
-        otp, vtok = _set_verification_challenge(uid_ok)
-    except Exception:
-        logger.exception("verify_resend_challenge_failed")
-        return render_template(
-            "verify_email.html",
-            errors=["Could not send a new code right now. Try again in a few minutes."],
-            email=email_in,
-        )
-    disp = u.get("display_name") or u.get("username") or "there"
-    sent = _send_signup_verification_email(email_in, disp, otp, vtok)
-    rq = {"email": email_in, "resent": "1"}
-    if not sent:
-        rq["email_failed"] = "1"
-    return redirect(url_for("verify_email", **rq))
-
-
-@app.route("/login", methods=["GET", "POST"])
-@limiter.limit("120/hour")
-def login():
-    uid = session.get("user_id")
-    if uid:
-        u = _get_user_by_id(uid)
-        if u and _user_is_email_verified(u):
-            return redirect(url_for("profile"))
-        session.pop("user_id", None)
-
-    sb_ctx = {"supabase_url": _SUPABASE_URL, "supabase_anon_key": _SUPABASE_ANON_KEY, "supabase_auth": _SUPABASE_AUTH_ENABLED}
-
-    if request.method == "GET":
-        oauth_device_msg = None
-        msgs = get_flashed_messages(category_filter=["oauth_device"])
-        if msgs:
-            oauth_device_msg = msgs[0]
-        return render_template(
-            "login.html",
-            next=request.args.get("next", ""),
-            oauth_device_error=oauth_device_msg,
-            **sb_ctx,
-        )
-
-    identifier = request.form.get("identifier", "").strip()
-    password   = request.form.get("password", "")
-    next_url   = request.form.get("next", "")
-
-    try:
-        user = _get_user_by_login(identifier)
-    except Exception:
-        logger.exception("login_lookup_failed")
-        return render_template(
-            "login.html",
-            error="Something went wrong. Please try again in a moment.",
-            identifier=identifier,
-            next=next_url,
-            **sb_ctx,
-        )
-    if not user or not check_password_hash(user["password_hash"], password):
-        return render_template(
-            "login.html",
-            error="Invalid email/username or password.",
-            identifier=identifier,
-            next=next_url,
-            **sb_ctx,
-        )
-    if not _user_is_email_verified(user):
-        return render_template(
-            "login.html",
-            error=(
-                "Please verify your email before signing in. Check your inbox for a 6-digit code and link, "
-                "or use the verification page to request a new email."
-            ),
-            identifier=identifier,
-            next=next_url,
-            verify_email_hint=True,
-            **sb_ctx,
-        )
-    session.permanent = True
-    try:
-        session["user_id"] = int(user["id"])
-    except (TypeError, ValueError):
-        session["user_id"] = user["id"]
-    return redirect(_safe_redirect_url(next_url))
-
-
-@app.route("/logout", methods=["GET", "POST"])
-def logout():
-    session.pop("user_id", None)
-    return redirect(url_for("index"))
-
-
-@app.route("/auth/callback", methods=["POST"])
-@limiter.limit("60/minute")
-def auth_callback():
-    """Client-side Supabase Auth sends us the session after sign-in/sign-up.
-
-    Requires a valid Supabase ``access_token`` (server-validated via GoTrue ``/auth/v1/user``).
-    Google OAuth accounts are bound to the first browser profile (httpOnly device cookie) and
-    to the Google OIDC subject stored at signup; other devices or Google accounts are rejected.
-    """
-    if not _SUPABASE_AUTH_ENABLED:
-        return jsonify({"error": "Supabase Auth not configured"}), 400
-    data = request.get_json(silent=True) or {}
-    access_token = (data.get("access_token") or "").strip()
-    if not access_token:
-        return jsonify({"error": "invalid_token", "message": "Missing access token."}), 401
-
-    sb_user = _supabase_fetch_user_from_access_token(access_token)
-    if not sb_user:
-        return jsonify(
-            {"error": "invalid_token", "message": "Could not validate session with Supabase."}
-        ), 401
-
-    token_email = (sb_user.get("email") or "").strip().lower()
-    if not token_email or "@" not in token_email:
-        return jsonify({"error": "invalid_token", "message": "No email on Supabase account."}), 401
-
-    client_email = (data.get("email") or "").strip().lower()
-    if client_email and client_email != token_email:
-        return jsonify({"error": "email_mismatch"}), 400
-
-    display_name = (data.get("display_name") or "").strip() or (
-        (sb_user.get("user_metadata") or {}).get("full_name") or ""
-    ).strip()
-    phone_raw = (data.get("phone") or "").strip()
-    phone_e164 = None
-    if phone_raw:
-        phone_e164 = _normalize_e164_phone(phone_raw)
-        if not phone_e164:
-            return jsonify({"error": "Invalid phone number. Use international format (e.g. +1 555 123 4567)."}), 400
-
-    supabase_uid = (sb_user.get("id") or "").strip()
-    google_sub = _google_sub_from_supabase_user(sb_user)
-
-    try:
-        uid = _sync_supabase_auth_user(token_email, display_name, phone_e164)
-    except Exception:
-        logger.exception("auth_callback_sync_failed")
-        return jsonify({"error": "Could not sync account"}), 500
-    if not uid:
-        return jsonify({"error": "Could not create account"}), 500
-    try:
-        uid = int(uid)
-    except (TypeError, ValueError):
-        return jsonify({"error": "Could not create account"}), 500
-
-    new_device_secret: str | None = None
-    existing = _oauth_binding_row_for_user(uid)
-
-    if existing:
-        if not google_sub:
-            return (
-                jsonify(
-                    {
-                        "error": "google_required",
-                        "message": (
-                            "This account was registered with Google on a specific device. "
-                            "Sign in with Google on that device."
-                        ),
-                    }
-                ),
-                403,
-            )
-        if (existing.get("google_sub") or "").strip() != google_sub:
-            return (
-                jsonify(
-                    {
-                        "error": "wrong_google_account",
-                        "message": (
-                            "Use the same Google account you used when you first signed up for this site."
-                        ),
-                    }
-                ),
-                403,
-            )
-        stored_sid = (existing.get("supabase_auth_uid") or "").strip()
-        if stored_sid and supabase_uid and stored_sid != supabase_uid:
-            return (
-                jsonify(
-                    {
-                        "error": "identity_mismatch",
-                        "message": "Supabase user does not match this profile.",
-                    }
-                ),
-                403,
-            )
-        if not _oauth_device_cookie_matches_binding(uid, existing):
-            return (
-                jsonify(
-                    {
-                        "error": "device_mismatch",
-                        "message": (
-                            "This profile is bound to another device or browser profile "
-                            "(the first place you completed Google sign-in)."
-                        ),
-                    }
-                ),
-                403,
-            )
-    elif google_sub and supabase_uid:
-        new_device_secret = secrets.token_urlsafe(32)
-        try:
-            _users_execute(
-                "INSERT INTO oauth_user_binding (user_id, supabase_auth_uid, google_sub, device_secret_hash) "
-                "VALUES (?,?,?,?)",
-                [uid, supabase_uid, google_sub, _hash_auth_device_secret(new_device_secret)],
-            )
-        except Exception:
-            logger.exception("oauth_user_binding_insert_failed")
-            return jsonify({"error": "Could not finalize device binding"}), 500
-
-    session.permanent = True
-    session["user_id"] = uid
-    resp = jsonify({"ok": True, "user_id": uid})
-    _set_welcome_seen_cookie(resp)
-    if new_device_secret:
-        _set_auth_device_cookie(resp, new_device_secret)
-    return resp
-
-
-@app.route("/auth/confirm")
-def auth_confirm():
-    """Landing page after Supabase OAuth redirect (e.g. Google). JS picks up the session."""
-    if not _SUPABASE_AUTH_ENABLED:
-        return redirect(url_for("login"))
-    return render_template("auth_confirm.html")
-
-
-@app.route("/forgot-password")
-def forgot_password():
-    """Password reset page — uses Supabase Auth resetPasswordForEmail."""
-    return render_template("forgot_password.html")
 
 
 def _hash_api_key(raw: str) -> str:
@@ -10160,6 +9786,7 @@ def _set_cache_headers(response):
 # to target an existing app endpoint still resolves during import.
 from blueprints.osint import osint_bp  # noqa: E402
 from blueprints.pet import pet_bp, RATE_LIMITS as _PET_RATE_LIMITS  # noqa: E402
+from blueprints.auth import auth_bp, RATE_LIMITS as _AUTH_RATE_LIMITS  # noqa: E402
 
 # Re-apply the same "30/minute" limit the original inline route had.
 limiter.limit("30/minute")(osint_bp)
@@ -10168,6 +9795,29 @@ app.register_blueprint(osint_bp)
 for _view_fn, _limit in _PET_RATE_LIMITS.items():
     limiter.limit(_limit)(_view_fn)
 app.register_blueprint(pet_bp)
+
+for _view_fn, _limit in _AUTH_RATE_LIMITS.items():
+    limiter.limit(_limit)(_view_fn)
+app.register_blueprint(auth_bp)
+
+# Endpoint aliases: auth routes are now exposed under their blueprint-qualified
+# names (e.g. `auth.login`), but dozens of call sites and templates still use
+# the flat name (`url_for("login")`). Register flat aliases that map back to
+# the same view so existing call sites keep building correct URLs without
+# needing to be rewritten.
+for _bp_endpoint, _flat_endpoint, _rule in (
+    ("auth.signup", "signup", "/signup"),
+    ("auth.verify_email", "verify_email", "/verify-email"),
+    ("auth.verify_email_resend", "verify_email_resend", "/verify-email/resend"),
+    ("auth.login", "login", "/login"),
+    ("auth.logout", "logout", "/logout"),
+    ("auth.auth_callback", "auth_callback", "/auth/callback"),
+    ("auth.auth_confirm", "auth_confirm", "/auth/confirm"),
+    ("auth.forgot_password", "forgot_password", "/forgot-password"),
+):
+    _vf = app.view_functions[_bp_endpoint]
+    app.add_url_rule(_rule, endpoint=_flat_endpoint, view_func=_vf,
+                     methods=["GET", "POST"])
 
 
 if __name__ == "__main__":
