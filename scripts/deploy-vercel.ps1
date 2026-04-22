@@ -51,7 +51,7 @@ Invoke-RepoCmd "git branch --show-current"
 
 $origin = (& git -C $RepoRoot config --get remote.origin.url 2>$null)
 if ($origin) { $origin = $origin.Trim() }
-if ($origin -and $origin -notmatch "abbieymatthewslol/abbiey-search-engine\.git") {
+if ($origin -and $origin -notmatch "abbieymatthewslol/abbiey-search-engine(-2)?(\.git)?$") {
     Write-Warning ("origin is not the canonical repo (see .cursor/rules git-canonical-origin). Current: {0}" -f $origin)
 }
 
