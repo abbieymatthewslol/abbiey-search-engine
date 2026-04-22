@@ -9,6 +9,7 @@ import json
 from collections import Counter
 import logging
 import os
+import queue
 import re
 import sys
 import sqlite3
@@ -4672,8 +4673,8 @@ def _check_single_onion(url):
             resp = client.head(
                 url,
                 headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; rv:128.0) Gecko/20100101 Firefox/128.0"},
-        status = "live" if resp.status_code < 400 else "down"
             )
+            status = "live" if resp.status_code < 400 else "down"
     except Exception:
         # Tor not running or site unreachable — can't distinguish, report unknown
         status = "unknown"
@@ -6626,7 +6627,6 @@ def _inclusive_text_recovery_bridge(
     out: list = []
 
     def _take(batch):
-        nonlocal out
         for r in batch or []:
             u = (r.get("url") or "").strip()
             if not u or u in seen:
@@ -7767,8 +7767,8 @@ def _try_prices(query, max_results=40):
     with_price = sorted(
         [r for r in results if r.get("price_val") is not None],
         key=lambda x: x["price_val"],
-    without_price = [r for r in results if r.get("price_val") is None]
     )
+    without_price = [r for r in results if r.get("price_val") is None]
     return (with_price + without_price)[:max_results]
 
 
