@@ -10,6 +10,25 @@
   appearance: none;
 }
 
+/* Kill Chrome / Safari autofill "yellow box" so pills match the dark theme */
+.auth-input-pill input:-webkit-autofill,
+.auth-input-pill input:-webkit-autofill:hover,
+.auth-input-pill input:-webkit-autofill:focus,
+.auth-input-pill input:-webkit-autofill:focus-visible,
+.auth-input-pill input:-webkit-autofill:active {
+  -webkit-text-fill-color: var(--text) !important;
+  transition: background-color 9999s ease-out 0s;
+  box-shadow: 0 0 0 1000px var(--search-surface) inset !important;
+}
+
+[data-theme="light"] .auth-input-pill input:-webkit-autofill,
+[data-theme="light"] .auth-input-pill input:-webkit-autofill:hover,
+[data-theme="light"] .auth-input-pill input:-webkit-autofill:focus,
+[data-theme="light"] .auth-input-pill input:-webkit-autofill:focus-visible,
+[data-theme="light"] .auth-input-pill input:-webkit-autofill:active {
+  box-shadow: 0 0 0 1000px #ffffff inset !important;
+}
+
 .auth-input-pill input:focus,
 .auth-input-pill input:focus-visible,
 .auth-input-pill textarea:focus,
@@ -20,7 +39,4 @@
   box-shadow: none !important;
 }
 
-.auth-input-pill:focus-within {
-  border-color: #22c55e;
-  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.3);
-}
+/* Focus ring is owned by the outer .auth-input-pill (see style.css + auth-search-align.css) */

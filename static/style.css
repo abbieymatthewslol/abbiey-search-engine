@@ -309,6 +309,7 @@ body:not(.has-results) header {
 .header-dev-btn {
   padding: .35rem .65rem;
   border-radius: var(--radius-sm);
+  font-family: var(--font-sans);
   font-size: .72rem;
   font-weight: 600;
   letter-spacing: 0.06em;
@@ -4401,6 +4402,7 @@ a.welcome-email-btn {
   transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
 }
 .auth-input-pill:focus-within {
+  /* Default: subtle ring; body.page-auth overrides to match .search-box (see auth-search-align.css) */
   border-color: var(--border-strong);
   outline: none;
   box-shadow: 0 0 0 1px var(--text-muted);
@@ -4487,6 +4489,23 @@ a.welcome-email-btn {
 .auth-footer a:hover {
   color: var(--text);
   border-bottom-color: var(--text-dim);
+}
+
+.auth-forgot-wrap {
+  text-align: right;
+  margin: -0.5rem 0 0.75rem;
+}
+
+.auth-forgot-link {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  text-decoration: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--text-dim) 30%, transparent);
+  transition: color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+}
+.auth-forgot-link:hover {
+  color: var(--text);
+  border-bottom-color: var(--text-muted);
 }
 
 /* ===== PROFILE PAGE ===== */
