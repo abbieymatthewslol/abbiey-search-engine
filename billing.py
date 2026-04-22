@@ -143,7 +143,6 @@ def _bump_pending(user_id: int) -> None:
 
 
 def _should_flush() -> bool:
-    global _last_flush_at
     with _pending_counts_lock:
         total = sum(_pending_counts.values())
     if total >= FLUSH_THRESHOLD:
