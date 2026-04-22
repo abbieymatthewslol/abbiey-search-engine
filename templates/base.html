@@ -10,7 +10,7 @@
     <link rel="shortcut icon" href="/favicon.ico">
     <meta name="deploy-hash" content="{{ deploy_hash }}">
     {% include 'includes/google_site_verification.html' %}
-    {% include 'includes/google_analytics.html' %}
+    {% include 'includes/google_adsense_head.html' %}
     {% block canonical %}
     <link rel="canonical" href="{{ site_base_url }}{{ request.path }}">
     {% endblock %}
@@ -132,6 +132,7 @@
             {% include 'includes/header_dev_link.html' %}
         </div>
     </header>
+    {% include 'includes/google_analytics.html' %}
 
     <div class="settings-overlay" id="settings-overlay" hidden>
         <div class="settings-modal" id="settings-modal" role="dialog" aria-label="Settings">
@@ -163,6 +164,24 @@
                                 <button type="button" class="color-swatch" data-color="#7c3aed" style="background:#7c3aed" title="Violet"></button>
                             </div>
                             <input type="color" id="custom-color" value="#e7e5e4" title="Custom color" class="settings-color-picker">
+                        </div>
+                    </div>
+                    <div class="settings-row">
+                        <span class="settings-row-label">Search bar colour</span>
+                        <div class="settings-accent-row">
+                            <div class="theme-color-presets" id="search-color-presets">
+                                <button type="button" class="search-color-swatch" data-color="" title="Default (theme)">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3l18 18"/><circle cx="12" cy="12" r="9"/></svg>
+                                </button>
+                                <button type="button" class="search-color-swatch" data-color="#4ade80" style="background:#4ade80" title="Green (default)"></button>
+                                <button type="button" class="search-color-swatch" data-color="#2563eb" style="background:#2563eb" title="Blue"></button>
+                                <button type="button" class="search-color-swatch" data-color="#7c3aed" style="background:#7c3aed" title="Violet"></button>
+                                <button type="button" class="search-color-swatch" data-color="#c026d3" style="background:#c026d3" title="Fuchsia"></button>
+                                <button type="button" class="search-color-swatch" data-color="#e11d48" style="background:#e11d48" title="Rose"></button>
+                                <button type="button" class="search-color-swatch" data-color="#d97706" style="background:#d97706" title="Amber"></button>
+                                <button type="button" class="search-color-swatch" data-color="#0891b2" style="background:#0891b2" title="Cyan"></button>
+                            </div>
+                            <input type="color" id="search-custom-color" value="#4ade80" title="Custom search bar colour" class="settings-color-picker">
                         </div>
                     </div>
                     <div class="settings-row">
@@ -209,7 +228,7 @@
                             <button type="button" class="settings-seg-btn" data-val="news">News</button>
                             <button type="button" class="settings-seg-btn" data-val="videos">Videos</button>
                             <button type="button" class="settings-seg-btn" data-val="code">Code</button>
-                            <button type="button" class="settings-seg-btn" data-val="onion">Deep Web</button>
+                            <button type="button" class="settings-seg-btn" data-val="onion" title="Clearnet-indexed .onion sites via Ahmia + DDG">Onion / Tor</button>
                         </div>
                     </div>
                     <div class="settings-row">
@@ -377,7 +396,24 @@
             <a href="/privacy">Privacy Policy</a>
             &nbsp;&middot;&nbsp;
             <a href="/terms">Terms of Service</a>
+            &nbsp;&middot;&nbsp;
+            <a href="/refund">Refunds</a>
+            &nbsp;&middot;&nbsp;
+            <a href="/community">Community</a>
+            &nbsp;&middot;&nbsp;
+            <a href="/status">Status</a>
+            &nbsp;&middot;&nbsp;
+            <a href="/changelog">Changelog</a>
+            {% if support_url %}
+            &nbsp;&middot;&nbsp;
+            <a href="{{ support_url }}" target="_blank" rel="noopener noreferrer">Support</a>
+            {% endif %}
         </p>
+        {% if data_region_label %}
+        <p class="footer-sub" style="opacity:.6;font-size:.78rem;margin-top:.5rem">
+            Data region: {{ data_region_label }}
+        </p>
+        {% endif %}
     </footer>
 
     <script src="{{ url_for('static', filename='script.js', v=deploy_hash) }}"></script>

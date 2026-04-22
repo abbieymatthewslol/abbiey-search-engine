@@ -14,6 +14,6 @@
       true
     );
   }
-  attachSubmitGuard("sb-signup-form", "signup-submit");
-  attachSubmitGuard("signup-form", "signup-submit");
+  attachSubmitGuard("sb-signup-form", "signup-submit-sb");
+  attachSubmitGuard("signup-form", "signup-submit-legacy");
 })();

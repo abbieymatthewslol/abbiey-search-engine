@@ -6,22 +6,35 @@
     <title>{% if query %}{{ query }} — abbieysearch{% else %}abbieysearch — unfiltered answers with receipts{% endif %}</title>
     <script nonce="{{ csp_nonce }}">
         (function() {
-            var t = localStorage.getItem('theme') || 'dark';
-            var d = localStorage.getItem('density') || 'default';
-            var a = localStorage.getItem('accent-color') || localStorage.getItem('accentColor');
+            var t  = localStorage.getItem('theme') || 'dark';
+            var d  = localStorage.getItem('density') || 'default';
+            var a  = localStorage.getItem('accent-color') || localStorage.getItem('accentColor');
             var fs = localStorage.getItem('abbiey_font_size');
             var ff = localStorage.getItem('abbiey_font_family');
-            document.documentElement.setAttribute('data-theme', t);
-            document.documentElement.setAttribute('data-density', d);
-            if (a) document.documentElement.style.setProperty('--accent', a);
-            if (fs) document.documentElement.setAttribute('data-font-size', fs);
-            if (ff) document.documentElement.setAttribute('data-font', ff);
+            var r  = localStorage.getItem('abbiey_radius');
+            var w  = localStorage.getItem('abbiey_width');
+            var m  = localStorage.getItem('abbiey_motion');
+            var us = localStorage.getItem('abbiey_url_style');
+            var ss = localStorage.getItem('abbiey_snippet_style');
+            var sb = localStorage.getItem('abbiey_searchbar');
+            var el = document.documentElement;
+            el.setAttribute('data-theme', t);
+            el.setAttribute('data-density', d);
+            if (a)  el.style.setProperty('--accent', a);
+            if (fs) el.setAttribute('data-font-size', fs);
+            if (ff) el.setAttribute('data-font', ff);
+            if (r)  el.setAttribute('data-radius', r);
+            if (w)  el.setAttribute('data-width', w);
+            if (m)  el.setAttribute('data-motion', m);
+            if (us) el.setAttribute('data-url-style', us);
+            if (ss) el.setAttribute('data-snippet-style', ss);
+            if (sb) el.setAttribute('data-searchbar', sb);
         })();
     </script>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=deploy_hash) }}">
     <meta name="deploy-hash" content="{{ deploy_hash }}">
     {% include 'includes/google_site_verification.html' %}
-    {% include 'includes/google_analytics.html' %}
+    {% include 'includes/google_adsense_head.html' %}
     <!-- Vercel Speed Insights -->
     <script nonce="{{ csp_nonce }}">
         window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
@@ -99,13 +112,6 @@
                 <a href="/" class="logo">abbiey<span>search</span></a>
                 <span class="incognito-badge" id="incognito-badge" hidden>Incognito</span>
             </div>
-            {% if not query %}
-            <ul class="home-support" role="list" aria-label="Principles">
-                <li class="home-support-item">unfiltered answers</li>
-                <li class="home-support-item">depth by default</li>
-                <li class="home-support-item">receipts over fluff</li>
-            </ul>
-            {% endif %}
         </div>
         <div class="header-controls">
 
@@ -153,12 +159,18 @@
                             <svg class="icon-moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
                         </button>
                     </div>
+                    <div class="overflow-menu-row">
+                        <span class="overflow-menu-label">Customize</span>
+                        <button type="button" id="theme-settings-btn" class="header-btn overflow-icon-btn" aria-label="Theme settings" title="Customize theme">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+                        </button>
+                    </div>
+                    {% if not current_user %}
+                    <a href="/signup" class="overflow-menu-link" aria-label="Create account">Create account</a>
+                    {% endif %}
+                    <a href="/developer" class="overflow-menu-link" title="API keys &amp; developer tools" aria-label="Developer: API keys">Developer</a>
                 </div>
             </div>
-
-            <button type="button" id="theme-settings-btn" class="header-btn" aria-label="Theme settings" title="Customize theme">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-            </button>
 
             {# User account nav #}
             {% if current_user %}
@@ -168,12 +180,11 @@
                 <span class="user-avatar-name">{{ current_user.display_name or current_user.username }}</span>
             </a>
             {% else %}
-            <a href="/signup" class="header-auth-btn" aria-label="Create account">Sign up</a>
             <a href="/login" class="header-auth-btn" aria-label="Sign in">Sign in</a>
             {% endif %}
-            {% include 'includes/header_dev_link.html' %}
         </div>
     </header>
+    {% include 'includes/google_analytics.html' %}
     <div class="settings-overlay" id="settings-overlay" hidden>
         <div class="settings-modal" id="settings-modal" role="dialog" aria-label="Settings">
             <div class="settings-modal-header">
@@ -204,8 +215,32 @@
                                 <button type="button" class="color-swatch" data-color="#15803d" style="background:#15803d" title="Green"></button>
                                 <button type="button" class="color-swatch" data-color="#2563eb" style="background:#2563eb" title="Blue"></button>
                                 <button type="button" class="color-swatch" data-color="#7c3aed" style="background:#7c3aed" title="Violet"></button>
+                                <button type="button" class="color-swatch" data-color="#c026d3" style="background:#c026d3" title="Fuchsia"></button>
+                                <button type="button" class="color-swatch" data-color="#e11d48" style="background:#e11d48" title="Rose"></button>
+                                <button type="button" class="color-swatch" data-color="#d97706" style="background:#d97706" title="Amber"></button>
+                                <button type="button" class="color-swatch" data-color="#0891b2" style="background:#0891b2" title="Cyan"></button>
                             </div>
                             <input type="color" id="custom-color" value="#e7e5e4" title="Custom color" class="settings-color-picker">
+                        </div>
+                    </div>
+                    <div class="settings-row">
+                        <span class="settings-row-label">Search bar colour</span>
+                        <div class="settings-accent-row">
+                            <div class="theme-color-presets" id="search-color-presets">
+                                <button type="button" class="search-color-swatch" data-color="" title="Default (theme)">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3l18 18"/><circle cx="12" cy="12" r="9"/></svg>
+                                </button>
+                                <button type="button" class="search-color-swatch" data-color="#4ade80" style="background:#4ade80" title="Green (default)"></button>
+                                <button type="button" class="search-color-swatch" data-color="#2563eb" style="background:#2563eb" title="Blue"></button>
+                                <button type="button" class="search-color-swatch" data-color="#7c3aed" style="background:#7c3aed" title="Violet"></button>
+                                <button type="button" class="search-color-swatch" data-color="#c026d3" style="background:#c026d3" title="Fuchsia"></button>
+                                <button type="button" class="search-color-swatch" data-color="#e11d48" style="background:#e11d48" title="Rose"></button>
+                                <button type="button" class="search-color-swatch" data-color="#d97706" style="background:#d97706" title="Amber"></button>
+                                <button type="button" class="search-color-swatch" data-color="#0891b2" style="background:#0891b2" title="Cyan"></button>
+                                <button type="button" class="search-color-swatch" data-color="#0f766e" style="background:#0f766e" title="Teal"></button>
+                                <button type="button" class="search-color-swatch" data-color="#e7e5e4" style="background:#e7e5e4;border:1px solid #444" title="Stone"></button>
+                            </div>
+                            <input type="color" id="search-custom-color" value="#4ade80" title="Custom search bar colour" class="settings-color-picker">
                         </div>
                     </div>
                     <div class="settings-row">
@@ -231,6 +266,31 @@
                             <button type="button" class="settings-seg-btn" data-val="compact">Compact</button>
                             <button type="button" class="settings-seg-btn" data-val="default">Default</button>
                             <button type="button" class="settings-seg-btn" data-val="comfortable">Comfortable</button>
+                        </div>
+                    </div>
+                    <div class="settings-row">
+                        <span class="settings-row-label">Corner radius</span>
+                        <div class="settings-btn-group" id="radius-group">
+                            <button type="button" class="settings-seg-btn" data-val="sharp">Sharp</button>
+                            <button type="button" class="settings-seg-btn" data-val="default">Default</button>
+                            <button type="button" class="settings-seg-btn" data-val="rounded">Rounded</button>
+                            <button type="button" class="settings-seg-btn" data-val="pill">Pill</button>
+                        </div>
+                    </div>
+                    <div class="settings-row">
+                        <span class="settings-row-label">Animations</span>
+                        <div class="settings-btn-group" id="motion-group">
+                            <button type="button" class="settings-seg-btn" data-val="full">Full</button>
+                            <button type="button" class="settings-seg-btn" data-val="reduced">Reduced</button>
+                            <button type="button" class="settings-seg-btn" data-val="none">Off</button>
+                        </div>
+                    </div>
+                    <div class="settings-row">
+                        <span class="settings-row-label">Search bar style</span>
+                        <div class="settings-btn-group" id="searchbar-group">
+                            <button type="button" class="settings-seg-btn" data-val="default">Default</button>
+                            <button type="button" class="settings-seg-btn" data-val="minimal">Minimal</button>
+                            <button type="button" class="settings-seg-btn" data-val="bordered">Bordered</button>
                         </div>
                     </div>
                 </section>
@@ -273,7 +333,7 @@
                             <button type="button" class="settings-seg-btn" data-val="news">News</button>
                             <button type="button" class="settings-seg-btn" data-val="videos">Videos</button>
                             <button type="button" class="settings-seg-btn" data-val="code">Code</button>
-                            <button type="button" class="settings-seg-btn" data-val="onion">Deep Web</button>
+                            <button type="button" class="settings-seg-btn" data-val="onion" title="Clearnet-indexed .onion sites via Ahmia + DDG">Onion / Tor</button>
                         </div>
                     </div>
                     <div class="settings-row">
@@ -309,6 +369,31 @@
                 {# ===== LAYOUT ===== #}
                 <section class="settings-section">
                     <h3 class="settings-section-title">Layout</h3>
+                    <div class="settings-row">
+                        <span class="settings-row-label">Results width</span>
+                        <div class="settings-btn-group" id="width-group">
+                            <button type="button" class="settings-seg-btn" data-val="narrow">Narrow</button>
+                            <button type="button" class="settings-seg-btn" data-val="default">Default</button>
+                            <button type="button" class="settings-seg-btn" data-val="wide">Wide</button>
+                            <button type="button" class="settings-seg-btn" data-val="full">Full</button>
+                        </div>
+                    </div>
+                    <div class="settings-row">
+                        <span class="settings-row-label">URL display</span>
+                        <div class="settings-btn-group" id="url-style-group">
+                            <button type="button" class="settings-seg-btn" data-val="full">Full</button>
+                            <button type="button" class="settings-seg-btn" data-val="domain">Domain</button>
+                            <button type="button" class="settings-seg-btn" data-val="none">Hide</button>
+                        </div>
+                    </div>
+                    <div class="settings-row">
+                        <span class="settings-row-label">Snippet length</span>
+                        <div class="settings-btn-group" id="snippet-style-group">
+                            <button type="button" class="settings-seg-btn" data-val="full">Full</button>
+                            <button type="button" class="settings-seg-btn" data-val="short">Short</button>
+                            <button type="button" class="settings-seg-btn" data-val="none">Hide</button>
+                        </div>
+                    </div>
                     <div class="settings-row">
                         <span class="settings-row-label">Answer cards</span>
                         <label class="settings-toggle">
@@ -447,9 +532,10 @@
     <main>
         <div class="search-container">
             {% if not query %}
-            {# ===== HOME: title above search; supporting copy below bar ===== #}
+            {# ===== HOME: logo → headline → search → one supporting line ===== #}
             <div class="home-hero">
                 <h1 class="home-logo">abbiey<span>search</span></h1>
+                <p class="home-hero-headline">Unfiltered answers.</p>
             </div>
             {% endif %}
 
@@ -458,7 +544,7 @@
                     <div class="search-box">
                         <svg class="search-icon icon-search-glass" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><g transform="rotate(38 12 11.5)" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="11" r="5.5" stroke-width="1.65"/><path d="M9.05 9.4A3.15 3.15 0 0 1 10.95 7.72" stroke-width="1.35"/><line x1="16.2" y1="15.05" x2="20.95" y2="20.4" stroke-width="2.2"/></g></svg>
                         <input type="text" name="q" id="search-input" value="{{ query or '' }}" placeholder="Search anything…" data-placeholder-rotate="true" autocomplete="off" autofocus aria-label="Search query">
-                        <button type="button" class="reverse-image-btn" id="reverse-image-btn" aria-label="Search by image" aria-expanded="false" aria-controls="reverse-image-panel" title="Search by image">
+                        <button type="button" class="reverse-image-btn" id="reverse-image-btn" aria-label="Choose image from your device to find similar images" title="Choose a photo from your device. Use Paste image URL below for an HTTPS link instead.">
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
                         </button>
                         <button type="button" class="voice-btn" id="voice-btn" aria-label="Search by voice" title="Voice search">
@@ -476,15 +562,18 @@
                         {% endif %}
                     </div>
                     <div class="ac-dropdown" id="ac-dropdown"></div>
-                </div>
-                <div id="reverse-image-panel" class="reverse-image-panel" hidden role="region" aria-label="Search by image">
-                    <p class="reverse-image-lead">Find similar images across the web. Paste a direct <strong>HTTPS</strong> image link, or choose a photo (upload works on the live site with a public URL).</p>
+                    <input type="file" id="reverse-image-file" class="sr-only" accept="image/*" aria-label="Image file for reverse search">
+                    <button type="button" class="reverse-image-url-entry" id="reverse-image-url-entry" aria-expanded="false" aria-controls="reverse-image-panel">Paste image URL</button>
+                    <div id="reverse-image-panel" class="reverse-image-panel" hidden role="dialog" aria-label="Search by image with a link" aria-modal="true">
+                    <p class="reverse-image-lead">Find similar images across the web. Paste a direct <strong>HTTPS</strong> image link, or use <strong>Choose photo</strong> to pick from this device. Uploads are hosted privately for ~60&nbsp;seconds while the lookup runs and then wiped.</p>
                     <label class="reverse-image-field"><span class="reverse-image-label">Image URL</span>
                         <input type="url" id="reverse-image-url" inputmode="url" autocomplete="off" placeholder="https://…/photo.jpg" class="reverse-image-input">
                     </label>
-                    <label class="reverse-image-field"><span class="reverse-image-label">From device</span>
-                        <input type="file" id="reverse-image-file" accept="image/jpeg,image/png,image/webp,image/gif" class="reverse-image-file">
-                    </label>
+                    <div class="reverse-image-field reverse-image-device-row">
+                        <span class="reverse-image-label">From device</span>
+                        <button type="button" class="reverse-image-pick-btn" id="reverse-image-pick-btn">Choose photo</button>
+                        <span class="reverse-image-file-hint" id="reverse-image-file-hint" aria-live="polite"></span>
+                    </div>
                     <label class="reverse-image-field"><span class="reverse-image-label">Results title (optional)</span>
                         <input type="text" id="reverse-image-caption" class="reverse-image-input" maxlength="200" value="Visual matches" placeholder="Visual matches">
                     </label>
@@ -493,6 +582,7 @@
                         <button type="button" class="reverse-image-cancel" id="reverse-image-close">Close</button>
                     </div>
                     <p class="reverse-image-foot">Matching uses Microsoft Bing&rsquo;s image index. Page links and thumbnails are third-party sites.</p>
+                    </div>
                 </div>
                 <input type="hidden" name="type" id="search-type-input" value="{{ search_type or 'text' }}">
                 <input type="hidden" name="onion_mode" id="onion-mode-input" value="{{ onion_mode or 'balanced' }}">
@@ -506,25 +596,33 @@
             </form>
 
             {% if not query %}
-            <nav class="home-search-modes" aria-label="What to search">
+            {# Hidden on landing to reduce noise. Tabs appear after a search (see .search-tabs below). Kept in DOM so JS that targets these modes still works. #}
+            <nav class="home-search-modes" aria-label="What to search" hidden>
                 <span class="home-search-modes-label" id="home-search-modes-label">Search</span>
                 <div class="home-search-modes-row" role="group" aria-labelledby="home-search-modes-label">
                     <button type="button" class="home-mode-btn{% if search_type == 'text' %} active{% endif %}" data-search-mode="text" aria-pressed="{% if search_type == 'text' %}true{% else %}false{% endif %}">All</button>
                     <button type="button" class="home-mode-btn{% if search_type == 'images' %} active{% endif %}" data-search-mode="images" aria-pressed="{% if search_type == 'images' %}true{% else %}false{% endif %}">Images</button>
                     <button type="button" class="home-mode-btn{% if search_type == 'news' %} active{% endif %}" data-search-mode="news" aria-pressed="{% if search_type == 'news' %}true{% else %}false{% endif %}">News</button>
                     <button type="button" class="home-mode-btn{% if search_type == 'videos' %} active{% endif %}" data-search-mode="videos" aria-pressed="{% if search_type == 'videos' %}true{% else %}false{% endif %}">Videos</button>
-                    <button type="button" class="home-mode-btn{% if search_type == 'onion' %} active{% endif %}" data-search-mode="onion" aria-pressed="{% if search_type == 'onion' %}true{% else %}false{% endif %}">Deep web</button>
+                    <button type="button" class="home-mode-btn{% if search_type == 'people' %} active{% endif %}" data-search-mode="people" aria-pressed="{% if search_type == 'people' %}true{% else %}false{% endif %}">People</button>
+                    <button type="button" class="home-mode-btn{% if search_type == 'email' %} active{% endif %}" data-search-mode="email" aria-pressed="{% if search_type == 'email' %}true{% else %}false{% endif %}">Email</button>
+                    <button type="button" class="home-mode-btn{% if search_type == 'business' %} active{% endif %}" data-search-mode="business" aria-pressed="{% if search_type == 'business' %}true{% else %}false{% endif %}">Business</button>
+                    <button type="button" class="home-mode-btn{% if search_type == 'onion' %} active{% endif %}" data-search-mode="onion" aria-pressed="{% if search_type == 'onion' %}true{% else %}false{% endif %}" title="Clearnet-indexed .onion sites via Ahmia + DDG">Onion / Tor</button>
                 </div>
             </nav>
-            <div class="home-message" aria-label="Search positioning">
-                <p class="home-message-title">Unfiltered answers, with receipts.</p>
-                <p class="home-message-subtitle">Get direct, detailed explanations with sources, tradeoffs, and next steps. Built privacy-first: no server-side query logging, optional incognito in Settings, and one-tap history clear.</p>
-            </div>
-            <p class="home-safety-note">Unfiltered = direct, detailed, and honest &mdash; without marketing fluff.</p>
+            <p class="home-message-sub" aria-label="Search positioning">Direct answers. Sources. No fluff.</p>
             <div class="home-recent-wrap">
                 <div id="recent-searches-home" class="recent-searches-home"></div>
             </div>
-            <p class="home-creator-credit" aria-hidden="true">abbiey matthews</p>
+            <div class="home-chatbots-row">
+                <a href="/chatbots" class="home-chatbots-btn" aria-label="Open AI chatbots">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                    Chatbots
+                </a>
+            </div>
+            {% with adsense_slot=google_adsense_slot_home %}
+            {% include 'includes/google_adsense_unit.html' %}
+            {% endwith %}
             {% endif %}
 
             {% if query %}
@@ -549,7 +647,10 @@
                 <a href="/search?q={{ query|urlencode }}&type=news{% if region %}&region={{ region }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab {% if search_type == 'news' %}active{% endif %}">News</a>
                 <a href="/search?q={{ query|urlencode }}&type=videos{% if region %}&region={{ region }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab {% if search_type == 'videos' %}active{% endif %}">Videos</a>
                 <a href="/search?q={{ query|urlencode }}&type=code{% if region %}&region={{ region }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab {% if search_type == 'code' %}active{% endif %}">Code</a>
-                <a href="/search?q={{ query|urlencode }}&type=onion{% if region %}&region={{ region }}{% endif %}{% if onion_mode %}&onion_mode={{ onion_mode }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab {% if search_type == 'onion' %}active{% endif %}">Deep Web</a>
+                <a href="/search?q={{ query|urlencode }}&type=people{% if region %}&region={{ region }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab {% if search_type == 'people' %}active{% endif %}">People</a>
+                <a href="/search?q={{ query|urlencode }}&type=email{% if region %}&region={{ region }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab {% if search_type == 'email' %}active{% endif %}">Email</a>
+                <a href="/search?q={{ query|urlencode }}&type=business{% if region %}&region={{ region }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab {% if search_type == 'business' %}active{% endif %}">Business</a>
+                <a href="/search?q={{ query|urlencode }}&type=onion{% if region %}&region={{ region }}{% endif %}{% if onion_mode %}&onion_mode={{ onion_mode }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab {% if search_type == 'onion' %}active{% endif %}" title="Clearnet-indexed .onion search">Onion / Tor</a>
                 </div>
                 <div class="tab-more-wrap {% if search_type in ('saved', 'mybot') %}has-active{% endif %}" id="tab-more-wrap">
                     <button type="button" class="tab tab-more-btn {% if search_type in ('saved', 'mybot') %}active{% endif %}" id="tab-more-btn" aria-haspopup="true" aria-expanded="false" aria-controls="tab-more-menu">
@@ -558,10 +659,16 @@
                     </button>
                     <div class="tab-more-menu" id="tab-more-menu" hidden>
                         <a href="/search?q={{ query|urlencode }}&type=saved{% if cleanweb %}&cleanweb=1{% endif %}" class="tab-more-item {% if search_type == 'saved' %}active{% endif %}">Saved <span class="bookmark-count-badge" id="bookmark-count-badge"></span></a>
-                        <a href="/profile#search-bots" class="tab-more-item">Custom bots</a>
+                        <a href="/profile#search-bots" class="tab-more-item">Your bots</a>
                     </div>
                 </div>
             </nav>
+            {% if query and search_type == 'mybot' %}
+            <p class="mybot-context-hint" role="status">
+                Custom bot search{% if mybot_name %}: <strong>{{ mybot_name }}</strong>{% endif %}.
+                <a href="/profile#search-bots">Manage in Profile</a>
+            </p>
+            {% endif %}
             {% if query and query_ui.local_intent and search_type == 'text' %}
             <div class="local-search-hint" id="local-search-hint" role="status">
                 Local search: results are re-ranked using map and listing signals. Exact distance per result is not available from the web index.
@@ -618,7 +725,7 @@
                 {% endif %}
             </div>
             {% if search_type == 'onion' %}
-            <div class="onion-scope-bar" id="onion-scope-bar" role="group" aria-label="Deep web search mode">
+            <div class="onion-scope-bar" id="onion-scope-bar" role="group" aria-label="Onion / Tor search mode">
                 <span class="onion-scope-label">Deep web mode</span>
                 <button type="button" class="onion-scope-btn{% if onion_mode == 'strict' %} active{% endif %}" data-onion-mode="strict" aria-pressed="{% if onion_mode == 'strict' %}true{% else %}false{% endif %}">Onion only</button>
                 <button type="button" class="onion-scope-btn{% if onion_mode == 'balanced' %} active{% endif %}" data-onion-mode="balanced" aria-pressed="{% if onion_mode == 'balanced' %}true{% else %}false{% endif %}">Balanced</button>
@@ -1162,7 +1269,7 @@
             {% if search_type == 'onion' %}
             <div class="onion-warning">
                 <span class="onion-warning-icon">&#9888;&#65039;</span>
-                <span>Deep web results can include <strong>.onion links</strong> that require the <a href="https://www.torproject.org/download/" target="_blank" rel="noopener">Tor Browser</a>. Use the mode toggle above to switch between direct onion-only links and broader intelligence results.</span>
+                <span>This tab is a <strong>clearnet-indexed .onion search</strong> (Ahmia + DDG onion filter) &mdash; not a dark-web crawler. Opening <strong>.onion links</strong> requires the <a href="https://www.torproject.org/download/" target="_blank" rel="noopener">Tor Browser</a>. <a href="/docs/deep-web">What this tab does &rarr;</a></span>
             </div>
             {% endif %}
             {% if search_notice %}
@@ -1212,6 +1319,11 @@
                     <noscript><p class="no-results">Saved bookmarks require JavaScript.</p></noscript>
                 </div>
             {% elif results %}
+                {% if query and search_type in ('text', 'news') %}
+                {% with adsense_slot=google_adsense_slot_results %}
+                {% include 'includes/google_adsense_unit.html' %}
+                {% endwith %}
+                {% endif %}
                 {% for r in results %}
                     {% if search_type == 'images' %}
                     <div class="image-card" data-full="{{ r.image or r.thumbnail }}" data-title="{{ r.title }}" data-source="{{ r.source or '' }}" data-url="{{ r.url }}" data-license="{{ r.license or '' }}" role="button" tabindex="0" aria-label="Open image result: {{ r.title }}">
@@ -1283,6 +1395,63 @@
                             <button type="button" class="result-action-btn feedback-btn" data-rating="down">Not relevant</button>
                         </div>
                     </article>
+                    {% elif search_type in ('people', 'email', 'business') %}
+                    {% if r.profile_card %}
+                    <article class="result profile-result profile-{{ search_type }}{% if r.disposable %} profile-warn{% endif %}" data-url="{{ r.url }}" data-rank="{{ loop.index0 }}">
+                        <div class="profile-result-head">
+                            {% if r.avatar or r.thumbnail %}
+                            <div class="profile-avatar">
+                                <img src="{{ r.avatar or r.thumbnail }}" alt="" loading="lazy" onerror="this.style.display='none'">
+                            </div>
+                            {% else %}
+                            <div class="profile-avatar profile-avatar-placeholder" aria-hidden="true">
+                                {{ r.title[0]|upper if r.title else '?' }}
+                            </div>
+                            {% endif %}
+                            <div class="profile-result-main">
+                                <a href="{{ r.url }}" target="_blank" rel="noopener" class="result-title profile-name">{{ r.title }}</a>
+                                {% if r.subtitle %}<p class="profile-subtitle">{{ r.subtitle }}</p>{% endif %}
+                                <div class="profile-source-row">
+                                    {% if r.source %}<span class="profile-source-chip">{{ r.source }}</span>{% endif %}
+                                    {% if r.disposable %}<span class="profile-source-chip profile-chip-warn">Disposable</span>{% endif %}
+                                    <img class="result-favicon" src="https://icons.duckduckgo.com/ip3/{{ r.url|domain }}/favicon.ico" onerror="this.style.display='none'" alt="" loading="lazy">
+                                    <cite class="result-url">{{ r.url|domain }}</cite>
+                                </div>
+                            </div>
+                        </div>
+                        {% if r.body %}<p class="result-snippet profile-bio">{{ r.body }}</p>{% endif %}
+                        {% if r.facts %}
+                        <ul class="profile-facts" role="list">
+                            {% for f in r.facts %}<li class="profile-fact">{{ f }}</li>{% endfor %}
+                        </ul>
+                        {% endif %}
+                        {% if r.accounts %}
+                        <ul class="profile-accounts" role="list">
+                            {% for a in r.accounts %}
+                            <li><a href="{{ a.url }}" target="_blank" rel="noopener">{{ a.name or a.url|domain }}</a></li>
+                            {% endfor %}
+                        </ul>
+                        {% endif %}
+                        <div class="result-actions" data-feedback="1">
+                            <button type="button" class="result-action-btn feedback-btn" data-rating="up">Helpful</button>
+                            <button type="button" class="result-action-btn feedback-btn" data-rating="down">Not relevant</button>
+                        </div>
+                    </article>
+                    {% else %}
+                    <article class="result profile-link-result" data-url="{{ r.url }}" data-rank="{{ loop.index0 }}">
+                        <div class="result-domain-row">
+                            <img class="result-favicon" src="https://icons.duckduckgo.com/ip3/{{ r.url|domain }}/favicon.ico" onerror="this.style.display='none'" alt="" loading="lazy">
+                            <span class="result-domain">{{ r.url|domain }}</span>
+                            {% if r.source %}<span class="profile-source-chip">{{ r.source }}</span>{% endif %}
+                        </div>
+                        <a href="{{ r.url }}" target="_blank" rel="noopener" class="result-title">{{ r.title }}</a>
+                        <p class="result-snippet">{{ r.body }}</p>
+                        <div class="result-actions" data-feedback="1">
+                            <button type="button" class="result-action-btn feedback-btn" data-rating="up">Helpful</button>
+                            <button type="button" class="result-action-btn feedback-btn" data-rating="down">Not relevant</button>
+                        </div>
+                    </article>
+                    {% endif %}
                     {% else %}
                     <article class="result" data-url="{{ r.url }}" data-source-type="{{ r.source_type or '' }}" data-rank="{{ loop.index0 }}">
                         <button class="bookmark-btn" data-url="{{ r.url }}" data-title="{{ r.title|e }}" data-snippet="{{ r.body|e }}" aria-label="Save result" title="Save">
@@ -1307,13 +1476,13 @@
             {% else %}
                 {% if search_type == 'onion' %}
                 <div class="no-results-deep">
-                    <p class="no-results">Deep web search returned no results.</p>
-                    <p class="no-results-hint">Ahmia.fi may be temporarily unreachable, or no .onion sites matched your query. Try broader keywords or check back shortly.</p>
+                    <p class="no-results">Onion search returned no results.</p>
+                    <p class="no-results-hint">Ahmia.fi may be temporarily unreachable, or no indexed .onion sites matched your query. Try broader keywords or check back shortly. <a href="/docs/deep-web">How this tab works</a>.</p>
                 </div>
                 {% elif search_type == 'mybot' %}
                 <div class="no-results-inclusive">
                     <p class="no-results">No pages in this bot matched your keywords.</p>
-                    <p class="no-results-hint">Run a crawl from <a href="/profile#search-bots">Profile → Custom search bots</a>, widen your query, or clear filters.</p>
+                    <p class="no-results-hint">Update your bot’s index from <a href="/profile#search-bots">Profile → Custom bots</a>, try a broader query, or clear filters.</p>
                 </div>
                 {% else %}
                 <div class="no-results-inclusive">
@@ -1352,9 +1521,9 @@
             {% if onion_mode == 'strict' %}
             <p>Showing all available direct onion matches. Switch to Balanced or Research mode if you want additional clearnet intelligence references.</p>
             {% elif onion_mode == 'extended' %}
-            <p>Showing all available deep web + intelligence results for this query blend.</p>
+            <p>Showing all available onion + intelligence results for this query blend.</p>
             {% else %}
-            <p>Showing all available deep web results. Ahmia indexes a limited subset of .onion sites.</p>
+            <p>Showing all available onion results. Ahmia indexes a limited subset of .onion sites.</p>
             {% endif %}
         </div>
         {% endif %}
@@ -1362,7 +1531,7 @@
     </main>
 
     {# ===== RESULT PREVIEW PANEL ===== #}
-    {% if query and search_type in ('text', 'news', 'code', 'onion', 'videos', 'images', 'saved', 'prices', 'alts', 'mybot') %}
+    {% if query and search_type in ('text', 'news', 'code', 'onion', 'videos', 'images', 'saved', 'prices', 'alts', 'mybot', 'people', 'email', 'business') %}
     <div class="layout-gutter-preview" id="layout-gutter-preview" role="separator" aria-orientation="vertical" aria-label="Resize preview panel" tabindex="0"></div>
     <aside class="preview-panel" id="preview-panel">
         <div class="preview-header">
@@ -1485,13 +1654,17 @@
     </div>
 
     <footer>
-        <p><strong>abbieysearch</strong> (abbiey.search) &mdash; Real answers. Full context. No fluff.</p>
+        <p><strong>abbieysearch</strong> (abbiey.search) &mdash; Real answers. Full context. No fluff. <span class="footer-credit">by abbiey matthews</span></p>
         <p class="footer-links">
             <a href="/privacy">Privacy Policy</a>
             &nbsp;&middot;&nbsp;
             <a href="/terms">Terms of Service</a>
             &nbsp;&middot;&nbsp;
             <a href="/about">About</a>
+            {% if support_url %}
+            &nbsp;&middot;&nbsp;
+            <a href="{{ support_url }}" target="_blank" rel="noopener noreferrer">Support</a>
+            {% endif %}
         </p>
         {% if not query %}
         <p class="home-about-blurb" id="what-is-abbieysearch">
@@ -1555,7 +1728,10 @@
                     <button class="welcome-chip" data-type="images">Images</button>
                     <button class="welcome-chip" data-type="code">Code</button>
                     <button class="welcome-chip" data-type="videos">Videos</button>
-                    <button class="welcome-chip" data-type="onion">Deep web</button>
+                    <button class="welcome-chip" data-type="people">People</button>
+                    <button class="welcome-chip" data-type="email">Email</button>
+                    <button class="welcome-chip" data-type="business">Business</button>
+                    <button class="welcome-chip" data-type="onion">Onion / Tor</button>
                 </div>
                 <p style="margin:1rem 0 0;text-align:center"><a href="/search" class="welcome-skip">Skip</a></p>
             </div>

@@ -26,7 +26,12 @@ DEFAULT_UA = "abbiey.search/bot (+https://www.abbieysearch.com)"
 MAX_PAGE_BYTES = 1_400_000
 MAX_SNIPPET = 2000
 MAX_TITLE = 400
-HTTP_TIMEOUT = 12.0
+# Per-page timeout. 6s keeps 3 fetches under Vercel's default 10s limit so a
+# full crawl step never overruns a serverless invocation.
+HTTP_TIMEOUT = 6.0
+# Default chunk size for chunked/resumable crawls. Full crawls still happen
+# one step at a time via crawl_bot_pages_step until the queue drains.
+DEFAULT_PAGES_PER_INVOCATION = 3
 _MAX_JSON_URLS_PER_PAGE = 80
 
 _BLOCKED_HOST_FRAGMENTS = (
@@ -259,31 +264,34 @@ def _extract_title(soup: BeautifulSoup) -> str:
     return ""
 
 
-def crawl_bot_pages(
-    seed_urls: list[str],
+def crawl_bot_pages_step(
+    queue: list[tuple[str, int]],
+    seen: list[str] | set[str],
     allow_hosts: list[str],
     max_depth: int,
     max_pages: int,
-) -> tuple[list[dict[str, str]], str | None]:
-    """
-    BFS crawl within allow_hosts. Returns list of {url, title, snippet} and optional error.
+    pages_per_invocation: int = DEFAULT_PAGES_PER_INVOCATION,
+) -> tuple[list[dict[str, str]], list[tuple[str, int]], list[str], str | None]:
+    """Resume a chunked BFS crawl.
+
+    Returns ``(new_pages, remaining_queue, new_seen, error)``. When
+    ``remaining_queue`` is empty the job is done. Caller persists
+    ``new_seen`` (deduped URLs) + the remaining queue between invocations.
+
+    ``pages_per_invocation`` hard-caps how many fresh pages are fetched in this
+    step so a single serverless call cannot run longer than roughly
+    ``pages_per_invocation * HTTP_TIMEOUT`` seconds.
     """
     if not allow_hosts:
-        return [], "No allowed hosts configured."
+        return [], [], list(seen), "No allowed hosts configured."
     max_depth = max(0, min(int(max_depth), 2))
     max_pages = max(1, min(int(max_pages), 30))
+    pages_per_invocation = max(1, min(int(pages_per_invocation), max_pages))
 
-    seeds: list[str] = []
-    for s in seed_urls:
-        n = normalize_http_seed(s, allow_hosts)
-        if n:
-            seeds.append(n)
-    if not seeds:
-        return [], "No valid seed URLs for the allowed hosts."
-
-    seen: set[str] = set()
+    seen_set: set[str] = set(seen or [])
     results: list[dict[str, str]] = []
-    queue: list[tuple[str, int]] = [(u, 0) for u in seeds]
+    q: list[tuple[str, int]] = list(queue or [])
+    pages_this_step = 0
 
     headers = {
         "User-Agent": DEFAULT_UA,
@@ -296,11 +304,12 @@ def crawl_bot_pages(
         timeout=HTTP_TIMEOUT,
         limits=httpx.Limits(max_connections=5, max_keepalive_connections=2),
     ) as client:
-        while queue and len(results) < max_pages:
-            url, depth = queue.pop(0)
-            if url in seen:
+        while q and pages_this_step < pages_per_invocation and len(seen_set) < max_pages * 20:
+            url, depth = q.pop(0)
+            if url in seen_set:
                 continue
-            seen.add(url)
+            seen_set.add(url)
+            pages_this_step += 1
             try:
                 pu = urlparse(url)
                 host = (pu.hostname or "").lower()
@@ -355,8 +364,8 @@ def crawl_bot_pages(
                     for u in urls_found:
                         joined = u.split("#")[0]
                         n = normalize_http_seed(joined, allow_hosts)
-                        if n and n not in seen and len(seen) + len(queue) < max_pages * 20:
-                            queue.append((n, depth + 1))
+                        if n and n not in seen_set and len(seen_set) + len(q) < max_pages * 20:
+                            q.append((n, depth + 1))
                     continue
                 if looks_csv:
                     try:
@@ -378,8 +387,8 @@ def crawl_bot_pages(
                     for u in urls_found:
                         joined = u.split("#")[0]
                         n = normalize_http_seed(joined, allow_hosts)
-                        if n and n not in seen and len(seen) + len(queue) < max_pages * 20:
-                            queue.append((n, depth + 1))
+                        if n and n not in seen_set and len(seen_set) + len(q) < max_pages * 20:
+                            q.append((n, depth + 1))
                     continue
 
                 if "html" not in ct and "text/plain" not in ct and "application/xhtml" not in ct:
@@ -392,7 +401,7 @@ def crawl_bot_pages(
                 if depth >= max_depth:
                     continue
                 for a in soup.find_all("a", href=True):
-                    if len(queue) + len(results) > max_pages * 8:
+                    if len(q) + len(results) > max_pages * 8:
                         break
                     href = (a.get("href") or "").strip()
                     if not href or href.startswith(("#", "javascript:", "mailto:", "tel:")):
@@ -405,11 +414,56 @@ def crawl_bot_pages(
                     if not host_allowed_for_bot(nh, allow_hosts):
                         continue
                     norm = joined.split("#")[0]
-                    if norm not in seen and len(seen) + len(queue) < max_pages * 20:
-                        queue.append((norm, depth + 1))
+                    if norm not in seen_set and len(seen_set) + len(q) < max_pages * 20:
+                        q.append((norm, depth + 1))
             except Exception as exc:
                 logger.debug("crawl skip url=%s err=%s", url, exc)
 
-    if not results:
+    return results, q, sorted(seen_set), None
+
+
+def crawl_bot_pages(
+    seed_urls: list[str],
+    allow_hosts: list[str],
+    max_depth: int,
+    max_pages: int,
+) -> tuple[list[dict[str, str]], str | None]:
+    """Back-compat wrapper: run a full synchronous crawl (no checkpointing).
+
+    Only used by legacy tests / CLI. Production uses ``crawl_bot_pages_step``
+    with persisted queue+seen state so a long crawl is resumable across
+    serverless invocations.
+    """
+    if not allow_hosts:
+        return [], "No allowed hosts configured."
+    seeds: list[str] = []
+    for s in seed_urls or []:
+        n = normalize_http_seed(s, allow_hosts)
+        if n:
+            seeds.append(n)
+    if not seeds:
+        return [], "No valid seed URLs for the allowed hosts."
+
+    queue: list[tuple[str, int]] = [(u, 0) for u in seeds]
+    seen: list[str] = []
+    all_pages: list[dict[str, str]] = []
+
+    # Step until the queue drains or we hit max_pages.
+    while queue and len(all_pages) < max(1, min(int(max_pages), 30)):
+        step_pages, queue, seen, err = crawl_bot_pages_step(
+            queue=queue,
+            seen=seen,
+            allow_hosts=allow_hosts,
+            max_depth=max_depth,
+            max_pages=max_pages,
+            pages_per_invocation=max(1, min(int(max_pages), 30)),
+        )
+        if err:
+            return all_pages, err
+        all_pages.extend(step_pages)
+        if not step_pages and not queue:
+            break
+
+    if not all_pages:
         return [], "Crawl found no indexable pages (check seeds, robots, or timeouts)."
-    return results, None
+    return all_pages, None

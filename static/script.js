@@ -594,6 +594,53 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  // ===== Custom search-bar colour =====
+  // Independent from --accent so users can theme the search pill without
+  // dragging every other accent-tinted element along. Empty string = reset.
+  const SEARCH_ACCENT_KEY = "abbiey_search_accent";
+  const savedSearchAccent = localStorage.getItem(SEARCH_ACCENT_KEY) || "";
+  applySearchAccent(savedSearchAccent);
+
+  function applySearchAccent(color) {
+    const vars = [
+      "--search-accent-border",
+      "--search-accent-border-hover",
+      "--search-accent-focus",
+      "--search-accent-ring",
+      "--search-accent-focus-icon",
+    ];
+    if (!color) {
+      vars.forEach(v => html.style.removeProperty(v));
+      localStorage.removeItem(SEARCH_ACCENT_KEY);
+    } else {
+      // Idle border: 45% of picked colour blended onto transparent.
+      html.style.setProperty("--search-accent-border", _mix(color, 0.45));
+      html.style.setProperty("--search-accent-border-hover", _mix(color, 0.75));
+      html.style.setProperty("--search-accent-focus", color);
+      html.style.setProperty("--search-accent-ring", _mix(color, 0.22));
+      html.style.setProperty("--search-accent-focus-icon", _mix(color, 1.0, true));
+      localStorage.setItem(SEARCH_ACCENT_KEY, color);
+    }
+    document.querySelectorAll(".search-color-swatch").forEach(s => {
+      s.classList.toggle("active", s.dataset.color === color);
+    });
+  }
+
+  function _mix(hex, alpha, brighten) {
+    const h = String(hex || "").replace("#", "");
+    if (h.length !== 6) return hex;
+    let r = parseInt(h.slice(0, 2), 16);
+    let g = parseInt(h.slice(2, 4), 16);
+    let b = parseInt(h.slice(4, 6), 16);
+    if (brighten) {
+      r = Math.min(255, Math.round(r + (255 - r) * 0.35));
+      g = Math.min(255, Math.round(g + (255 - g) * 0.35));
+      b = Math.min(255, Math.round(b + (255 - b) * 0.35));
+      return `rgb(${r}, ${g}, ${b})`;
+    }
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+
   function adjustBrightness(hex, amount) {
     hex = hex.replace("#", "");
     const r = Math.max(0, Math.min(255, parseInt(hex.slice(0, 2), 16) + amount));
@@ -602,25 +649,54 @@ document.addEventListener("DOMContentLoaded", () => {
     return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
   }
 
+  // Wrap URL paths in a span so CSS can hide just the path, leaving the domain visible
+  function applyDomainUrlStyle() {
+    document.querySelectorAll("cite.result-url").forEach(el => {
+      if (el.dataset.urlProcessed) return;
+      el.dataset.urlProcessed = "1";
+      const raw = el.textContent.trim();
+      try {
+        const u = new URL(raw.startsWith("http") ? raw : "https://" + raw);
+        const domain = u.protocol + "//" + u.host;
+        const path   = u.pathname + u.search + u.hash;
+        if (path && path !== "/") {
+          el.innerHTML = "";
+          el.appendChild(document.createTextNode(domain));
+          const pathSpan = document.createElement("span");
+          pathSpan.className = "result-url-path";
+          pathSpan.textContent = path;
+          el.appendChild(pathSpan);
+        }
+      } catch {}
+    });
+  }
+
   // Theme settings popover
   // ===== Settings Modal =====
   const _S = {
-    theme:         { key: "theme",                 def: "dark"   },
-    accent:        { key: "accent-color",          def: "#e7e5e4"},
-    density:       { key: "density",               def: "default"},
-    fontSize:      { key: "abbiey_font_size",      def: "medium" },
-    fontFamily:    { key: "abbiey_font_family",    def: "system" },
-    safesearch:    { key: "abbiey_safesearch",     def: "off"    },
-    newTab:        { key: "abbiey_new_tab",        def: "true"   },
-    defaultTab:    { key: "abbiey_default_tab",    def: "text"   },
-    aiSummary:     { key: "abbiey_ai_summary",     def: "true"   },
-    autocomplete:  { key: "abbiey_autocomplete",   def: "true"   },
-    persistRegion: { key: "abbiey_region_persist", def: "false"  },
-    history:       { key: "abbiey_history",        def: "false"  },
-    incognito:     { key: "abbiey_incognito",      def: "false"  },
-    showCards:     { key: "abbiey_show_cards",     def: "true"   },
-    showFavicons:  { key: "abbiey_show_favicons",  def: "true"   },
-    showDates:     { key: "abbiey_show_dates",     def: "true"   },
+    theme:         { key: "theme",                 def: "dark"    },
+    accent:        { key: "accent-color",          def: "#e7e5e4" },
+    density:       { key: "density",               def: "default" },
+    fontSize:      { key: "abbiey_font_size",      def: "medium"  },
+    fontFamily:    { key: "abbiey_font_family",    def: "system"  },
+    safesearch:    { key: "abbiey_safesearch",     def: "off"     },
+    newTab:        { key: "abbiey_new_tab",        def: "true"    },
+    defaultTab:    { key: "abbiey_default_tab",    def: "text"    },
+    aiSummary:     { key: "abbiey_ai_summary",     def: "true"    },
+    autocomplete:  { key: "abbiey_autocomplete",   def: "true"    },
+    persistRegion: { key: "abbiey_region_persist", def: "false"   },
+    history:       { key: "abbiey_history",        def: "false"   },
+    incognito:     { key: "abbiey_incognito",      def: "false"   },
+    showCards:     { key: "abbiey_show_cards",     def: "true"    },
+    showFavicons:  { key: "abbiey_show_favicons",  def: "true"    },
+    showDates:     { key: "abbiey_show_dates",     def: "true"    },
+    // New customisation settings
+    radius:        { key: "abbiey_radius",         def: "default" },
+    motion:        { key: "abbiey_motion",         def: "full"    },
+    width:         { key: "abbiey_width",          def: "default" },
+    urlStyle:      { key: "abbiey_url_style",      def: "full"    },
+    snippetStyle:  { key: "abbiey_snippet_style",  def: "full"    },
+    searchBar:     { key: "abbiey_searchbar",      def: "default" },
   };
   function gs(name) { return localStorage.getItem(_S[name].key) ?? _S[name].def; }
   function ss(name, val) { localStorage.setItem(_S[name].key, val); }
@@ -766,6 +842,33 @@ document.addEventListener("DOMContentLoaded", () => {
         if (_alr) _alr.hidden = false;
       }
     }
+
+    // Corner radius
+    const _radius = gs("radius");
+    if (_radius !== "default") html.setAttribute("data-radius", _radius);
+
+    // Animation speed
+    const _motion = gs("motion");
+    if (_motion !== "full") html.setAttribute("data-motion", _motion);
+
+    // Results width
+    const _width = gs("width");
+    if (_width !== "default") html.setAttribute("data-width", _width);
+
+    // URL display
+    const _urlStyle = gs("urlStyle");
+    if (_urlStyle !== "full") {
+      html.setAttribute("data-url-style", _urlStyle);
+      if (_urlStyle === "domain") applyDomainUrlStyle();
+    }
+
+    // Snippet style
+    const _snippetStyle = gs("snippetStyle");
+    if (_snippetStyle !== "full") html.setAttribute("data-snippet-style", _snippetStyle);
+
+    // Search bar style
+    const _searchBar = gs("searchBar");
+    if (_searchBar !== "default") html.setAttribute("data-searchbar", _searchBar);
   }
 
   applyAllSettings();
@@ -937,11 +1040,17 @@ document.addEventListener("DOMContentLoaded", () => {
     syncBtnGroup("safesearch-group",   gs("safesearch"));
     syncBtnGroup("default-tab-group",  gs("defaultTab"));
     syncBtnGroup("newtab-group",       gs("newTab"));
+    syncBtnGroup("radius-group",       gs("radius"));
+    syncBtnGroup("motion-group",       gs("motion"));
+    syncBtnGroup("width-group",        gs("width"));
+    syncBtnGroup("url-style-group",    gs("urlStyle"));
+    syncBtnGroup("snippet-style-group",gs("snippetStyle"));
+    syncBtnGroup("searchbar-group",    gs("searchBar"));
     syncToggle("ai-summary-toggle",    gs("aiSummary")     === "true");
     syncToggle("autocomplete-toggle",  gs("autocomplete")  === "true");
     syncToggle("persist-region-toggle",gs("persistRegion") === "true");
     syncToggle("history-toggle",       gs("history")       === "true");
-    syncToggle("incognito-toggle",   gs("incognito")     === "true");
+    syncToggle("incognito-toggle",     gs("incognito")     === "true");
     syncToggle("cards-toggle",         gs("showCards")     === "true");
     syncToggle("favicons-toggle",      gs("showFavicons")  === "true");
     syncToggle("dates-toggle",         gs("showDates")     === "true");
@@ -1009,6 +1118,25 @@ document.addEventListener("DOMContentLoaded", () => {
       else a.removeAttribute("target");
     });
   });
+  wireBtnGroup("radius-group", "radius", (val) => {
+    html.setAttribute("data-radius", val);
+  });
+  wireBtnGroup("motion-group", "motion", (val) => {
+    html.setAttribute("data-motion", val);
+  });
+  wireBtnGroup("width-group", "width", (val) => {
+    html.setAttribute("data-width", val);
+  });
+  wireBtnGroup("url-style-group", "urlStyle", (val) => {
+    html.setAttribute("data-url-style", val);
+    if (val === "domain") applyDomainUrlStyle();
+  });
+  wireBtnGroup("snippet-style-group", "snippetStyle", (val) => {
+    html.setAttribute("data-snippet-style", val);
+  });
+  wireBtnGroup("searchbar-group", "searchBar", (val) => {
+    html.setAttribute("data-searchbar", val);
+  });
 
   wireToggle("ai-summary-toggle", "aiSummary", (checked) => {
     const c = document.getElementById("ai-summary-card");
@@ -1075,6 +1203,23 @@ document.addEventListener("DOMContentLoaded", () => {
     customColorInput.addEventListener("input", () => {
       applyAccentColor(customColorInput.value);
       ss("accent", customColorInput.value);
+    });
+  }
+
+  // ===== Search-bar colour (in settings modal) =====
+  document.querySelectorAll(".search-color-swatch").forEach(swatch => {
+    swatch.addEventListener("click", () => {
+      const c = swatch.dataset.color || "";
+      applySearchAccent(c);
+      const sc = document.getElementById("search-custom-color");
+      if (sc && c) sc.value = c;
+    });
+  });
+  const searchCustomColor = document.getElementById("search-custom-color");
+  if (searchCustomColor) {
+    if (savedSearchAccent) searchCustomColor.value = savedSearchAccent;
+    searchCustomColor.addEventListener("input", () => {
+      applySearchAccent(searchCustomColor.value);
     });
   }
 
@@ -3609,33 +3754,59 @@ document.addEventListener("DOMContentLoaded", () => {
   (function initReverseImageSearch() {
     const btn = document.getElementById("reverse-image-btn");
     const panel = document.getElementById("reverse-image-panel");
+    const urlEntryBtn = document.getElementById("reverse-image-url-entry");
+    const pickBtn = document.getElementById("reverse-image-pick-btn");
     const closeBtn = document.getElementById("reverse-image-close");
     const submitBtn = document.getElementById("reverse-image-submit");
     const urlInput = document.getElementById("reverse-image-url");
     const fileInput = document.getElementById("reverse-image-file");
     const capInput = document.getElementById("reverse-image-caption");
-    if (!btn || !panel) return;
+    const fileHint = document.getElementById("reverse-image-file-hint");
+    if (!btn || !panel || !fileInput) return;
+
+    let busy = false;
+
+    function openImageFilePicker() {
+      fileInput.value = "";
+      if (fileHint) fileHint.textContent = "";
+      if (typeof fileInput.showPicker === "function") {
+        fileInput.showPicker().catch(() => {
+          fileInput.click();
+        });
+      } else {
+        fileInput.click();
+      }
+    }
 
     function setOpen(open) {
       panel.hidden = !open;
-      btn.setAttribute("aria-expanded", open ? "true" : "false");
+      urlEntryBtn?.setAttribute("aria-expanded", open ? "true" : "false");
+      if (open) {
+        requestAnimationFrame(() => {
+          urlInput?.focus();
+        });
+      }
     }
 
-    btn.addEventListener("click", () => setOpen(panel.hidden));
-    closeBtn?.addEventListener("click", () => setOpen(false));
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && !panel.hidden) setOpen(false);
-    });
+    function setBusy(on) {
+      busy = on;
+      btn.disabled = on;
+      submitBtn && (submitBtn.disabled = on);
+      pickBtn && (pickBtn.disabled = on);
+      btn.setAttribute("aria-busy", on ? "true" : "false");
+    }
 
-    submitBtn?.addEventListener("click", async () => {
+    async function runReverseImageSubmit() {
+      if (busy) return;
       const cap = (capInput?.value || "").trim();
-      const file = fileInput?.files?.[0];
+      const file = fileInput.files && fileInput.files[0];
       const url = (urlInput?.value || "").trim();
       if (!file && !url) {
         window.alert("Add an HTTPS image link or choose a photo from your device.");
         return;
       }
-      submitBtn.disabled = true;
+      if (fileHint) fileHint.textContent = file ? "Searching…" : "";
+      setBusy(true);
       try {
         let resp;
         if (file) {
@@ -3653,13 +3824,54 @@ document.addEventListener("DOMContentLoaded", () => {
         const data = await resp.json().catch(() => ({}));
         if (!resp.ok || !data.ok) {
           window.alert(data.message || data.error || "Could not look up that image.");
+          fileInput.value = "";
+          if (fileHint) fileHint.textContent = "";
           return;
         }
         if (data.redirect) window.location.href = data.redirect;
       } finally {
-        submitBtn.disabled = false;
+        setBusy(false);
+        if (fileHint && fileHint.textContent === "Searching…") fileHint.textContent = "";
+      }
+    }
+
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (busy) return;
+      openImageFilePicker();
+    });
+
+    pickBtn?.addEventListener("click", () => {
+      if (busy) return;
+      openImageFilePicker();
+    });
+
+    urlEntryBtn?.addEventListener("click", () => {
+      if (busy) return;
+      setOpen(panel.hidden);
+    });
+
+    closeBtn?.addEventListener("click", () => {
+      setOpen(false);
+      urlEntryBtn?.focus();
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !panel.hidden) {
+        setOpen(false);
+        urlEntryBtn?.focus();
       }
     });
+
+    fileInput.addEventListener("change", () => {
+      const f = fileInput.files && fileInput.files[0];
+      if (!f) return;
+      if (fileHint) fileHint.textContent = f.name || "Selected";
+      runReverseImageSubmit();
+    });
+
+    submitBtn?.addEventListener("click", () => runReverseImageSubmit());
   })();
 
   (function initHomeSearchModes() {

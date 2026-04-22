@@ -1,10 +1,15 @@
 """Custom search bots API — auth and validation (no live crawl)."""
 
 import json
+import time
+from unittest.mock import patch
 
+import bot_crawler as _bc
 from search_bots import (
+    HTTP_TIMEOUT,
     collect_http_urls_from_json,
     collect_http_urls_from_tabular,
+    crawl_bot_pages_step,
     normalize_http_seed,
     parse_csv_rows,
     parse_json_documents,
@@ -72,3 +77,71 @@ def test_search_bots_create_requires_auth(client):
         json={"name": "x", "allow_hosts": ["example.com"], "seed_urls": ["https://example.com/"]},
     )
     assert r.status_code == 401
+
+
+def test_http_timeout_kept_short_for_serverless():
+    """Regression: Vercel default function timeout is 10s, so per-page timeout
+    must stay low enough that 3 pages * timeout < 10s."""
+    assert HTTP_TIMEOUT * _bc.DEFAULT_PAGES_PER_INVOCATION + 2 < 60, (
+        "A full crawl step must comfortably fit inside the Vercel 60s function budget."
+    )
+
+
+def test_crawl_bot_pages_step_respects_pages_per_invocation():
+    """With a slow upstream, crawl_bot_pages_step caps at pages_per_invocation."""
+
+    class _FakeResp:
+        status_code = 200
+
+        def __init__(self, body=b"<html><title>t</title><body>hi</body></html>"):
+            self.content = body
+            self.headers = {"content-type": "text/html"}
+
+    class _FakeClient:
+        def __init__(self, *a, **kw):
+            self.calls = 0
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def get(self, url, **kw):
+            self.calls += 1
+            # Simulate a sluggish upstream but well under the unit-test budget.
+            time.sleep(0.02)
+            return _FakeResp()
+
+    seen_calls: list[int] = []
+
+    def _client_factory(*args, **kwargs):
+        c = _FakeClient()
+        seen_calls.append(id(c))
+        return c
+
+    with patch("search_bots.httpx.Client", side_effect=_client_factory):
+        started = time.time()
+        pages, remaining_queue, new_seen, err = crawl_bot_pages_step(
+            queue=[
+                ("https://example.com/a", 0),
+                ("https://example.com/b", 0),
+                ("https://example.com/c", 0),
+                ("https://example.com/d", 0),
+                ("https://example.com/e", 0),
+            ],
+            seen=[],
+            allow_hosts=["example.com"],
+            max_depth=0,
+            max_pages=10,
+            pages_per_invocation=3,
+        )
+        elapsed = time.time() - started
+
+    assert err is None
+    # Exactly 3 pages fetched despite 5 in queue (chunking works).
+    assert len(pages) == 3
+    assert len(remaining_queue) == 2
+    assert len(new_seen) == 3
+    # Sanity: a chunked step finished well under the 10s serverless default.
+    assert elapsed < 3.0

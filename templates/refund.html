@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Refund policy · abbieysearch{% endblock %}
+{% block content %}
+<main class="legal-page" style="max-width:720px;margin:0 auto;padding:2.5rem 1.25rem 4rem;line-height:1.65">
+    <h1 style="font-size:1.7rem;margin:0 0 1rem">Refund policy</h1>
+    <p style="opacity:.9">
+        If you paid for something on abbieysearch and you aren&rsquo;t happy with it,
+        you can get your money back. No lawyer-speak below.
+    </p>
+
+    <section style="margin-top:1.5rem">
+        <h2 style="font-size:1.2rem;margin:0 0 .5rem">14-day, no-questions-asked refund</h2>
+        <p>
+            Any one-time purchase (search unlock, API access credit) is fully
+            refundable for <strong>14 days</strong> from the date of the Stripe
+            charge. We don&rsquo;t ask why. Email
+            <a href="mailto:refunds@abbieysearch.com">refunds@abbieysearch.com</a>
+            with the email address you paid with and we&rsquo;ll refund to the
+            original payment method, typically within 2 business days.
+        </p>
+    </section>
+
+    <section style="margin-top:1.5rem">
+        <h2 style="font-size:1.2rem;margin:0 0 .5rem">After 14 days</h2>
+        <p>
+            One-time purchases become non-refundable after 14 days &mdash; with two
+            exceptions:
+        </p>
+        <ul>
+            <li><strong>We screwed up.</strong> If the feature you paid for was
+            broken or unavailable for more than an hour during your usage window,
+            email us. We will refund proportionally.</li>
+            <li><strong>Fraudulent charge.</strong> If someone else used your card,
+            file a chargeback &mdash; we won&rsquo;t dispute it and we will permanently
+            revoke any resulting account.</li>
+        </ul>
+    </section>
+
+    <section style="margin-top:1.5rem">
+        <h2 style="font-size:1.2rem;margin:0 0 .5rem">API credits (metered)</h2>
+        <p>
+            For metered API billing, we only charge at the end of the billing
+            period based on Stripe Meter usage. If the total looks wrong,
+            email us within 30 days of the invoice and we will reconcile
+            against the public row-level events in your account (<a href="/developer">/developer</a>).
+        </p>
+    </section>
+
+    <section style="margin-top:1.5rem">
+        <h2 style="font-size:1.2rem;margin:0 0 .5rem">Data deletion</h2>
+        <p>
+            A refund automatically cancels any associated account access. If you
+            also want your account deleted and server-side data purged, reply to
+            the refund email with &ldquo;please delete my data&rdquo; and we will remove
+            your account, bookmarks, and search history within 7 days. Payment
+            records are retained as required by tax law (typically 7 years).
+        </p>
+    </section>
+
+    <p class="footer-sub" style="margin-top:2rem;opacity:.65">
+        Last updated: 2026-04-22. Changes to this policy are logged in
+        <a href="/changelog">the changelog</a>.
+    </p>
+</main>
+{% endblock %}

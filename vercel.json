@@ -13,12 +13,19 @@
           "entity_parser.py",
           "query_understanding.py",
           "reverse_image.py",
+          "reverse_image_storage.py",
+          "bot_crawler.py",
           "digital_pet.py",
           "app.py"
         ]
       }
     }
   ],
+  "functions": {
+    "api/index.py": {
+      "maxDuration": 60
+    }
+  },
   "redirects": [
     {
       "source": "/(.*)",
