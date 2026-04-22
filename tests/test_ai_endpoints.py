@@ -52,7 +52,7 @@ def test_chat_missing_fields(client):
 def test_chat_fallback_on_ollama_failure(client, mock_ddg):
     """When Ollama is down the extractive fallback must still return 200."""
     with patch("app._ollama_chat", side_effect=RuntimeError("Ollama unavailable")), patch(
-        "app._openai_chat", side_effect=RuntimeError("OpenAI unavailable")
+        "app._resolve_openai_chat_config", return_value=None
     ):
         resp = client.post("/api/chat", json={"query": "python", "message": "explain it"})
         assert resp.status_code == 200

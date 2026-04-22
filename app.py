@@ -357,8 +357,8 @@ def _site_base_url() -> str:
             root = (request.url_root or "").rstrip("/")
             if root:
                 return root
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Falling back to default site base URL: %s", exc)
     return "https://abbieysearch.com"
 
 
@@ -1147,8 +1147,8 @@ def _migrate_search_logs_client_columns():
                 except Exception:
                     pass
             con.commit()
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Ollama chat unavailable for /api/chat: %s", exc)
 
 
 try:
@@ -5383,6 +5383,7 @@ def api_chat():
     except Exception:
         pass
 
+    # _resolve_openai_chat_config returns a config dict when keys are available, otherwise None.
     if _resolve_openai_chat_config("research_chat"):
         try:
             response = _openai_chat(messages, chatbot="research_chat", timeout=35.0, max_tokens=1400)
