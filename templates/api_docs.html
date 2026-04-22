@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API docs — abbieysearch</title>
+    <meta name="description" content="Interactive API documentation for abbiey.search /api/v1 endpoints.">
+    <link rel="canonical" href="{{ site_base_url }}/api/v1/docs">
+    <style nonce="{{ csp_nonce }}">
+        body { margin: 0; background: #0a0a0a; color: #e7e5e4; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+        #topbar {
+            position: sticky; top: 0; z-index: 10;
+            padding: .75rem 1.25rem;
+            background: rgba(10, 10, 10, .92);
+            border-bottom: 1px solid rgba(255,255,255,.08);
+            display: flex; gap: 1rem; align-items: center; justify-content: space-between;
+        }
+        #topbar a { color: var(--accent, #a78bfa); text-decoration: none; font-size: .92rem; }
+        #topbar a:hover { text-decoration: underline; }
+        #topbar .brand { font-weight: 700; color: #fafaf9; font-size: 1rem; }
+    </style>
+</head>
+<body>
+    <nav id="topbar">
+        <span class="brand">abbieysearch API</span>
+        <span>
+            <a href="/docs/api">Full docs</a>
+            &nbsp;·&nbsp;
+            <a href="/developer">Manage API keys</a>
+            &nbsp;·&nbsp;
+            <a href="/openapi.json">openapi.json</a>
+            &nbsp;·&nbsp;
+            <a href="/status">Status</a>
+        </span>
+    </nav>
+    <redoc spec-url="/openapi.json"></redoc>
+    <script src="https://cdn.jsdelivr.net/npm/redoc@2.1.5/bundles/redoc.standalone.js" nonce="{{ csp_nonce }}" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+</body>
+</html>

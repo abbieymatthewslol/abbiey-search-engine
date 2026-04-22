@@ -1,0 +1,55 @@
+# fly.toml - Fly.io deployment config for self-hosters.
+#
+# One-shot setup:
+#   fly launch --from https://github.com/abbieymatthewslol/abbiey-search-engine-2 --no-deploy
+#   fly secrets set SECRET_KEY=$(python -c "import secrets; print(secrets.token_hex(32))")
+#   fly secrets set ADMIN_TOKEN=<long random string>
+#   fly volumes create abbiey_data --size 1 --region iad   # SQLite fallback
+#   fly deploy
+#
+# Add SUPABASE_* / STRIPE_* secrets later if you want persistent users + payments.
+
+app = "abbiey-search"
+primary_region = "iad"
+kill_signal = "SIGTERM"
+kill_timeout = "15s"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8000"
+  ABBIEY_OPEN_ACCESS = "0"          # Fly gets real traffic; keep rate limits on.
+  ABBIEY_SKIP_WELCOME_SCREEN = "1"  # Direct to /search — SEO-friendly.
+  ABBIEY_DATA_REGION = "us-east-1"
+
+[[mounts]]
+  source = "abbiey_data"
+  destination = "/app/data"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 60
+    hard_limit = 100
+
+  [[http_service.checks]]
+    grace_period = "30s"
+    interval = "30s"
+    method = "GET"
+    path = "/health"
+    protocol = "http"
+    timeout = "5s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
+  cpus = 1
+  cpu_kind = "shared"

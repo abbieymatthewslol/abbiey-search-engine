@@ -4,6 +4,7 @@ import io
 from unittest.mock import patch
 
 import app as app_module
+import reverse_image_storage as _ris
 from reverse_image import parse_bing_reverse_html, validate_client_image_url
 
 
@@ -19,16 +20,64 @@ def test_sniff_image_magic_avif_ftyp():
     assert app_module._sniff_image_magic(blob) == "image/avif"
 
 
-def test_api_reverse_image_multipart_localhost_needs_site_url(client):
-    """Upload path requires a public base URL so Bing can fetch the preview once."""
+def test_api_reverse_image_multipart_localhost_without_storage_fallback_errors(client):
+    """With no Supabase creds *and* no SITE_URL, uploads 422 with an explicit message."""
     jpeg = b"\xff\xd8\xff\xe0" + b"\x00" * 200
-    resp = client.post(
-        "/api/reverse-image",
-        data={"image": (io.BytesIO(jpeg), "photo.jpg")},
-        content_type="multipart/form-data",
-    )
+    with patch.object(_ris, "put_object", return_value=None):
+        resp = client.post(
+            "/api/reverse-image",
+            data={"image": (io.BytesIO(jpeg), "photo.jpg")},
+            content_type="multipart/form-data",
+        )
     assert resp.status_code == 422
     assert resp.get_json().get("error") == "upload_needs_public_https"
+
+
+def test_api_reverse_image_multipart_uses_supabase_storage_without_site_url(client):
+    """When Supabase Storage is wired up, uploads succeed even with no SITE_URL."""
+    jpeg = b"\xff\xd8\xff\xe0" + b"\x00" * 200
+    fake_hits = [
+        {
+            "title": "Match",
+            "url": "https://page.example/x",
+            "image": "https://img.example/x.jpg",
+            "thumbnail": "https://img.example/x.jpg",
+            "source": "page.example",
+            "body": "caption",
+        }
+    ]
+    handle = _ris.StoredObject(bucket="reverse-image-uploads", path="abc.jpg")
+    signed = "https://project.supabase.co/storage/v1/object/sign/reverse-image-uploads/abc.jpg?token=xyz"
+    deletes: list[_ris.StoredObject] = []
+
+    def _fake_put(raw, mime):
+        assert raw.startswith(b"\xff\xd8\xff")
+        return signed, handle
+
+    def _fake_delete(h):
+        deletes.append(h)
+
+    with patch.object(_ris, "put_object", side_effect=_fake_put), \
+         patch.object(_ris, "delete_object", side_effect=_fake_delete), \
+         patch("app.fetch_reverse_hits_for_image_url", return_value=fake_hits):
+        resp = client.post(
+            "/api/reverse-image",
+            data={"image": (io.BytesIO(jpeg), "photo.jpg")},
+            content_type="multipart/form-data",
+        )
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data.get("ok") is True
+    assert "img_rev_key=" in data.get("redirect", "")
+    assert deletes == [handle]
+
+
+def test_reverse_image_storage_put_object_without_env_returns_none(monkeypatch):
+    monkeypatch.delenv("SUPABASE_URL", raising=False)
+    monkeypatch.delenv("SUPABASE_SERVICE_ROLE_KEY", raising=False)
+    monkeypatch.delenv("SUPABASE_SECRET_KEY", raising=False)
+    assert _ris.put_object(b"\xff\xd8\xff\xe0", "image/jpeg") is None
+    assert _ris.is_configured() is False
 
 
 def test_parse_bing_reverse_html_extracts_rows():

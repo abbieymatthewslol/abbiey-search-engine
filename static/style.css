@@ -629,7 +629,7 @@ body:not(.has-results) .search-container { max-width: 600px; }
   display: flex;
   align-items: center;
   background: var(--search-surface);
-  border: 1px solid var(--search-border);
+  border: 1px solid var(--search-accent-border, var(--search-border));
   border-radius: 9999px;
   padding: .55rem .55rem .55rem 1.05rem;
   gap: .35rem;
@@ -645,16 +645,16 @@ body:not(.has-results) .search-box {
   padding: .65rem .65rem .65rem 1.2rem;
 }
 .search-box:hover {
-  border-color: var(--search-border-hover);
+  border-color: var(--search-accent-border-hover, var(--search-border-hover));
   transform: translateY(-1px);
   box-shadow: var(--search-shadow-hover);
 }
 .search-box:focus-within {
   background: var(--search-surface-focus);
-  border-color: #4ade80;
+  border-color: var(--search-accent-focus, #4ade80);
   outline: none;
   box-shadow:
-    0 0 0 2px rgba(74, 222, 128, 0.15),
+    0 0 0 2px var(--search-accent-ring, rgba(74, 222, 128, 0.15)),
     0 8px 30px rgba(0,0,0,0.35);
   transform: translateY(-1px);
 }
@@ -665,7 +665,7 @@ body:not(.has-results) .search-box {
   height: 1.25rem;
   display: block;
 }
-.search-box:focus-within .search-icon { color: #86efac; }
+.search-box:focus-within .search-icon { color: var(--search-accent-focus-icon, #86efac); }
 
 /* Shared line-art magnifier (input, autocomplete, recent header) — currentColor, theme-safe */
 .icon-search-glass {
@@ -2026,6 +2026,63 @@ article.result.code-result { font-size: .9rem; }
 .home-mode-btn.active:hover {
   background: color-mix(in srgb, var(--accent) 24%, transparent);
   border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+/* Onion / Tor mode chip — deliberately louder than the grey sibling buttons
+ * so users notice the tab exists without having to read every label. Tinted
+ * violet to signal "different source" (Ahmia/Tor) rather than normal web.
+ */
+.home-mode-btn[data-search-mode="onion"] {
+  color: #c4b5fd;
+  background: color-mix(in srgb, #7c3aed 10%, transparent);
+  border-color: color-mix(in srgb, #7c3aed 55%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, #7c3aed 15%, transparent),
+              0 2px 10px -4px color-mix(in srgb, #7c3aed 50%, transparent);
+  padding-left: 0.7rem;
+  position: relative;
+}
+.home-mode-btn[data-search-mode="onion"]::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 0.45rem;
+  border-radius: 50%;
+  background: #a78bfa;
+  box-shadow: 0 0 8px #7c3aed;
+  vertical-align: middle;
+  animation: onionPulse 2.4s ease-in-out infinite;
+}
+@keyframes onionPulse {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50%      { opacity: 1.0;  transform: scale(1.15); }
+}
+.home-mode-btn[data-search-mode="onion"]:hover {
+  background: color-mix(in srgb, #7c3aed 22%, transparent);
+  border-color: color-mix(in srgb, #7c3aed 75%, transparent);
+  color: #ddd6fe;
+  box-shadow: 0 0 0 1px color-mix(in srgb, #7c3aed 35%, transparent),
+              0 4px 16px -4px color-mix(in srgb, #7c3aed 70%, transparent);
+  transform: translateY(-1px);
+}
+.home-mode-btn[data-search-mode="onion"].active {
+  color: #fff;
+  background: color-mix(in srgb, #7c3aed 35%, transparent);
+  border-color: #a78bfa;
+  box-shadow: 0 0 0 2px color-mix(in srgb, #7c3aed 30%, transparent),
+              0 4px 20px -4px color-mix(in srgb, #7c3aed 80%, transparent);
+}
+html[data-theme="light"] .home-mode-btn[data-search-mode="onion"] {
+  color: #5b21b6;
+  background: color-mix(in srgb, #7c3aed 8%, #fff);
+  border-color: color-mix(in srgb, #7c3aed 45%, transparent);
+}
+html[data-theme="light"] .home-mode-btn[data-search-mode="onion"]:hover {
+  background: color-mix(in srgb, #7c3aed 15%, #fff);
+  color: #4c1d95;
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-mode-btn[data-search-mode="onion"]::before { animation: none; }
 }
 
 .home-message {
@@ -3755,6 +3812,24 @@ header > .header-brand-top {
 }
 .color-swatch:hover { border-color: var(--border-strong); }
 .color-swatch.active { border-color: var(--text); }
+.search-color-swatch {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  background: transparent;
+  cursor: pointer;
+  transition: transform var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+}
+.search-color-swatch[data-color=""] {
+  background: transparent;
+  border-color: var(--border);
+}
+.search-color-swatch:hover { border-color: var(--border-strong); transform: translateY(-1px); }
+.search-color-swatch.active { border-color: var(--text); }
 .settings-color-picker {
   width: 32px; height: 22px;
   border: 1px solid var(--border);

@@ -224,6 +224,26 @@
                         </div>
                     </div>
                     <div class="settings-row">
+                        <span class="settings-row-label">Search bar colour</span>
+                        <div class="settings-accent-row">
+                            <div class="theme-color-presets" id="search-color-presets">
+                                <button type="button" class="search-color-swatch" data-color="" title="Default (theme)">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3l18 18"/><circle cx="12" cy="12" r="9"/></svg>
+                                </button>
+                                <button type="button" class="search-color-swatch" data-color="#4ade80" style="background:#4ade80" title="Green (default)"></button>
+                                <button type="button" class="search-color-swatch" data-color="#2563eb" style="background:#2563eb" title="Blue"></button>
+                                <button type="button" class="search-color-swatch" data-color="#7c3aed" style="background:#7c3aed" title="Violet"></button>
+                                <button type="button" class="search-color-swatch" data-color="#c026d3" style="background:#c026d3" title="Fuchsia"></button>
+                                <button type="button" class="search-color-swatch" data-color="#e11d48" style="background:#e11d48" title="Rose"></button>
+                                <button type="button" class="search-color-swatch" data-color="#d97706" style="background:#d97706" title="Amber"></button>
+                                <button type="button" class="search-color-swatch" data-color="#0891b2" style="background:#0891b2" title="Cyan"></button>
+                                <button type="button" class="search-color-swatch" data-color="#0f766e" style="background:#0f766e" title="Teal"></button>
+                                <button type="button" class="search-color-swatch" data-color="#e7e5e4" style="background:#e7e5e4;border:1px solid #444" title="Stone"></button>
+                            </div>
+                            <input type="color" id="search-custom-color" value="#4ade80" title="Custom search bar colour" class="settings-color-picker">
+                        </div>
+                    </div>
+                    <div class="settings-row">
                         <span class="settings-row-label">Font size</span>
                         <div class="settings-btn-group" id="font-size-group">
                             <button type="button" class="settings-seg-btn" data-val="small">S</button>
@@ -313,7 +333,7 @@
                             <button type="button" class="settings-seg-btn" data-val="news">News</button>
                             <button type="button" class="settings-seg-btn" data-val="videos">Videos</button>
                             <button type="button" class="settings-seg-btn" data-val="code">Code</button>
-                            <button type="button" class="settings-seg-btn" data-val="onion">Deep Web</button>
+                            <button type="button" class="settings-seg-btn" data-val="onion" title="Clearnet-indexed .onion sites via Ahmia + DDG">Onion / Tor</button>
                         </div>
                     </div>
                     <div class="settings-row">
@@ -515,7 +535,7 @@
             {# ===== HOME: logo → headline → search → one supporting line ===== #}
             <div class="home-hero">
                 <h1 class="home-logo">abbiey<span>search</span></h1>
-                <p class="home-hero-headline">Unfiltered answers with receipts.</p>
+                <p class="home-hero-headline">Unfiltered answers.</p>
             </div>
             {% endif %}
 
@@ -545,7 +565,7 @@
                     <input type="file" id="reverse-image-file" class="sr-only" accept="image/*" aria-label="Image file for reverse search">
                     <button type="button" class="reverse-image-url-entry" id="reverse-image-url-entry" aria-expanded="false" aria-controls="reverse-image-panel">Paste image URL</button>
                     <div id="reverse-image-panel" class="reverse-image-panel" hidden role="dialog" aria-label="Search by image with a link" aria-modal="true">
-                    <p class="reverse-image-lead">Find similar images across the web. Paste a direct <strong>HTTPS</strong> image link, or use <strong>Choose photo</strong> to pick from this device (upload needs a public site URL — set <code>SITE_URL</code> on the server).</p>
+                    <p class="reverse-image-lead">Find similar images across the web. Paste a direct <strong>HTTPS</strong> image link, or use <strong>Choose photo</strong> to pick from this device. Uploads are hosted privately for ~60&nbsp;seconds while the lookup runs and then wiped.</p>
                     <label class="reverse-image-field"><span class="reverse-image-label">Image URL</span>
                         <input type="url" id="reverse-image-url" inputmode="url" autocomplete="off" placeholder="https://…/photo.jpg" class="reverse-image-input">
                     </label>
@@ -587,7 +607,7 @@
                     <button type="button" class="home-mode-btn{% if search_type == 'people' %} active{% endif %}" data-search-mode="people" aria-pressed="{% if search_type == 'people' %}true{% else %}false{% endif %}">People</button>
                     <button type="button" class="home-mode-btn{% if search_type == 'email' %} active{% endif %}" data-search-mode="email" aria-pressed="{% if search_type == 'email' %}true{% else %}false{% endif %}">Email</button>
                     <button type="button" class="home-mode-btn{% if search_type == 'business' %} active{% endif %}" data-search-mode="business" aria-pressed="{% if search_type == 'business' %}true{% else %}false{% endif %}">Business</button>
-                    <button type="button" class="home-mode-btn{% if search_type == 'onion' %} active{% endif %}" data-search-mode="onion" aria-pressed="{% if search_type == 'onion' %}true{% else %}false{% endif %}">Deep web</button>
+                    <button type="button" class="home-mode-btn{% if search_type == 'onion' %} active{% endif %}" data-search-mode="onion" aria-pressed="{% if search_type == 'onion' %}true{% else %}false{% endif %}" title="Clearnet-indexed .onion sites via Ahmia + DDG">Onion / Tor</button>
                 </div>
             </nav>
             <p class="home-message-sub" aria-label="Search positioning">Direct answers. Sources. No fluff.</p>
@@ -630,7 +650,7 @@
                 <a href="/search?q={{ query|urlencode }}&type=people{% if region %}&region={{ region }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab {% if search_type == 'people' %}active{% endif %}">People</a>
                 <a href="/search?q={{ query|urlencode }}&type=email{% if region %}&region={{ region }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab {% if search_type == 'email' %}active{% endif %}">Email</a>
                 <a href="/search?q={{ query|urlencode }}&type=business{% if region %}&region={{ region }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab {% if search_type == 'business' %}active{% endif %}">Business</a>
-                <a href="/search?q={{ query|urlencode }}&type=onion{% if region %}&region={{ region }}{% endif %}{% if onion_mode %}&onion_mode={{ onion_mode }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab {% if search_type == 'onion' %}active{% endif %}">Deep Web</a>
+                <a href="/search?q={{ query|urlencode }}&type=onion{% if region %}&region={{ region }}{% endif %}{% if onion_mode %}&onion_mode={{ onion_mode }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab {% if search_type == 'onion' %}active{% endif %}" title="Clearnet-indexed .onion search">Onion / Tor</a>
                 </div>
                 <div class="tab-more-wrap {% if search_type in ('saved', 'mybot') %}has-active{% endif %}" id="tab-more-wrap">
                     <button type="button" class="tab tab-more-btn {% if search_type in ('saved', 'mybot') %}active{% endif %}" id="tab-more-btn" aria-haspopup="true" aria-expanded="false" aria-controls="tab-more-menu">
@@ -705,7 +725,7 @@
                 {% endif %}
             </div>
             {% if search_type == 'onion' %}
-            <div class="onion-scope-bar" id="onion-scope-bar" role="group" aria-label="Deep web search mode">
+            <div class="onion-scope-bar" id="onion-scope-bar" role="group" aria-label="Onion / Tor search mode">
                 <span class="onion-scope-label">Deep web mode</span>
                 <button type="button" class="onion-scope-btn{% if onion_mode == 'strict' %} active{% endif %}" data-onion-mode="strict" aria-pressed="{% if onion_mode == 'strict' %}true{% else %}false{% endif %}">Onion only</button>
                 <button type="button" class="onion-scope-btn{% if onion_mode == 'balanced' %} active{% endif %}" data-onion-mode="balanced" aria-pressed="{% if onion_mode == 'balanced' %}true{% else %}false{% endif %}">Balanced</button>
@@ -1249,7 +1269,7 @@
             {% if search_type == 'onion' %}
             <div class="onion-warning">
                 <span class="onion-warning-icon">&#9888;&#65039;</span>
-                <span>Deep web results can include <strong>.onion links</strong> that require the <a href="https://www.torproject.org/download/" target="_blank" rel="noopener">Tor Browser</a>. Use the mode toggle above to switch between direct onion-only links and broader intelligence results.</span>
+                <span>This tab is a <strong>clearnet-indexed .onion search</strong> (Ahmia + DDG onion filter) &mdash; not a dark-web crawler. Opening <strong>.onion links</strong> requires the <a href="https://www.torproject.org/download/" target="_blank" rel="noopener">Tor Browser</a>. <a href="/docs/deep-web">What this tab does &rarr;</a></span>
             </div>
             {% endif %}
             {% if search_notice %}
@@ -1456,8 +1476,8 @@
             {% else %}
                 {% if search_type == 'onion' %}
                 <div class="no-results-deep">
-                    <p class="no-results">Deep web search returned no results.</p>
-                    <p class="no-results-hint">Ahmia.fi may be temporarily unreachable, or no .onion sites matched your query. Try broader keywords or check back shortly.</p>
+                    <p class="no-results">Onion search returned no results.</p>
+                    <p class="no-results-hint">Ahmia.fi may be temporarily unreachable, or no indexed .onion sites matched your query. Try broader keywords or check back shortly. <a href="/docs/deep-web">How this tab works</a>.</p>
                 </div>
                 {% elif search_type == 'mybot' %}
                 <div class="no-results-inclusive">
@@ -1501,9 +1521,9 @@
             {% if onion_mode == 'strict' %}
             <p>Showing all available direct onion matches. Switch to Balanced or Research mode if you want additional clearnet intelligence references.</p>
             {% elif onion_mode == 'extended' %}
-            <p>Showing all available deep web + intelligence results for this query blend.</p>
+            <p>Showing all available onion + intelligence results for this query blend.</p>
             {% else %}
-            <p>Showing all available deep web results. Ahmia indexes a limited subset of .onion sites.</p>
+            <p>Showing all available onion results. Ahmia indexes a limited subset of .onion sites.</p>
             {% endif %}
         </div>
         {% endif %}
@@ -1711,7 +1731,7 @@
                     <button class="welcome-chip" data-type="people">People</button>
                     <button class="welcome-chip" data-type="email">Email</button>
                     <button class="welcome-chip" data-type="business">Business</button>
-                    <button class="welcome-chip" data-type="onion">Deep web</button>
+                    <button class="welcome-chip" data-type="onion">Onion / Tor</button>
                 </div>
                 <p style="margin:1rem 0 0;text-align:center"><a href="/search" class="welcome-skip">Skip</a></p>
             </div>

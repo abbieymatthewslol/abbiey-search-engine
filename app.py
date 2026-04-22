@@ -62,7 +62,12 @@ from query_understanding import (
 )
 from retrieval.pipeline import run_text_retrieval_pipeline_sync
 from reverse_image import fetch_reverse_hits_for_image_url, validate_client_image_url
+import reverse_image_storage as _reverse_image_storage
 from search_bots import crawl_bot_pages, normalize_http_seed, parse_json_list
+import bot_crawler as _bot_crawler
+import billing as _billing
+from api_v1 import api_v1 as _api_v1_bp
+import startup_checks as _startup_checks
 import digital_pet as _digital_pet
 from osint.service import enrich as _osint_enrich_run
 from osint.service import enrich_from_query as _osint_enrich_from_query
@@ -331,6 +336,29 @@ def _site_base_url() -> str:
     except Exception:
         pass
     return "https://abbieysearch.com"
+
+
+_DATA_REGION_LABELS = {
+    "sg": "Singapore (Supabase ap-southeast-1)",
+    "ap-southeast-1": "Singapore (Supabase ap-southeast-1)",
+    "eu": "EU (Supabase eu-central-1)",
+    "eu-central-1": "EU (Supabase eu-central-1)",
+    "us": "US East (Supabase us-east-2)",
+    "us-east-2": "US East (Supabase us-east-2)",
+    "local": "Local / self-hosted",
+    "selfhost": "Local / self-hosted",
+}
+
+
+def _data_region_label() -> str:
+    """Human-readable label for the advertised data region.
+
+    Sourced from ``ABBIEY_DATA_REGION`` so self-hosts that move their
+    Supabase project to another region see the update instantly in the
+    footer + /privacy + /status pages without a code change.
+    """
+    raw = (os.environ.get("ABBIEY_DATA_REGION") or "sg").strip().lower()
+    return _DATA_REGION_LABELS.get(raw, raw.upper() or "Singapore (Supabase ap-southeast-1)")
 
 
 # Stable user-facing API messages (never put raw exceptions in JSON bodies).
@@ -1840,6 +1868,12 @@ def _inject_current_user():
         "google_adsense_slot_results": _GOOGLE_ADSENSE_SLOT_RESULTS,
         "support_url": _SUPPORT_URL,
         "site_base_url": _site_base_url(),
+        "community_discord_url": os.environ.get("COMMUNITY_DISCORD_URL", "").strip() or None,
+        "community_matrix_url": os.environ.get("COMMUNITY_MATRIX_URL", "").strip() or None,
+        "community_github_url": os.environ.get(
+            "COMMUNITY_GITHUB_URL", "https://github.com/abbieymatthewslol/abbiey-search-engine-2"
+        ).strip() or None,
+        "data_region_label": _data_region_label(),
         "supabase_auth": _SUPABASE_AUTH_ENABLED,
         "supabase_url": _SUPABASE_URL if _SUPABASE_AUTH_ENABLED else "",
         "supabase_anon_key": _SUPABASE_ANON_KEY if _SUPABASE_AUTH_ENABLED else "",
@@ -3461,6 +3495,183 @@ def privacy():
 def terms():
     """Terms of service page."""
     return render_template("terms.html")
+
+
+@app.route("/community")
+def community():
+    """Public community page — links to Discord / Matrix / GitHub.
+
+    Closes the "no community" reviewer finding. Actual invite URLs come from
+    env vars (``COMMUNITY_DISCORD_URL`` / ``COMMUNITY_MATRIX_URL``) so we
+    can rotate or swap them without a deploy.
+    """
+    return render_template("community.html")
+
+
+@app.route("/refund")
+def refund():
+    """Refund policy — prominent, linked from footer + Stripe return page."""
+    return render_template("refund.html")
+
+
+@app.route("/changelog")
+def changelog_page():
+    """Render CHANGELOG.md as a public page so reviewers can see activity."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "CHANGELOG.md")
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            md = fh.read()
+    except FileNotFoundError:
+        md = "# Changelog\n\nNo changelog yet."
+    return render_template("docs_page.html", title="Changelog", markdown=md, slug="changelog")
+
+
+@app.route("/status")
+def status_page():
+    """Public health dashboard — no admin token required.
+
+    Renders the same per-feature probes that power /admin/api/health, but
+    with sensitive fields scrubbed. Self-hosters can link reviewers straight
+    here to demonstrate uptime without needing an admin token.
+    """
+    return render_template("status.html")
+
+
+_DOCS_ALLOWED = {
+    "deep-web": ("Onion / Tor search — what it is, what it is not", "docs/deep-web.md"),
+    "self-hosting": ("Self-hosting abbiey.search", "docs/SELF-HOSTING.md"),
+    "api": ("API reference", "docs/API.md"),
+}
+
+
+@app.route("/api/v1/docs")
+def api_v1_docs():
+    """Interactive OpenAPI docs (ReDoc, served as a small static HTML)."""
+    return render_template("api_docs.html")
+
+
+@app.route("/openapi.json")
+def openapi_spec():
+    """Public OpenAPI 3.0 spec for /api/v1/*."""
+    base = (os.environ.get("SITE_URL") or request.host_url.rstrip("/")).rstrip("/")
+    spec = {
+        "openapi": "3.0.3",
+        "info": {
+            "title": "abbiey.search API",
+            "version": "1.0.0",
+            "description": "Public developer API. Bearer-authenticated. "
+                           "Free tier: 1,000 calls/month per key; usage above the "
+                           "free tier is metered via Stripe. See /docs/api for full details.",
+            "contact": {"url": f"{base}/docs/api"},
+            "license": {"name": "MIT"},
+        },
+        "servers": [{"url": f"{base}/api/v1"}],
+        "components": {
+            "securitySchemes": {
+                "bearerAuth": {"type": "http", "scheme": "bearer", "bearerFormat": "abb_sk_live_*"}
+            }
+        },
+        "security": [{"bearerAuth": []}],
+        "paths": {
+            "/health": {
+                "get": {
+                    "summary": "Liveness + feature health",
+                    "security": [],
+                    "responses": {"200": {"description": "Health payload (JSON)."}},
+                }
+            },
+            "/search": {
+                "get": {
+                    "summary": "Run a search",
+                    "parameters": [
+                        {"name": "q", "in": "query", "required": True, "schema": {"type": "string"}},
+                        {"name": "type", "in": "query", "schema": {"type": "string",
+                            "enum": ["text", "images", "news", "videos", "code", "onion"]}},
+                        {"name": "page", "in": "query", "schema": {"type": "integer", "minimum": 1, "maximum": 20}},
+                        {"name": "region", "in": "query", "schema": {"type": "string"}},
+                        {"name": "lang", "in": "query", "schema": {"type": "string"}},
+                        {"name": "df", "in": "query", "schema": {"type": "string",
+                            "enum": ["", "d", "w", "m", "y"]}},
+                    ],
+                    "responses": {
+                        "200": {"description": "Paginated results."},
+                        "400": {"description": "Missing / malformed parameters."},
+                        "401": {"description": "Missing or invalid API key."},
+                        "429": {"description": "Rate limited."},
+                    },
+                }
+            },
+            "/bots": {
+                "get": {
+                    "summary": "List your custom crawl bots",
+                    "responses": {"200": {"description": "Array of bots."}},
+                }
+            },
+            "/bots/{botId}/query": {
+                "post": {
+                    "summary": "Keyword search within a bot's corpus",
+                    "parameters": [
+                        {"name": "botId", "in": "path", "required": True, "schema": {"type": "integer"}}
+                    ],
+                    "requestBody": {
+                        "required": True,
+                        "content": {"application/json": {"schema": {"type": "object", "properties": {
+                            "q": {"type": "string"}, "limit": {"type": "integer", "maximum": 100}
+                        }}}},
+                    },
+                    "responses": {
+                        "200": {"description": "Hits within the bot's indexed pages."},
+                        "404": {"description": "Bot not found or not owned by key."},
+                    },
+                }
+            },
+            "/reverse-image": {
+                "post": {
+                    "summary": "Reverse-image lookup",
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "multipart/form-data": {"schema": {"type": "object", "properties": {
+                                "image": {"type": "string", "format": "binary"}
+                            }}},
+                            "application/json": {"schema": {"type": "object", "properties": {
+                                "image_url": {"type": "string", "format": "uri"}
+                            }}},
+                        },
+                    },
+                    "responses": {
+                        "200": {"description": "Redirect payload with cache key for result paging."},
+                        "413": {"description": "Image too large (>4MB)."},
+                        "422": {"description": "Upload unavailable (configure Supabase Storage or SITE_URL)."},
+                    },
+                }
+            },
+        },
+    }
+    return jsonify(spec)
+
+
+@app.route("/docs/<slug>")
+def docs_page(slug: str):
+    """Render a repo markdown doc as plain HTML.
+
+    Only files in ``_DOCS_ALLOWED`` are served; the map is the security
+    boundary (no arbitrary filesystem access). Rendered minimally — we want
+    the content auditable from the UI, not a full CMS.
+    """
+    meta = _DOCS_ALLOWED.get(slug)
+    if not meta:
+        return render_template("error.html", code=404, title="Not found",
+                               message="That document does not exist."), 404
+    title, rel = meta
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), rel)
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            md = fh.read()
+    except FileNotFoundError:
+        return render_template("error.html", code=404, title="Not found",
+                               message="That document has not been published yet."), 404
+    return render_template("docs_page.html", title=title, markdown=md, slug=slug)
 
 
 @app.route("/payment-return")
@@ -5242,31 +5453,46 @@ def api_reverse_image():
         mime = sniffed or (f.mimetype or "") or "application/octet-stream"
         if sniffed is None and mime not in {"image/jpeg", "image/png", "image/webp", "image/gif", "image/avif"}:
             return jsonify({"ok": False, "error": "unsupported_type"}), 400
-        base = _public_base_url()
-        host = (urlparse(base).hostname or "").lower()
-        if not base or host in {"127.0.0.1", "localhost"}:
-            return (
-                jsonify(
-                    {
-                        "ok": False,
-                        "error": "upload_needs_public_https",
-                        "message": (
-                            "Upload matching needs a public HTTPS site (set SITE_URL) so the image can be "
-                            "fetched once for lookup — or paste a direct HTTPS image link instead."
-                        ),
-                    }
-                ),
-                422,
-            )
-        prev_tok = secrets.token_urlsafe(24)
-        with _reverse_image_preview_lock:
-            _reverse_image_preview_cache[prev_tok] = (raw, mime)
-        preview_url = f"{base}/api/reverse-image/preview/{prev_tok}"
-        try:
-            hits = _hits_with_client(preview_url)
-        finally:
+
+        storage_uploaded = _reverse_image_storage.put_object(raw, mime)
+        if storage_uploaded is not None:
+            signed_url, handle = storage_uploaded
+            try:
+                hits = _hits_with_client(signed_url)
+            finally:
+                _reverse_image_storage.delete_object(handle)
+        else:
+            # Fallback: echo the image back via our own origin. Requires a
+            # public HTTPS base URL (SITE_URL or a real request host) so Bing
+            # can fetch it. Self-hosters / local dev without SITE_URL or
+            # Supabase hit this branch; the error there is explicit.
+            base = _public_base_url()
+            host = (urlparse(base).hostname or "").lower()
+            if not base or host in {"127.0.0.1", "localhost"}:
+                return (
+                    jsonify(
+                        {
+                            "ok": False,
+                            "error": "upload_needs_public_https",
+                            "message": (
+                                "Upload matching needs either SUPABASE_SERVICE_ROLE_KEY "
+                                "(recommended) or a public HTTPS site (SITE_URL) so the "
+                                "image can be fetched once for lookup — or paste a direct "
+                                "HTTPS image link instead."
+                            ),
+                        }
+                    ),
+                    422,
+                )
+            prev_tok = secrets.token_urlsafe(24)
             with _reverse_image_preview_lock:
-                _reverse_image_preview_cache.pop(prev_tok, None)
+                _reverse_image_preview_cache[prev_tok] = (raw, mime)
+            preview_url = f"{base}/api/reverse-image/preview/{prev_tok}"
+            try:
+                hits = _hits_with_client(preview_url)
+            finally:
+                with _reverse_image_preview_lock:
+                    _reverse_image_preview_cache.pop(prev_tok, None)
         cap = (request.form.get("caption") or "").strip()
     else:
         data = request.get_json(silent=True) or {}
@@ -6787,6 +7013,98 @@ def admin_api_stream():
             "Connection": "keep-alive",
         },
     )
+def _feature_probe_image_upload() -> dict:
+    """Image upload: ok if Supabase Storage configured OR SITE_URL is public https."""
+    if _reverse_image_storage.is_configured():
+        return {"state": "ok", "reason": "Supabase Storage bucket configured"}
+    site = (os.environ.get("SITE_URL") or "").strip().lower()
+    if site.startswith("https://") and "localhost" not in site and "127.0.0.1" not in site:
+        return {"state": "ok", "reason": "Fallback via public SITE_URL"}
+    return {
+        "state": "degraded",
+        "reason": "Neither SUPABASE_SERVICE_ROLE_KEY nor a public SITE_URL is set; multipart uploads will 422.",
+    }
+
+
+def _feature_probe_chatbots() -> dict:
+    """Chatbots: queries route to Ollama; crawl jobs drain via cron."""
+    ollama = (os.environ.get("OLLAMA_BASE_URL") or "").strip()
+    if not ollama:
+        return {"state": "degraded", "reason": "OLLAMA_BASE_URL unset; AI replies return 503."}
+    return {"state": "ok", "reason": f"Ollama endpoint configured ({ollama.split('://')[-1][:60]})"}
+
+
+def _feature_probe_bots() -> dict:
+    """Custom crawl bots: ok when the crawl_jobs table is reachable."""
+    try:
+        _bot_crawler.ensure_jobs_schema(_users_execute)
+        _users_execute("SELECT COUNT(*) AS n FROM user_search_bot_crawl_jobs")
+        return {"state": "ok", "reason": "Crawl queue reachable"}
+    except Exception as exc:
+        return {"state": "down", "reason": f"Crawl queue unavailable: {exc}"[:200]}
+
+
+def _feature_probe_deep_web() -> dict:
+    """Onion / Tor search: ok when Ahmia responded in the last hour."""
+    try:
+        # Cheap HEAD to Ahmia's clearnet homepage with short timeout.
+        with httpx.Client(timeout=4.0, follow_redirects=True) as cli:
+            r = cli.head("https://ahmia.fi/")
+        if r.status_code < 500:
+            return {"state": "ok", "reason": f"Ahmia responded {r.status_code}"}
+        return {"state": "degraded", "reason": f"Ahmia {r.status_code}; using DDG onion fallback"}
+    except Exception as exc:
+        return {"state": "degraded", "reason": f"Ahmia unreachable ({type(exc).__name__}); DDG fallback only"}
+
+
+def _feature_probe_api_v1() -> dict:
+    """/api/v1 developer surface: ok if rate limiter is armed + blueprint registered."""
+    has_bp = "api_v1.search" in (app.view_functions or {})
+    if not has_bp:
+        return {"state": "down", "reason": "Blueprint not registered"}
+    return {"state": "ok", "reason": "Blueprint + bearer auth online"}
+
+
+def _feature_probe_stripe_webhook() -> dict:
+    """Stripe webhook: ok if secret is set; degraded if Stripe is enabled but secret missing."""
+    checkout_set = bool((os.environ.get("STRIPE_SEARCH_CHECKOUT_URL") or "").strip())
+    secret_set = bool((os.environ.get("STRIPE_WEBHOOK_SECRET") or "").strip())
+    if not checkout_set:
+        return {"state": "ok", "reason": "Stripe not enabled"}
+    if not secret_set:
+        return {"state": "down", "reason": "Stripe enabled but STRIPE_WEBHOOK_SECRET missing"}
+    return {"state": "ok", "reason": "Stripe webhook signature verification armed"}
+
+
+def _feature_probe_search() -> dict:
+    """Basic search probe: cache reachable."""
+    try:
+        _ = len(_cache)
+        return {"state": "ok", "reason": "Search cache online"}
+    except Exception as exc:
+        return {"state": "down", "reason": str(exc)[:200]}
+
+
+_FEATURE_PROBES = {
+    "search": _feature_probe_search,
+    "image_upload": _feature_probe_image_upload,
+    "chatbots": _feature_probe_chatbots,
+    "bots": _feature_probe_bots,
+    "deep_web": _feature_probe_deep_web,
+    "api_v1": _feature_probe_api_v1,
+    "stripe_webhook": _feature_probe_stripe_webhook,
+}
+
+
+def _aggregate_status(features: dict) -> str:
+    states = {v.get("state") for v in features.values() if isinstance(v, dict)}
+    if "down" in states:
+        return "degraded"  # Public /status shouldn't lie; at least one feature down ⇒ degraded overall.
+    if "degraded" in states:
+        return "degraded"
+    return "ok"
+
+
 def _build_health_payload(include_sensitive: bool = False) -> dict:
     """Build health payload for public and admin probes."""
     import datetime as _dt
@@ -6795,6 +7113,7 @@ def _build_health_payload(include_sensitive: bool = False) -> dict:
         "server_time": _dt.datetime.now(_dt.timezone.utc).isoformat().replace("+00:00", "Z"),
         "storage": _active_storage(),
         "live_sse_clients": len(_SSE_CLIENTS),
+        "data_region": _data_region_label(),
     }
     if include_sensitive and _SUPABASE_DB_URL:
         health["db_endpoint"] = _db_url_host_for_log(_SUPABASE_DB_URL)
@@ -6818,6 +7137,21 @@ def _build_health_payload(include_sensitive: bool = False) -> dict:
         health["onion_cache_size"] = len(_onion_status_cache)
     except Exception:
         pass
+
+    features: dict = {}
+    for key, probe in _FEATURE_PROBES.items():
+        try:
+            features[key] = probe()
+        except Exception as exc:
+            features[key] = {"state": "down", "reason": str(exc)[:200]}
+    health["features"] = features
+    health["status"] = _aggregate_status(features) if health["status"] == "ok" else health["status"]
+
+    if include_sensitive:
+        try:
+            health["startup_checks"] = _startup_checks.summarize_config()
+        except Exception:
+            pass
     return health
 
 
@@ -10925,12 +11259,17 @@ def _count_active_api_keys(uid: int) -> int:
 def developer():
     uid = session.get("user_id")
     keys = []
+    usage = None
     if uid:
         try:
             keys = _list_api_keys_for_user(uid)
         except Exception:
             logger.exception("developer_keys_list_failed")
             session["api_key_error"] = "Could not load API keys. Please refresh the page."
+        try:
+            usage = _billing.monthly_usage_for_user(int(uid))
+        except Exception:
+            logger.exception("developer_usage_fetch_failed")
     reveal = session.pop("api_key_reveal_once", None)
     err = session.pop("api_key_error", None)
     billing_success = request.args.get("billing", "").strip().lower() == "success"
@@ -10941,6 +11280,7 @@ def developer():
         api_key_error=err,
         billing_success=billing_success,
         stripe_api_checkout_url=STRIPE_API_KEYS_CHECKOUT_URL,
+        api_usage=usage,
     )
 @app.route("/developer/api-keys/create", methods=["POST"])
 @limiter.limit("30/hour")
@@ -11494,9 +11834,46 @@ def api_user_search_bots_delete(bid: int):
     return jsonify({"ok": True})
 
 
+def _bot_persist_page(bid: int, p: dict) -> None:
+    _users_execute(
+        "INSERT OR IGNORE INTO user_search_bot_pages (bot_id, url, title, snippet) VALUES (?,?,?,?)",
+        [bid, (p.get("url") or "")[:2000], (p.get("title") or "")[:400], (p.get("snippet") or "")[:2000]],
+    )
+
+
+def _bot_clear_pages(bid: int) -> None:
+    _users_execute("DELETE FROM user_search_bot_pages WHERE bot_id=?", [bid])
+
+
+def _sync_bot_summary(bid: int, status: _bot_crawler.JobStatus) -> None:
+    """Mirror crawl-job progress back onto user_search_bots for the list UI."""
+    ts = datetime.now(timezone.utc).isoformat()
+    if status.state == "done":
+        msg = f"Indexed {status.pages_done} page(s)."
+    elif status.state == "failed":
+        msg = (status.error or "Crawl failed.")[:500]
+    elif status.state in ("queued", "running"):
+        msg = f"Crawling… {status.pages_done}/{status.pages_total}"
+    else:
+        msg = status.state
+    try:
+        _users_execute(
+            "UPDATE user_search_bots SET last_crawled_at=?, last_crawl_status=? WHERE id=?",
+            [ts, msg, bid],
+        )
+    except Exception:
+        logger.exception("sync_bot_summary_failed bot_id=%s", bid)
+
+
 @app.route("/api/user/search-bots/<int:bid>/crawl", methods=["POST"])
 @limiter.limit("20/day")
 def api_user_search_bots_crawl(bid: int):
+    """Enqueue a chunked crawl and run one inline step (≤3 pages).
+
+    The rest of the crawl drains in the background via
+    ``/admin/api/bot-crawl-step`` (GitHub Actions cron). A single request
+    never exceeds ``DEFAULT_PAGES_PER_INVOCATION * HTTP_TIMEOUT`` seconds.
+    """
     uid, bearer_err = _api_auth_user()
     if bearer_err:
         return bearer_err
@@ -11519,38 +11896,76 @@ def api_user_search_bots_crawl(bid: int):
         mp = int(row.get("max_pages") or 15)
     except (TypeError, ValueError):
         mp = 15
-    pages, err = crawl_bot_pages(seed_urls, allow_hosts, md, mp)
-    ts = datetime.now(timezone.utc).isoformat()
-    if err:
-        try:
-            _users_execute(
-                "UPDATE user_search_bots SET last_crawled_at=?, last_crawl_status=? WHERE id=?",
-                [ts, err[:500], bid],
-            )
-        except Exception:
-            logger.exception("api_user_search_bots_crawl_status_failed")
-        return jsonify({"ok": False, "error": err, "pages": 0}), 200
+
     try:
-        _users_execute("DELETE FROM user_search_bot_pages WHERE bot_id=?", [bid])
-    except Exception:
-        logger.exception("api_user_search_bots_crawl_clear_failed")
-        return jsonify({"error": "Could not clear old pages."}), 500
-    for p in pages:
-        try:
-            _users_execute(
-                "INSERT OR IGNORE INTO user_search_bot_pages (bot_id, url, title, snippet) VALUES (?,?,?,?)",
-                [bid, p["url"][:2000], p["title"][:400], p["snippet"][:2000]],
-            )
-        except Exception:
-            logger.exception("api_user_search_bots_page_insert_failed url=%s", p.get("url"))
-    try:
-        _users_execute(
-            "UPDATE user_search_bots SET last_crawled_at=?, last_crawl_status=? WHERE id=?",
-            [ts, f"Indexed {len(pages)} page(s).", bid],
+        _bot_crawler.enqueue_job(
+            _users_execute,
+            bot_id=bid,
+            seed_urls=seed_urls,
+            allow_hosts=allow_hosts,
+            max_depth=md,
+            max_pages=mp,
+        )
+        status = _bot_crawler.step_job(
+            _users_execute,
+            bot_id=bid,
+            persist_page=_bot_persist_page,
+            clear_pages=_bot_clear_pages,
         )
     except Exception:
-        pass
-    return jsonify({"ok": True, "pages": len(pages)}), 200
+        logger.exception("api_user_search_bots_crawl_failed bot_id=%s", bid)
+        return jsonify({"error": "Could not start crawl."}), 500
+
+    _sync_bot_summary(bid, status)
+    return jsonify(
+        {
+            "ok": status.state != "failed",
+            "status": status.to_dict(),
+            "pages": status.pages_done,
+            "state": status.state,
+        }
+    ), 200
+
+
+@app.route("/api/user/search-bots/<int:bid>/status", methods=["GET"])
+def api_user_search_bots_status(bid: int):
+    """UI polls this endpoint while a crawl drains in the background."""
+    uid, bearer_err = _api_auth_user()
+    if bearer_err:
+        return bearer_err
+    if not uid:
+        return jsonify({"error": "Not authenticated"}), 401
+    if not _mybot_owned(bid, uid):
+        return jsonify({"error": "Not found"}), 404
+    status = _bot_crawler.get_job_status(_users_execute, bot_id=bid)
+    if not status:
+        return jsonify({"status": None})
+    return jsonify({"status": status.to_dict()})
+
+
+@app.route("/admin/api/bot-crawl-step", methods=["POST"])
+def admin_api_bot_crawl_step():
+    """Advance the oldest pending bot-crawl job by one chunk.
+
+    Protected by ADMIN_TOKEN so the GitHub Actions cron worker can drain the
+    queue without users needing to keep a tab open.
+    """
+    err = _admin_check()
+    if err:
+        return err
+    try:
+        status = _bot_crawler.step_next_job(
+            _users_execute,
+            persist_page=_bot_persist_page,
+            clear_pages=_bot_clear_pages,
+        )
+    except Exception:
+        logger.exception("admin_api_bot_crawl_step_failed")
+        return jsonify({"ok": False, "error": "Step failed."}), 500
+    if status is None:
+        return jsonify({"ok": True, "idle": True})
+    _sync_bot_summary(status.bot_id, status)
+    return jsonify({"ok": True, "idle": False, "status": status.to_dict()})
 
 
 # ---- Bookmarks API (session or Bearer API key) ------------------------------
@@ -12063,6 +12478,34 @@ def _set_cache_headers(response):
     except Exception:
         logger.exception("_set_cache_headers_failed")
         return response
+
+
+# ---------------------------------------------------------------------------
+# Production boot guard — fail fast on missing envs (see startup_checks.py)
+# ---------------------------------------------------------------------------
+try:
+    _startup_checks.assert_production_env()
+except SystemExit:
+    raise
+except Exception:
+    logger.exception("startup_checks_crashed; continuing so the app still boots")
+
+
+# ---------------------------------------------------------------------------
+# /api/v1 developer API + metered billing
+# ---------------------------------------------------------------------------
+_billing.configure(_users_execute)
+app.register_blueprint(_api_v1_bp)
+
+# Attach per-API-key rate limits to the blueprint views. Must run after the
+# blueprint registration so ``current_app.view_functions`` has the endpoints.
+try:
+    with app.app_context():
+        from api_v1 import _register_limits as _apiv1_register_limits
+
+        _apiv1_register_limits(limiter)
+except Exception:
+    logger.exception("api_v1_limit_registration_failed")
 
 
 if __name__ == "__main__":

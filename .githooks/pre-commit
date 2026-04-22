@@ -1,0 +1,47 @@
+#!/bin/sh
+# Docs-lint pre-commit hook.
+#
+# Block a commit that changes a tracked feature area without updating the
+# corresponding docs. This is the enforcement arm of the "futureproofing"
+# workstream - it makes "shipped feature but forgot to update docs" a local
+# error instead of a reviewer-caught regression months later.
+#
+# Enable locally (once per clone):
+#   git config core.hooksPath .githooks
+#
+# Override for a genuinely docs-free change (rare):
+#   git commit --no-verify ...
+#
+# Each rule: if ANY staged file matches a src pattern AND NO staged file
+# matches the docs pattern, the commit is blocked.
+
+set -eu
+
+staged=$(git diff --cached --name-only --diff-filter=ACMRT || true)
+[ -z "${staged}" ] && exit 0
+
+fail=0
+matches() { echo "${staged}" | grep -E "$1" >/dev/null 2>&1; }
+
+check() {
+    label="$1"; src_re="$2"; doc_re="$3"; doc_label="$4"
+    if matches "${src_re}" && ! matches "${doc_re}"; then
+        echo "pre-commit: ${label} changed but ${doc_label} not updated." >&2
+        echo "           Update ${doc_label} to reflect the change, or commit with --no-verify." >&2
+        fail=1
+    fi
+}
+
+check "/api/v1 handlers" "^(api_v1\.py|app\.py)$" "^(docs/API\.md)$" "docs/API.md"
+check "Bot crawler / chatbots" "^(bot_crawler\.py|search_bots\.py|templates/chatbots\.html)$" "^(docs/bots\.md|docs/API\.md|CHANGELOG\.md)$" "docs/bots.md, docs/API.md, or CHANGELOG.md"
+check "Self-host surface" "^(Dockerfile|docker-compose\.yml|render\.yaml|fly\.toml|vercel\.json)$" "^(docs/SELF-HOSTING\.md|CHANGELOG\.md|README\.md)$" "docs/SELF-HOSTING.md, CHANGELOG.md, or README.md"
+check "Onion / deep-web logic" "^(app\.py|templates/index\.html)$" "^(docs/deep-web\.md|CHANGELOG\.md)$" "docs/deep-web.md or CHANGELOG.md"
+check "Env matrix" "^\.env\.example$" "^(docs/SELF-HOSTING\.md|README\.md|CHANGELOG\.md)$" "docs/SELF-HOSTING.md, README.md, or CHANGELOG.md"
+
+if [ "${fail}" -ne 0 ]; then
+    echo "" >&2
+    echo "Docs-lint blocked the commit. See the list above." >&2
+    exit 1
+fi
+
+exit 0

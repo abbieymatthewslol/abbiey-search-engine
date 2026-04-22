@@ -594,6 +594,53 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  // ===== Custom search-bar colour =====
+  // Independent from --accent so users can theme the search pill without
+  // dragging every other accent-tinted element along. Empty string = reset.
+  const SEARCH_ACCENT_KEY = "abbiey_search_accent";
+  const savedSearchAccent = localStorage.getItem(SEARCH_ACCENT_KEY) || "";
+  applySearchAccent(savedSearchAccent);
+
+  function applySearchAccent(color) {
+    const vars = [
+      "--search-accent-border",
+      "--search-accent-border-hover",
+      "--search-accent-focus",
+      "--search-accent-ring",
+      "--search-accent-focus-icon",
+    ];
+    if (!color) {
+      vars.forEach(v => html.style.removeProperty(v));
+      localStorage.removeItem(SEARCH_ACCENT_KEY);
+    } else {
+      // Idle border: 45% of picked colour blended onto transparent.
+      html.style.setProperty("--search-accent-border", _mix(color, 0.45));
+      html.style.setProperty("--search-accent-border-hover", _mix(color, 0.75));
+      html.style.setProperty("--search-accent-focus", color);
+      html.style.setProperty("--search-accent-ring", _mix(color, 0.22));
+      html.style.setProperty("--search-accent-focus-icon", _mix(color, 1.0, true));
+      localStorage.setItem(SEARCH_ACCENT_KEY, color);
+    }
+    document.querySelectorAll(".search-color-swatch").forEach(s => {
+      s.classList.toggle("active", s.dataset.color === color);
+    });
+  }
+
+  function _mix(hex, alpha, brighten) {
+    const h = String(hex || "").replace("#", "");
+    if (h.length !== 6) return hex;
+    let r = parseInt(h.slice(0, 2), 16);
+    let g = parseInt(h.slice(2, 4), 16);
+    let b = parseInt(h.slice(4, 6), 16);
+    if (brighten) {
+      r = Math.min(255, Math.round(r + (255 - r) * 0.35));
+      g = Math.min(255, Math.round(g + (255 - g) * 0.35));
+      b = Math.min(255, Math.round(b + (255 - b) * 0.35));
+      return `rgb(${r}, ${g}, ${b})`;
+    }
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+
   function adjustBrightness(hex, amount) {
     hex = hex.replace("#", "");
     const r = Math.max(0, Math.min(255, parseInt(hex.slice(0, 2), 16) + amount));
@@ -1156,6 +1203,23 @@ document.addEventListener("DOMContentLoaded", () => {
     customColorInput.addEventListener("input", () => {
       applyAccentColor(customColorInput.value);
       ss("accent", customColorInput.value);
+    });
+  }
+
+  // ===== Search-bar colour (in settings modal) =====
+  document.querySelectorAll(".search-color-swatch").forEach(swatch => {
+    swatch.addEventListener("click", () => {
+      const c = swatch.dataset.color || "";
+      applySearchAccent(c);
+      const sc = document.getElementById("search-custom-color");
+      if (sc && c) sc.value = c;
+    });
+  });
+  const searchCustomColor = document.getElementById("search-custom-color");
+  if (searchCustomColor) {
+    if (savedSearchAccent) searchCustomColor.value = savedSearchAccent;
+    searchCustomColor.addEventListener("input", () => {
+      applySearchAccent(searchCustomColor.value);
     });
   }
 

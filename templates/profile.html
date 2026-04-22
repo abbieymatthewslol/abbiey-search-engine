@@ -300,17 +300,51 @@
                     btn.addEventListener('click', async function () {
                         clearErr();
                         btn.disabled = true;
-                        const r = await fetch('/api/user/search-bots/' + btn.dataset.id + '/crawl', {
+                        btn.textContent = 'Crawling…';
+                        const id = btn.dataset.id;
+                        const r = await fetch('/api/user/search-bots/' + id + '/crawl', {
                             method: 'POST',
                             credentials: 'same-origin',
                             headers: { 'Content-Type': 'application/json' },
                             body: '{}',
                         });
                         const d = await r.json().catch(function () { return null; });
-                        btn.disabled = false;
-                        if (d && d.ok) { loadBots(); return; }
-                        showErr((d && d.error) ? String(d.error) : 'Could not update the index.');
-                        loadBots();
+                        if (!d || d.ok === false) {
+                            btn.disabled = false;
+                            btn.textContent = 'Update index';
+                            showErr((d && d.error) ? String(d.error) : 'Could not update the index.');
+                            loadBots();
+                            return;
+                        }
+                        var state = (d.status && d.status.state) || d.state || 'queued';
+                        if (state === 'done' || state === 'failed') {
+                            btn.disabled = false;
+                            btn.textContent = 'Update index';
+                            loadBots();
+                            return;
+                        }
+                        var attempts = 0;
+                        var maxAttempts = 40; // ~2 minutes at 3s each
+                        var poll = setInterval(async function () {
+                            attempts++;
+                            try {
+                                const sr = await fetch('/api/user/search-bots/' + id + '/status', {
+                                    credentials: 'same-origin',
+                                });
+                                const sd = await sr.json();
+                                var s = sd.status || {};
+                                if (s.pages_done != null && s.pages_total != null) {
+                                    btn.textContent = 'Crawling ' + s.pages_done + '/' + s.pages_total;
+                                }
+                                if (s.state === 'done' || s.state === 'failed' || attempts >= maxAttempts) {
+                                    clearInterval(poll);
+                                    btn.disabled = false;
+                                    btn.textContent = 'Update index';
+                                    if (s.state === 'failed' && s.error) showErr(String(s.error));
+                                    loadBots();
+                                }
+                            } catch (e) { /* keep polling */ }
+                        }, 3000);
                     });
                 });
                 listEl.querySelectorAll('.sb-del').forEach(function (btn) {
