@@ -1483,7 +1483,7 @@ def _supabase_fetch_user_from_access_token(access_token: str) -> dict | None:
                 "Authorization": f"Bearer {token}",
                 "apikey": _SUPABASE_ANON_KEY,
             },
-            timeout=12.0,
+            timeout=10.0,
         )
     except Exception:
         logger.exception("supabase_auth_user_fetch_failed")
@@ -1847,7 +1847,7 @@ def _send_signup_verification_email(
                 "text": text_body,
                 "html": html_body,
             },
-            timeout=20.0,
+            timeout=10.0,
         )
         if r.status_code >= 400:
             logger.warning("Resend API error %s: %s", r.status_code, (r.text or "")[:500])
@@ -2408,15 +2408,26 @@ _reverse_image_hits_lock = threading.Lock()
 _reverse_image_preview_cache = TTLCache(maxsize=200, ttl=180)
 _reverse_image_preview_lock = threading.Lock()
 
+# Third-party HTTP: per-request ceiling (Ollama on loopback can exceed via _httpx_effective_timeout).
+_EXTERNAL_HTTP_MAX_S = 10.0
+
 # Lazy-init shared httpx client
 _http = None
+
+
+def _httpx_effective_timeout(url: str, requested: float) -> float:
+    """Cap remote URLs at _EXTERNAL_HTTP_MAX_S; allow longer only for loopback (local Ollama)."""
+    u = (url or "").lower()
+    if "127.0.0.1" in u or "localhost" in u or "0.0.0.0" in u:
+        return float(requested)
+    return min(float(requested), _EXTERNAL_HTTP_MAX_S)
 
 
 def _get_http():
     global _http
     if _http is None:
         _http = httpx.Client(
-            timeout=3.0,
+            timeout=_EXTERNAL_HTTP_MAX_S,
             follow_redirects=True,
             limits=httpx.Limits(max_connections=100, max_keepalive_connections=20, keepalive_expiry=30),
         )
@@ -5432,13 +5443,17 @@ def api_reverse_image():
     caption_default = "Visual matches"
 
     def _hits_with_client(img_url: str) -> list:
-        with httpx.Client(
-            timeout=30.0,
-            follow_redirects=True,
-            limits=httpx.Limits(max_connections=10, max_keepalive_connections=5),
-            headers={"User-Agent": "Mozilla/5.0 (compatible; abbiey.search/1.0)"},
-        ) as cli:
-            return fetch_reverse_hits_for_image_url(img_url, client=cli)
+        try:
+            with httpx.Client(
+                timeout=_EXTERNAL_HTTP_MAX_S,
+                follow_redirects=True,
+                limits=httpx.Limits(max_connections=10, max_keepalive_connections=5),
+                headers={"User-Agent": "Mozilla/5.0 (compatible; abbiey.search/1.0)"},
+            ) as cli:
+                return fetch_reverse_hits_for_image_url(img_url, client=cli)
+        except Exception:
+            logger.warning("reverse_image_hits_with_client failed", exc_info=True)
+            return []
 
     ct = (request.content_type or "").lower()
     hits: list = []
@@ -5617,8 +5632,17 @@ def api_knowledge_graph():
             }
         )
 
-    wiki = _try_knowledge_panel(query)
-    topics = _wikidata_topic_labels(query, limit=6)
+    with ThreadPoolExecutor(max_workers=2) as _kg_pool:
+        fw = _kg_pool.submit(_try_knowledge_panel, query)
+        ft = _kg_pool.submit(_wikidata_topic_labels, query, 6)
+        try:
+            wiki = fw.result(timeout=_EXTERNAL_HTTP_MAX_S)
+        except Exception:
+            wiki = None
+        try:
+            topics = ft.result(timeout=_EXTERNAL_HTTP_MAX_S)
+        except Exception:
+            topics = []
     categories = []
     if wiki and wiki.get("title"):
         categories = _wikipedia_category_labels(wiki["title"], limit=8)
@@ -5683,7 +5707,7 @@ def api_onion_proxy():
         import httpx
         # Route through Tor SOCKS5 proxy
         transport = httpx.HTTPTransport(proxy="socks5://127.0.0.1:9050")
-        with httpx.Client(transport=transport, timeout=30.0, follow_redirects=True) as client:
+        with httpx.Client(transport=transport, timeout=10.0, follow_redirects=True) as client:
             resp = client.get(
                 url,
                 headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; rv:128.0) Gecko/20100101 Firefox/128.0"},
@@ -5929,14 +5953,16 @@ def api_preview():
 # AI Research Assistant Chat
 # ---------------------------------------------------------------------------
 
-def _ollama_chat(messages, model=None, timeout=30.0):
+def _ollama_chat(messages, model=None, timeout=10.0):
     """AI chat using local Ollama instance."""
     _model = model or OLLAMA_MODEL
+    ollama_url = f"{(OLLAMA_BASE_URL or 'http://localhost:11434').rstrip('/')}/api/chat"
+    to = _httpx_effective_timeout(ollama_url, float(timeout))
     try:
         resp = _get_http().post(
-            f"{OLLAMA_BASE_URL}/api/chat",
+            ollama_url,
             json={"model": _model, "messages": messages, "stream": False},
-            timeout=float(timeout),
+            timeout=to,
         )
         resp.raise_for_status()
         return resp.json()["message"]["content"]
@@ -7294,10 +7320,11 @@ def admin_chat():
     # Try Ollama first (local/self-hosted)
     ollama_url = OLLAMA_BASE_URL.rstrip("/")
     try:
+        ollama_post = f"{ollama_url}/api/chat"
         resp = _get_http().post(
-            f"{ollama_url}/api/chat",
+            ollama_post,
             json={"model": OLLAMA_MODEL, "messages": messages, "stream": False},
-            timeout=30,
+            timeout=_httpx_effective_timeout(ollama_post, 30.0),
         )
         if resp.status_code == 200:
             reply = resp.json().get("message", {}).get("content", "")
@@ -7316,7 +7343,7 @@ def admin_chat():
                 f"{openai_base.rstrip('/')}/chat/completions",
                 headers={"Authorization": f"Bearer {openai_key}"},
                 json={"model": openai_model, "messages": messages, "max_tokens": 1200},
-                timeout=30,
+                timeout=_EXTERNAL_HTTP_MAX_S,
             )
             if resp.status_code == 200:
                 reply = resp.json()["choices"][0]["message"]["content"]
@@ -7991,7 +8018,7 @@ def _try_openverse(query, max_results=20, filters=None):
             "https://api.openverse.org/v1/images/",
             params=params,
             headers={"User-Agent": "abbiey.search/1.0", "Accept": "application/json"},
-            timeout=12.0,
+            timeout=_EXTERNAL_HTTP_MAX_S,
         )
         resp.raise_for_status()
         data = resp.json()
@@ -8088,7 +8115,7 @@ def _fetch_images_multi_source(
             futs["archive"] = _pool.submit(_try_internet_archive_images, query, max_results)
         for name, fut in futs.items():
             try:
-                buckets[name] = fut.result(timeout=12) or []
+                buckets[name] = fut.result(timeout=_EXTERNAL_HTTP_MAX_S) or []
             except Exception:
                 logger.warning("multi-source images: %s failed", name, exc_info=True)
                 buckets[name] = []
@@ -9932,30 +9959,26 @@ def _try_ahmia(query, max_results=30):
     We fetch the homepage first, extract the token, then search.
     """
     results = []
+    _ahmia_ua = (
+        "Mozilla/5.0 (Windows NT 10.0; rv:128.0) Gecko/20100101 Firefox/128.0"
+    )
     try:
-        client = _get_http()
-        # Step 1: Fetch homepage to get anti-bot hidden field
-        home_resp = client.get(
-            "https://ahmia.fi/",
-            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; rv:128.0) Gecko/20100101 Firefox/128.0"},
-        )
-        home_resp.raise_for_status()
-        token_match = re.search(
-            r'<input\s+type="hidden"\s+name="([^"]+)"\s+value="([^"]+)"',
-            home_resp.text,
-        )
-        params = {"q": query}
-        if token_match:
-            params[token_match.group(1)] = token_match.group(2)
-
-        # Step 2: Search with token (Ahmia returns large pages slowly, needs long timeout)
-        resp = httpx.get(
-            "https://ahmia.fi/search/",
-            params=params,
-            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; rv:128.0) Gecko/20100101 Firefox/128.0"},
-            timeout=20.0,
+        # Two sequential calls; 5s each so the handler stays bounded (see OSINT/httpx policy).
+        with httpx.Client(
+            timeout=5.0,
             follow_redirects=True,
-        )
+            headers={"User-Agent": _ahmia_ua},
+        ) as ahm:
+            home_resp = ahm.get("https://ahmia.fi/")
+            home_resp.raise_for_status()
+            token_match = re.search(
+                r'<input\s+type="hidden"\s+name="([^"]+)"\s+value="([^"]+)"',
+                home_resp.text,
+            )
+            params = {"q": query}
+            if token_match:
+                params[token_match.group(1)] = token_match.group(2)
+            resp = ahm.get("https://ahmia.fi/search/", params=params)
         resp.raise_for_status()
         html = resp.text
 
@@ -12374,7 +12397,7 @@ def api_breach_check():
     try:
         resp = _get_http().get(
             f"https://api.xposedornot.com/v1/breach-analytics?email={quote_plus(email)}",
-            timeout=12,
+            timeout=_EXTERNAL_HTTP_MAX_S,
             headers={"User-Agent": "abbiey.search/1.0 (breach-check)"},
             follow_redirects=True,
         )

@@ -17,7 +17,7 @@ Production for **abbiey.search** is meant to be a **single Vercel project** serv
 
 ## GitHub → Vercel (automatic production)
 
-- **On every push to `**master`**: `[.github/workflows/deploy.yml](workflows/deploy.yml)` runs `pytest`, then `vercel build` and `vercel deploy --prebuilt --prod` (requires the repository secret **`VERCEL_TOKEN`**; same token as the Vercel CLI). No manual “Run workflow” is required to ship to production.
+- **On every push to `**master`**: `[.github/workflows/deploy.yml](workflows/deploy.yml)` runs `python scripts/run_tests_for_changes.py` (tests scoped to the pushed commit; set `RUN_FULL_TESTS=1` in the job to force a full `pytest tests/`), then `vercel build` and `vercel deploy --prebuilt --prod` (requires the repository secret **`VERCEL_TOKEN`**; same token as the Vercel CLI). No manual “Run workflow” is required to ship to production.
 - **Duplicate build guard** — [Sync main from master](workflows/sync-main-from-master.yml) still fast-forwards `**main**` to match `**master**`. Vercel’s *Git* hook would otherwise also build `main`. Root `[vercel.json](../vercel.json)` `ignoreCommand` **skips** the Git build when `VERCEL_GIT_COMMIT_REF=main` so there is a single production path (Actions + CLI). Preview deployments from other branches are unaffected.
 - **Optional** — you can still **Run workflow** on `Deploy to Vercel` to redeploy from the current default branch (e.g. after fixing secrets).
 

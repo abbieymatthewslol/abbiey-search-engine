@@ -1,0 +1,29 @@
+---
+description: When adding Python imports for Vercel, keep vercel.json includeFiles in sync (no repo-wide wildcards)
+alwaysApply: true
+---
+
+# Vercel `includeFiles` for new imports
+
+**When preparing a deploy,** run the verifier first (see [pre-deployment.mdc](pre-deployment.mdc)); update `includeFiles` before merging if anything is missing.
+
+The serverless entry is `api/index.py` → `from app import app`. The Vercel Python build lists **extra** files in `vercel.json` → `builds[0].config.includeFiles`.
+
+## Exempt paths (no extra root-level file line required)
+
+`vercel.json` already includes explicit globs `engine/**`, `osint/**`, `retrieval/**`, `templates/**`, and `static/**`. If the import resolves only under one of these trees or `api/`, you normally only add a new line for **new root modules** (e.g. `foo.py` at repo root) or a new top-level package (one `newpkg/**` entry).
+
+- `app.py` (always shipped)
+- `engine/**`, `retrieval/**`, `osint/**` (globs in `vercel.json`)
+- `api/` (serverless `src` + tree)
+
+## Must update `includeFiles`
+
+If you add or use a **new** first-party import that resolves **outside** the paths above (for example a new root module `foo.py` or a new top-level package), you **must**:
+
+1. Open `vercel.json` and look at `includeFiles`.
+2. Add **only** the missing path: the exact file (e.g. `"foo.py"`) or **one** directory glob for a new package (e.g. `"newpkg/**"`).
+3. **Do not** replace the list with a single repo-wide `**` or blanket include.
+4. Run `python scripts/verify_deployment_config.py` (or `python scripts/verify_vercel_include_files.py`); it must exit 0.
+
+CI runs `verify_deployment_config.py` in `.github/workflows/python-package.yml` (Vercel + env drift).
