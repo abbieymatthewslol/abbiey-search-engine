@@ -9328,101 +9328,6 @@ def _pet_snapshot_for_user(uid: int) -> dict:
     }
 
 
-@app.route("/pet")
-def pet_home():
-    redir = _require_login()
-    if redir:
-        return redir
-    uid = _session_user_id_int(session.get("user_id"))
-    if not uid:
-        return redirect(url_for("login", next="/pet"))
-    snap = _pet_snapshot_for_user(uid)
-    return render_template("pet.html", pet=snap, species_list=list(_digital_pet.PET_SPECIES))
-
-
-@app.route("/pet/leaderboard")
-def pet_leaderboard():
-    rows = []
-    try:
-        rows = _users_execute(
-            "SELECT u.username, u.display_name, p.species, p.xp_total, p.last_activity_at, u.id AS user_id, u.created_at "
-            "FROM user_pet p INNER JOIN users u ON u.id = p.user_id "
-            "WHERE p.xp_total > 0 "
-            "ORDER BY p.xp_total DESC, p.last_activity_at DESC, u.created_at ASC "
-            "LIMIT 100",
-            [],
-        )
-    except Exception:
-        logger.exception("pet_leaderboard_failed")
-    ranked = []
-    for i, r in enumerate(rows or [], start=1):
-        xp = int(r.get("xp_total") or 0)
-        uid = int(r["user_id"])
-        st = _digital_pet.stage_from_xp(xp)
-        ranked.append(
-            {
-                "rank": i,
-                "username": r.get("username") or "",
-                "display_name": r.get("display_name") or "",
-                "species": (r.get("species") or "hummingbird").lower(),
-                "xp_total": xp,
-                "level": _digital_pet.level_from_xp(xp),
-                "stage": st,
-                "is_you": uid == _session_user_id_int(session.get("user_id")),
-            }
-        )
-    return render_template("pet_leaderboard.html", leaderboard=ranked)
-
-
-@app.route("/api/pet/me", methods=["GET"])
-def api_pet_me():
-    uid, bearer_err = _api_auth_user()
-    if bearer_err:
-        return bearer_err
-    if not uid:
-        return jsonify({"error": "Not authenticated"}), 401
-    return jsonify({"pet": _pet_snapshot_for_user(uid)})
-
-
-@app.route("/api/pet/species", methods=["POST"])
-@limiter.limit("30/minute")
-def api_pet_species():
-    uid, bearer_err = _api_auth_user()
-    if bearer_err:
-        return bearer_err
-    if not uid:
-        return jsonify({"error": "Not authenticated"}), 401
-    data = request.get_json(silent=True) or {}
-    sp = (data.get("species") or "").strip().lower()
-    if sp not in _digital_pet.PET_SPECIES:
-        return jsonify({"error": "Invalid species"}), 400
-    try:
-        _pet_ensure_row(uid)
-        _users_execute("UPDATE user_pet SET species=? WHERE user_id=?", [sp, uid])
-    except Exception:
-        logger.exception("api_pet_species_failed")
-        return jsonify({"error": "Could not save"}), 503
-    return jsonify({"ok": True, "pet": _pet_snapshot_for_user(uid)})
-
-
-@app.route("/api/pet/activity", methods=["POST"])
-@limiter.limit("120/minute")
-def api_pet_activity():
-    """Client-reported actions (e.g. share). Server enforces cooldowns and caps."""
-    uid, bearer_err = _api_auth_user()
-    if bearer_err:
-        return bearer_err
-    if not uid:
-        return jsonify({"error": "Not authenticated"}), 401
-    data = request.get_json(silent=True) or {}
-    action = (data.get("action") or "").strip().lower()
-    if action != "share":
-        return jsonify({"error": "Unsupported action"}), 400
-    out = _pet_try_award(uid, "share")
-    out["pet"] = _pet_snapshot_for_user(uid)
-    return jsonify(out)
-
-
 @app.route("/profile")
 def profile():
     redir = _require_login()
@@ -10254,10 +10159,15 @@ def _set_cache_headers(response):
 # after all in-file routes so any in-blueprint `url_for("xxx")` that happens
 # to target an existing app endpoint still resolves during import.
 from blueprints.osint import osint_bp  # noqa: E402
+from blueprints.pet import pet_bp, RATE_LIMITS as _PET_RATE_LIMITS  # noqa: E402
 
 # Re-apply the same "30/minute" limit the original inline route had.
 limiter.limit("30/minute")(osint_bp)
 app.register_blueprint(osint_bp)
+
+for _view_fn, _limit in _PET_RATE_LIMITS.items():
+    limiter.limit(_limit)(_view_fn)
+app.register_blueprint(pet_bp)
 
 
 if __name__ == "__main__":
