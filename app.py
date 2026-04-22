@@ -4304,28 +4304,6 @@ def api_entity():
     })
 
 
-@app.route("/api/osint/enrich", methods=["POST"])
-@limiter.limit("30/minute")
-def api_osint_enrich():
-    """On-demand public OSINT (DNS / RDAP / PTR; optional TLS, dig, whois). Not logged as search history."""
-    if not _abbiey_osint_enabled():
-        return jsonify({"ok": False, "error": "disabled", "facts": [], "modules": [], "entity": None}), 404
-    if not request.is_json:
-        return jsonify({"ok": False, "error": "json_required", "facts": [], "modules": [], "entity": None}), 400
-    data = request.get_json(silent=True) or {}
-    q = (data.get("query") or "").strip()
-    et = (data.get("entity_type") or "").strip().lower()
-    val = (data.get("value") or "").strip()
-    if et and val:
-        payload = _osint_enrich_run(entity_type=et, value=val)
-    elif q:
-        payload = _osint_enrich_from_query(q)
-    else:
-        return jsonify({"ok": False, "error": "missing_body", "facts": [], "modules": [], "entity": None}), 400
-    status = 200 if payload.get("ok") else 422
-    return jsonify(payload), status
-
-
 def _sniff_image_magic(head: bytes) -> str | None:
     h = head[:32]
     if h.startswith(b"\xff\xd8\xff"):
@@ -10266,6 +10244,20 @@ def _set_cache_headers(response):
     except Exception:
         logger.exception("_set_cache_headers_failed")
         return response
+
+
+# ---------------------------------------------------------------------------
+# Modular blueprints
+# ---------------------------------------------------------------------------
+# Routes grouped by surface area — admin / auth / pet / osint — live under
+# `blueprints/` so this module doesn't grow unbounded. They are registered
+# after all in-file routes so any in-blueprint `url_for("xxx")` that happens
+# to target an existing app endpoint still resolves during import.
+from blueprints.osint import osint_bp  # noqa: E402
+
+# Re-apply the same "30/minute" limit the original inline route had.
+limiter.limit("30/minute")(osint_bp)
+app.register_blueprint(osint_bp)
 
 
 if __name__ == "__main__":
