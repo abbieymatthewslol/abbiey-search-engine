@@ -1,7 +1,8 @@
 name: Deploy to Vercel
 
-# Production from Git: Vercel builds when the connected branch (e.g. main) updates — see sync-main-from-master.yml.
-# This workflow: on push to master, run tests only. The deploy job runs on workflow_dispatch (manual) or add trigger if you want CLI on every push.
+# Automatic: every push to master runs tests, then `vercel build` + `vercel deploy --prebuilt --prod`.
+# Requires secret VERCEL_TOKEN. Manual re-run: Actions → this workflow → Run workflow.
+# Vercel Git builds on `main` are skipped (vercel.json ignoreCommand) so "sync main" + this workflow do not double-deploy.
 # See .github/PLATFORM_INTEGRATIONS.md
 on:
   push:
@@ -39,8 +40,6 @@ jobs:
         run: pytest tests/ -v --tb=short
 
   deploy:
-    # Avoid double-deploy: Vercel builds production from Git. Use this job only when dispatching manually.
-    if: github.event_name == 'workflow_dispatch'
     needs: test
     runs-on: ubuntu-latest
     steps:
