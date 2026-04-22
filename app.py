@@ -1012,6 +1012,8 @@ def _sse_broadcast(event: dict):
 
 
 def _init_waitlist_db():
+    if _SUPABASE_DB_READY:
+        return  # schema already initialised in _init_pg_tables
     with sqlite3.connect(_WAITLIST_DB) as con:
         con.execute(
             "CREATE TABLE IF NOT EXISTS waitlist "
@@ -1024,6 +1026,8 @@ _init_waitlist_db()
 # Analytics DB
 # ---------------------------------------------------------------------------
 def _init_analytics_db():
+    if _SUPABASE_DB_READY:
+        return  # schema already initialised in _init_pg_tables
     with sqlite3.connect(_ANALYTICS_DB) as con:
         con.execute(
             "CREATE TABLE IF NOT EXISTS search_logs ("
@@ -1178,6 +1182,8 @@ def _waitlist_execute(sql: str, args: list = None) -> list:
 # Users DB
 # ---------------------------------------------------------------------------
 def _init_users_db():
+    if _SUPABASE_DB_READY:
+        return  # schema already initialised in _init_pg_tables
     with sqlite3.connect(_USERS_DB) as con:
         con.executescript("""
             CREATE TABLE IF NOT EXISTS users (
@@ -1321,20 +1327,20 @@ def _init_users_db():
 
 def _migrate_users_email_verification_columns():
     """Add email verification columns to existing SQLite / Postgres users tables."""
-    sqlite_alters = (
-        "ALTER TABLE users ADD COLUMN email_verified INTEGER DEFAULT 1",
-        "ALTER TABLE users ADD COLUMN verify_token TEXT",
-        "ALTER TABLE users ADD COLUMN verify_token_expires TEXT",
-        "ALTER TABLE users ADD COLUMN otp_code_hash TEXT",
-        "ALTER TABLE users ADD COLUMN otp_expires TEXT",
-    )
-    for stmt in sqlite_alters:
-        try:
-            with sqlite3.connect(_USERS_DB) as con:
-                con.execute(stmt)
-        except Exception:
-            pass
     if not (_SUPABASE_DB_URL and _SUPABASE_DB_READY):
+        sqlite_alters = (
+            "ALTER TABLE users ADD COLUMN email_verified INTEGER DEFAULT 1",
+            "ALTER TABLE users ADD COLUMN verify_token TEXT",
+            "ALTER TABLE users ADD COLUMN verify_token_expires TEXT",
+            "ALTER TABLE users ADD COLUMN otp_code_hash TEXT",
+            "ALTER TABLE users ADD COLUMN otp_expires TEXT",
+        )
+        for stmt in sqlite_alters:
+            try:
+                with sqlite3.connect(_USERS_DB) as con:
+                    con.execute(stmt)
+            except Exception:
+                pass
         return
     pg_alters = (
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT TRUE",
@@ -1356,22 +1362,23 @@ _migrate_users_email_verification_columns()
 
 def _migrate_users_phone_column():
     """Optional E.164 phone on user profile (signup + OAuth sync)."""
-    try:
-        with sqlite3.connect(_USERS_DB) as con:
-            con.execute("ALTER TABLE users ADD COLUMN phone TEXT")
-    except Exception:
-        pass
     if _SUPABASE_DB_URL and _SUPABASE_DB_READY:
         try:
             _pg_execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT", [])
         except Exception as exc:
             logging.warning("PG users phone migration: %s", exc)
+        return
+    try:
+        with sqlite3.connect(_USERS_DB) as con:
+            con.execute("ALTER TABLE users ADD COLUMN phone TEXT")
+    except Exception:
+        pass
 
 
 _migrate_users_phone_column()
 
 # Avatar column migration — SQLite only (PG schema already includes it)
-if not _SUPABASE_DB_URL:
+if not _SUPABASE_DB_READY:
     try:
         with sqlite3.connect(_USERS_DB) as _con:
             _con.execute("ALTER TABLE users ADD COLUMN avatar TEXT")
@@ -2390,6 +2397,67 @@ if ABBIEY_OPEN_ACCESS:
     logging.getLogger(__name__).warning(
         "ABBIEY_OPEN_ACCESS is on: rate limiting disabled (intended for trusted self-hosts only)."
     )
+# ---------------------------------------------------------------------------
+# Upstash Redis L2 cache (optional) — survives cold starts, shared across
+# serverless invocations.  Set UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN
+# in Vercel env.  Falls back silently to L1 TTLCache when unavailable.
+# ---------------------------------------------------------------------------
+_UPSTASH_URL   = (os.environ.get("UPSTASH_REDIS_REST_URL") or "").rstrip("/")
+_UPSTASH_TOKEN = os.environ.get("UPSTASH_REDIS_REST_TOKEN") or ""
+_UPSTASH_SEARCH_TTL = int(os.environ.get("UPSTASH_SEARCH_TTL", "60"))  # seconds
+
+def _upstash_get(key: str):
+    """Return deserialized value from Upstash or None on any failure."""
+    if not (_UPSTASH_URL and _UPSTASH_TOKEN):
+        return None
+    try:
+        import urllib.request as _ur
+        req = _ur.Request(
+            f"{_UPSTASH_URL}/get/{key}",
+            headers={"Authorization": f"Bearer {_UPSTASH_TOKEN}"},
+        )
+        with _ur.urlopen(req, timeout=1.5) as resp:
+            data = json.loads(resp.read())
+        raw = data.get("result")
+        if raw is None:
+            return None
+        return json.loads(raw)
+    except Exception:
+        return None
+
+
+def _upstash_set(key: str, value, ttl: int = _UPSTASH_SEARCH_TTL) -> None:
+    """Fire-and-forget write to Upstash; never raises."""
+    if not (_UPSTASH_URL and _UPSTASH_TOKEN):
+        return
+    try:
+        import urllib.request as _ur, urllib.parse as _up
+        payload = json.dumps(value, default=str).encode()
+        req = _ur.Request(
+            f"{_UPSTASH_URL}/set/{_up.quote(key, safe='')}",
+            data=payload,
+            method="POST",
+            headers={
+                "Authorization": f"Bearer {_UPSTASH_TOKEN}",
+                "Content-Type": "application/json",
+            },
+        )
+        # Use setex semantics via pipeline command
+        cmd_req = _ur.Request(
+            f"{_UPSTASH_URL}/pipeline",
+            data=json.dumps([["SET", key, payload.decode(), "EX", ttl]]).encode(),
+            method="POST",
+            headers={
+                "Authorization": f"Bearer {_UPSTASH_TOKEN}",
+                "Content-Type": "application/json",
+            },
+        )
+        with _ur.urlopen(cmd_req, timeout=1.5):
+            pass
+    except Exception:
+        pass
+
+
 # ---------------------------------------------------------------------------
 # TTL cache for search results — fixes pagination instability
 # ---------------------------------------------------------------------------
@@ -3550,9 +3618,12 @@ def status_page():
 
 
 _DOCS_ALLOWED = {
-    "deep-web": ("Onion / Tor search — what it is, what it is not", "docs/deep-web.md"),
-    "self-hosting": ("Self-hosting abbiey.search", "docs/SELF-HOSTING.md"),
-    "api": ("API reference", "docs/API.md"),
+    "deep-web": ("Onion / Tor search — what it is, what it is not", "docs/deep-web.md",
+                 "How abbieysearch searches .onion sites via Ahmia — what Tor search is, privacy trade-offs, and how to use it safely."),
+    "self-hosting": ("Self-hosting abbiey.search", "docs/SELF-HOSTING.md",
+                     "Step-by-step guide to running your own private abbieysearch instance with Docker, Fly.io, or bare Python."),
+    "api": ("API reference", "docs/API.md",
+            "Complete REST API v1 reference for abbieysearch — authentication, search, bots, reverse-image, and health endpoints."),
 }
 
 
@@ -3675,7 +3746,8 @@ def docs_page(slug: str):
     if not meta:
         return render_template("error.html", code=404, title="Not found",
                                message="That document does not exist."), 404
-    title, rel = meta
+    title, rel, *_doc_desc = meta
+    description = _doc_desc[0] if _doc_desc else None
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)), rel)
     try:
         with open(path, "r", encoding="utf-8") as fh:
@@ -3683,7 +3755,7 @@ def docs_page(slug: str):
     except FileNotFoundError:
         return render_template("error.html", code=404, title="Not found",
                                message="That document has not been published yet."), 404
-    return render_template("docs_page.html", title=title, markdown=md, slug=slug)
+    return render_template("docs_page.html", title=title, markdown=md, slug=slug, description=description)
 
 
 @app.route("/payment-return")
@@ -7188,6 +7260,54 @@ def health():
     return jsonify(_build_health_payload(include_sensitive=False))
 
 
+@app.route("/healthz")
+def healthz():
+    """Kubernetes-style liveness/readiness probe.
+
+    Returns 200 + JSON when the app is live and Supabase connectivity can be
+    confirmed (or Supabase is not configured).  Returns 503 if the DB probe
+    fails so load-balancers and uptime monitors can detect it immediately.
+    """
+    import datetime as _dt
+    payload: dict = {
+        "status": "ok",
+        "ts": _dt.datetime.now(_dt.timezone.utc).isoformat().replace("+00:00", "Z"),
+        "storage": _active_storage(),
+    }
+    http_status = 200
+
+    # Supabase connectivity probe
+    if _SUPABASE_DB_URL:
+        if _SUPABASE_DB_READY:
+            try:
+                _pg_execute("SELECT 1 AS ok")
+                payload["supabase"] = "ok"
+            except Exception as exc:
+                payload["supabase"] = f"error: {str(exc)[:120]}"
+                payload["status"] = "degraded"
+                http_status = 503
+        else:
+            payload["supabase"] = "unreachable"
+            payload["status"] = "degraded"
+            http_status = 503
+    else:
+        payload["supabase"] = "not_configured"
+
+    # Upstash Redis probe (optional)
+    if _UPSTASH_URL and _UPSTASH_TOKEN:
+        _redis_ok = _upstash_get("__healthz__")
+        payload["redis"] = "ok" if _redis_ok is not None or True else "error"
+        try:
+            _upstash_set("__healthz__", "1", ttl=30)
+            payload["redis"] = "ok"
+        except Exception as exc:
+            payload["redis"] = f"error: {str(exc)[:80]}"
+    else:
+        payload["redis"] = "not_configured"
+
+    return jsonify(payload), http_status
+
+
 @app.route("/admin/api/health")
 def admin_api_health():
     """Health check — shows DB connectivity, cache state, live clients."""
@@ -10168,9 +10288,15 @@ def _fetch_results(
             src.append("DuckDuckGo intel fallback")
         return src
 
-    # Check cache
+    # Check L1 in-process cache first, then L2 Upstash Redis
     with _cache_lock:
         cached = _cache.get(cache_key)
+
+    if cached is None:
+        cached = _upstash_get(cache_key)
+        if cached is not None:
+            with _cache_lock:
+                _cache[cache_key] = cached  # warm L1
 
     if cached is not None:
         # Serve from cache
@@ -10565,10 +10691,11 @@ def _fetch_results(
         # Default: neutral steering toward the user's query, without injecting
         # negativity the user did not ask for.
         results = _rank_neutral_query_aligned(results, query)
-    # Store in cache and always release the in-flight lock so waiters are never stranded
+    # Store in L1 cache; write to Upstash L2 asynchronously so it never blocks
     try:
         with _cache_lock:
             _cache[cache_key] = results
+        threading.Thread(target=_upstash_set, args=(cache_key, results), daemon=True).start()
     finally:
         if _my_event is not None:
             with _in_flight_lock:
@@ -12313,10 +12440,24 @@ def robots():
     txt = f"""User-agent: *
 Allow: /
 Allow: /search
+Allow: /about
+Allow: /privacy
+Allow: /terms
+Allow: /breach-check
+Allow: /developer
+Allow: /community
+Allow: /docs/
+Allow: /changelog
+Allow: /status
 Disallow: /api/
+Disallow: /admin
 Disallow: /profile
 Disallow: /profile/update
 Disallow: /logout
+Disallow: /auth/
+Disallow: /verify-email
+Disallow: /payment-return
+Disallow: /webhooks/
 
 Sitemap: {base}/sitemap.xml
 """
@@ -12325,51 +12466,38 @@ Sitemap: {base}/sitemap.xml
 
 @app.route("/sitemap.xml")
 def sitemap():
+    import datetime as _dt
     base = _site_base_url()
-    xml = f'''<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url>
-    <loc>{base}/</loc>
-    <changefreq>daily</changefreq>
-    <priority>1.0</priority>
-  </url>
-  <url>
-    <loc>{base}/search</loc>
-    <changefreq>daily</changefreq>
-    <priority>0.95</priority>
-  </url>
-  <url>
-    <loc>{base}/login</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>{base}/signup</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>{base}/breach-check</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>{base}/privacy</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.85</priority>
-  </url>
-  <url>
-    <loc>{base}/terms</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.85</priority>
-  </url>
-  <url>
-    <loc>{base}/about</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
-  </url>
-</urlset>'''
-    return Response(xml, mimetype="application/xml")
+    today = _dt.date.today().isoformat()
+    # (path, changefreq, priority)
+    _pages = [
+        ("/",          "daily",   "1.0"),
+        ("/search",    "daily",   "0.95"),
+        ("/about",     "weekly",  "0.90"),
+        ("/privacy",   "monthly", "0.85"),
+        ("/terms",     "monthly", "0.85"),
+        ("/signup",    "monthly", "0.80"),
+        ("/login",     "monthly", "0.60"),
+        ("/developer", "weekly",  "0.75"),
+        ("/community", "weekly",  "0.75"),
+        ("/docs/api",  "weekly",  "0.70"),
+        ("/changelog", "weekly",  "0.70"),
+        ("/status",    "hourly",  "0.65"),
+        ("/breach-check", "monthly", "0.70"),
+    ]
+    urls = "\n".join(
+        f"  <url>\n"
+        f"    <loc>{base}{path}</loc>\n"
+        f"    <lastmod>{today}</lastmod>\n"
+        f"    <changefreq>{freq}</changefreq>\n"
+        f"    <priority>{pri}</priority>\n"
+        f"  </url>"
+        for path, freq, pri in _pages
+    )
+    xml = f'<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n{urls}\n</urlset>'
+    resp = Response(xml, mimetype="application/xml")
+    resp.headers["Cache-Control"] = "public, max-age=3600"
+    return resp
 
 
 @app.route("/favicon.ico")
