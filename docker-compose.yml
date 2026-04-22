@@ -12,7 +12,7 @@ services:
     profiles: ["kali"]
     build:
       context: .
-      dockerfile: Dockerfile.kali-dev
+      dockerfile: docker/Dockerfile.kali-dev
     ports:
       - "8001:8000"
     environment:

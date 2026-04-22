@@ -2,7 +2,8 @@ name: bot-crawl-worker
 
 # Drain pending bot-crawl jobs. Each tick advances the oldest pending job by
 # up to ~3 pages; a full 30-page crawl finishes in ~10 ticks (~50 minutes at
-# the default 5-minute cadence). Lower the cron if you want faster drain.
+# the default daily cadence at 02:30 UTC). For faster drain, use workflow_dispatch
+# or change the cron to a tighter schedule (avoid blank / overly frequent crons).
 #
 # Required repo secrets:
 #   SITE_URL     - production origin, e.g. https://abbieysearch.com
@@ -12,7 +13,8 @@ name: bot-crawl-worker
 
 on:
   schedule:
-    - cron: "*/5 * * * *"
+    # Daily — avoids noisy Actions + accidental high-frequency automation
+    - cron: "30 2 * * *"
   workflow_dispatch:
     inputs:
       ticks:

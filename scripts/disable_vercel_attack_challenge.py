@@ -5,7 +5,7 @@ Turn off Vercel Attack Challenge Mode for the production project.
 When enabled, visitors see the "Vercel Security Checkpoint" (HTTP 429) instead of the app.
 
 Requires: VERCEL_TOKEN (Vercel account token with access to the project).
-Optional: VERCEL_PROJECT_ID (default: value from .github/workflows/deploy.yml),
+Optional: VERCEL_PROJECT_ID (required for API calls unless set in .env),
           VERCEL_TEAM_ID or VERCEL_ORG_ID (team slug id, e.g. team_...).
 
 Usage:
@@ -23,7 +23,6 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-DEFAULT_PROJECT_ID = "prj_hGdLqDsNtQK2A57hWyZNxdZKMi3b"
 API = "https://api.vercel.com/v1/security/attack-mode"
 
 
@@ -67,7 +66,7 @@ def main() -> int:
     _load_dotenv_defaults()
 
     token = (os.environ.get("VERCEL_TOKEN") or "").strip()
-    project_id = (os.environ.get("VERCEL_PROJECT_ID") or DEFAULT_PROJECT_ID).strip()
+    project_id = (os.environ.get("VERCEL_PROJECT_ID") or "").strip()
     team_id = (
         os.environ.get("VERCEL_TEAM_ID")
         or os.environ.get("VERCEL_ORG_ID")
@@ -80,6 +79,14 @@ def main() -> int:
             "https://vercel.com/account/tokens then run:\n"
             "  set VERCEL_TOKEN=...   (Windows)\n"
             "  export VERCEL_TOKEN=...  (Unix)",
+            file=sys.stderr,
+        )
+        return 2
+
+    if not project_id:
+        print(
+            "VERCEL_PROJECT_ID is not set. Set it to your Vercel project id "
+            "(Project Settings → General) or add it to .env.",
             file=sys.stderr,
         )
         return 2

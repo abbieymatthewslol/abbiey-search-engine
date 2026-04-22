@@ -6,12 +6,19 @@ venv/
 dist/
 *.egg-info/
 *.db
-# Vercel CLI: commit project link only; never commit pulled env (see vercel pull)
-.vercel/*
-!.vercel/project.json
+# Vercel CLI: never commit link metadata or pulled env (use `vercel link` locally)
+.vercel/
 .env*.local
-.vercel
 
 # Vercel local env
 .env.local
 .env*.local
+
+# IDE / agent local config (not part of the shipped app)
+.cursor/
+.vscode/
+.agents/
+
+# Accidental runtime / transcript junk
+ter
+verify_log.txt

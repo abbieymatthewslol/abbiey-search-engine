@@ -35,7 +35,7 @@ Before considering work “done”, try to ensure:
 - Environment configuration may involve **Supabase**.
 - If something fails only on Vercel, look for:
   - missing env vars
-  - wrong project settings (`vercel.json`, `.vercel/project.json`)
+  - wrong project settings (`vercel.json`, `.vercel/project.json` after `vercel link`)
   - Python runtime/build config issues
 
 # Branch/PR policy (important)

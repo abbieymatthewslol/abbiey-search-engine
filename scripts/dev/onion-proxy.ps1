@@ -2,7 +2,7 @@
 # Requires: Tor running on port 9050 (Tor Browser or standalone tor.exe)
 #
 # Usage:
-#   powershell -ExecutionPolicy Bypass -File onion-proxy.ps1
+#   powershell -ExecutionPolicy Bypass -File scripts/dev/onion-proxy.ps1
 #
 # This is OPTIONAL — abbiey.search has a built-in /api/onion-proxy endpoint
 # that does the same thing. This standalone script is for advanced users

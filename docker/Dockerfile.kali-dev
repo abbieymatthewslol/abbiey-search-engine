@@ -1,0 +1,30 @@
+# Local development image with Kali base + dnsutils/whois for OSINT dig/whois modules.
+# Not intended for minimal production deploys (image is large).
+FROM kalilinux/kali-rolling
+
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        python3 \
+        python3-pip \
+        python3-venv \
+        dnsutils \
+        whois \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+RUN python3 -m venv /opt/abbiey-venv
+ENV PATH="/opt/abbiey-venv/bin:$PATH"
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+ENV PORT=8000
+ENV ABBIEY_OSINT_MODULES=dns,rdap,ptr,tls,dig,whois
+
+EXPOSE 8000
+
+CMD gunicorn -w 2 -b 0.0.0.0:${PORT} --timeout 120 app:app
