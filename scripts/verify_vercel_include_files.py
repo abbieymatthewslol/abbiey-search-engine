@@ -40,8 +40,6 @@ _TOP_SKIP = frozenset(
         "conftest",
         "tests",
         "scripts",
-        "fix_parens",
-        "find_parens",
     }
 )
 _STDLIB_TOP: set[str] | None = None
