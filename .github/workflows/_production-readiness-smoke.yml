@@ -1,0 +1,66 @@
+# Called by production-readiness.yml. Declares secrets for workflow_call so
+# secrets.* references in this file are schema-valid for the Actions language service.
+
+name: Production readiness / smoke
+
+on:
+  workflow_call:
+    secrets:
+      SITE_URL:
+        description: Production origin for Playwright smoke tests
+        required: false
+      ADMIN_TOKEN:
+        description: Admin token for smoke checks
+        required: false
+      API_TEST_KEY:
+        description: API key for authenticated smoke routes
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: End-to-end smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Check SITE_URL is configured
+        id: gate
+        env:
+          SITE_URL: ${{ secrets.SITE_URL }}
+        run: |
+          if [ -z "${SITE_URL:-}" ]; then
+            echo "SITE_URL secret not set; skipping smoke tests. Configure the secret to enable."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install Playwright
+        if: steps.gate.outputs.skip != 'true'
+        run: |
+          npm init -y
+          npm install @playwright/test
+          npx playwright install --with-deps chromium
+
+      - name: Run smoke script
+        if: steps.gate.outputs.skip != 'true'
+        env:
+          SITE_URL: ${{ secrets.SITE_URL }}
+          ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
+          API_TEST_KEY: ${{ secrets.API_TEST_KEY }}
+        run: node tests/smoke/production-smoke.mjs
+
+      - name: Upload smoke screenshots
+        if: always() && steps.gate.outputs.skip != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-screenshots
+          path: tests/smoke/screenshots/
+          if-no-files-found: ignore
