@@ -7,7 +7,14 @@
 #   fly volumes create abbiey_data --size 1 --region iad   # SQLite fallback
 #   fly deploy
 #
-# Add SUPABASE_* / STRIPE_* secrets later if you want persistent users + payments.
+# Persistent users + payments (set once after launch):
+#   fly secrets set ABBIEY_SUPABASE_PROJECT_REF=xwxscvllmghyogddpmii \
+#     SUPABASE_URL=https://xwxscvllmghyogddpmii.supabase.co \
+#     NEXT_PUBLIC_SUPABASE_URL=https://xwxscvllmghyogddpmii.supabase.co \
+#     SUPABASE_ANON_KEY=eyJ... SUPABASE_SERVICE_ROLE_KEY=eyJ...
+#   fly secrets set SUPABASE_DB_URL=postgresql://postgres.xwxscvllmghyogddpmii:PASSWORD@aws-1-ap-southeast-1.pooler.supabase.com:6543/postgres?sslmode=require
+#   fly secrets set STRIPE_SEARCH_CHECKOUT_URL=https://buy.stripe.com/... STRIPE_API_KEYS_CHECKOUT_URL=https://buy.stripe.com/...
+#   fly secrets set STRIPE_WEBHOOK_SECRET=whsec_...
 
 app = "abbiey-search"
 primary_region = "iad"
