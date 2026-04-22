@@ -9963,22 +9963,23 @@ def _try_ahmia(query, max_results=30):
         "Mozilla/5.0 (Windows NT 10.0; rv:128.0) Gecko/20100101 Firefox/128.0"
     )
     try:
-        # Two sequential calls; 5s each so the handler stays bounded (see OSINT/httpx policy).
-        with httpx.Client(
+        ahm = _get_http()
+        home_resp = ahm.get("https://ahmia.fi/", headers={"User-Agent": _ahmia_ua})
+        home_resp.raise_for_status()
+        token_match = re.search(
+            r'<input\s+type="hidden"\s+name="([^"]+)"\s+value="([^"]+)"',
+            home_resp.text,
+        )
+        params = {"q": query}
+        if token_match:
+            params[token_match.group(1)] = token_match.group(2)
+        resp = httpx.get(
+            "https://ahmia.fi/search/",
+            params=params,
             timeout=5.0,
             follow_redirects=True,
             headers={"User-Agent": _ahmia_ua},
-        ) as ahm:
-            home_resp = ahm.get("https://ahmia.fi/")
-            home_resp.raise_for_status()
-            token_match = re.search(
-                r'<input\s+type="hidden"\s+name="([^"]+)"\s+value="([^"]+)"',
-                home_resp.text,
-            )
-            params = {"q": query}
-            if token_match:
-                params[token_match.group(1)] = token_match.group(2)
-            resp = ahm.get("https://ahmia.fi/search/", params=params)
+        )
         resp.raise_for_status()
         html = resp.text
 
