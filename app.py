@@ -5381,12 +5381,16 @@ def api_chat():
             raise RuntimeError("Empty AI response")
         return jsonify({"response": response})
     except Exception:
-        logger.warning("AI chat unavailable for /api/chat, trying OpenAI fallback")
-    try:
-        response = _openai_chat(messages, chatbot="research_chat", timeout=35.0, max_tokens=1400)
-        return jsonify({"response": response})
-    except Exception:
-        logger.warning("OpenAI chat unavailable for /api/chat, using extractive fallback")
+        pass
+
+    if _resolve_openai_chat_config("research_chat"):
+        try:
+            response = _openai_chat(messages, chatbot="research_chat", timeout=35.0, max_tokens=1400)
+            return jsonify({"response": response})
+        except Exception:
+            logger.warning("OpenAI chat request failed for /api/chat, using extractive fallback")
+    else:
+        logger.info("OpenAI chat not configured for /api/chat, using extractive fallback")
 
     # Fallback: extractive research from search results
     try:

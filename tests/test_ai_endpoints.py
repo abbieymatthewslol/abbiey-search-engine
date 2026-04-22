@@ -51,19 +51,10 @@ def test_chat_missing_fields(client):
 
 def test_chat_fallback_on_ollama_failure(client, mock_ddg):
     """When Ollama is down the extractive fallback must still return 200."""
-    with patch("app._ollama_chat", side_effect=RuntimeError("Ollama unavailable")):
+    with patch("app._ollama_chat", side_effect=RuntimeError("Ollama unavailable")), patch(
+        "app._openai_chat", side_effect=RuntimeError("OpenAI unavailable")
+    ):
         resp = client.post("/api/chat", json={"query": "python", "message": "explain it"})
         assert resp.status_code == 200
         data = resp.get_json()
         assert "response" in data
-
-
-def test_chat_uses_openai_when_ollama_fails(client, mock_ddg):
-    with patch("app._ollama_chat", side_effect=RuntimeError("Ollama unavailable")), patch(
-        "app._openai_chat", return_value="OpenAI chat answer."
-    ) as openai_mock:
-        resp = client.post("/api/chat", json={"query": "python", "message": "explain it"})
-        assert resp.status_code == 200
-        data = resp.get_json()
-        assert data["response"] == "OpenAI chat answer."
-        assert openai_mock.called
