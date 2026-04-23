@@ -41,51 +41,43 @@ EMPTY_AHMIA_HTML = "<html><body><ul id='ahmiaResultsPage'></ul></body></html>"
 # _try_ahmia unit tests
 # ---------------------------------------------------------------------------
 
+def _make_ahmia_client_mock(home_html, search_html):
+    """Return a patched httpx.Client context-manager mock for _try_ahmia tests.
+
+    _try_ahmia creates its own ``httpx.Client(...)`` context manager; patching
+    ``httpx.Client`` is the correct interception point.
+    """
+    home_resp = MagicMock()
+    home_resp.raise_for_status = MagicMock()
+    home_resp.text = home_html
+
+    search_resp = MagicMock()
+    search_resp.raise_for_status = MagicMock()
+    search_resp.text = search_html
+
+    mock_client = MagicMock()
+    mock_client.__enter__ = MagicMock(return_value=mock_client)
+    mock_client.__exit__ = MagicMock(return_value=False)
+    # First call → homepage token, second call → search results
+    mock_client.get.side_effect = [home_resp, search_resp]
+    return mock_client
+
+
 class TestTryAhmia:
     """Unit-tests for the _try_ahmia() scraper (no real HTTP)."""
-
-    def _make_http_mock(self, search_html, home_html="<html></html>", status=200):
-        """Return a mock _get_http() client whose responses match Ahmia's two-step flow."""
-        http = MagicMock()
-        home_resp = MagicMock()
-        home_resp.raise_for_status = MagicMock()
-        home_resp.text = home_html
-
-        search_resp = MagicMock()
-        search_resp.raise_for_status = MagicMock()
-        search_resp.text = search_html
-
-        # First call → homepage, second call → search results
-        http.get.return_value = home_resp
-
-        import httpx as _httpx
-        return http, home_resp, search_resp
 
     def test_parses_redirect_url_from_ahmia_wrapper(self):
         """Ahmia wraps real .onion URLs in a redirect; the parser should unwrap them."""
         from app import _try_ahmia
 
-        http_mock = MagicMock()
-        home_resp = MagicMock()
-        home_resp.raise_for_status = MagicMock()
-        home_resp.text = "<html></html>"
-        http_mock.get.return_value = home_resp
-
-        import httpx
-
-        search_resp = MagicMock()
-        search_resp.raise_for_status = MagicMock()
-        search_resp.text = SAMPLE_AHMIA_HTML
-
-        with patch("app._get_http", return_value=http_mock), \
-             patch("httpx.get", return_value=search_resp):
+        mock_client = _make_ahmia_client_mock("<html></html>", SAMPLE_AHMIA_HTML)
+        with patch("httpx.Client", return_value=mock_client):
             results = _try_ahmia("hidden wiki")
 
         assert len(results) >= 1
         titles = [r["title"] for r in results]
         assert "Hidden Wiki" in titles
 
-        # First result must have the unwrapped onion URL
         hidden_wiki = next(r for r in results if r["title"] == "Hidden Wiki")
         assert hidden_wiki["url"] == "http://abcde12345.onion/index.html"
         assert hidden_wiki["onion"] is True
@@ -94,19 +86,8 @@ class TestTryAhmia:
         """Results with a direct .onion href (no redirect wrapper) are kept as-is."""
         from app import _try_ahmia
 
-        http_mock = MagicMock()
-        home_resp = MagicMock()
-        home_resp.raise_for_status = MagicMock()
-        home_resp.text = "<html></html>"
-        http_mock.get.return_value = home_resp
-
-        import httpx
-        search_resp = MagicMock()
-        search_resp.raise_for_status = MagicMock()
-        search_resp.text = SAMPLE_AHMIA_HTML
-
-        with patch("app._get_http", return_value=http_mock), \
-             patch("httpx.get", return_value=search_resp):
+        mock_client = _make_ahmia_client_mock("<html></html>", SAMPLE_AHMIA_HTML)
+        with patch("httpx.Client", return_value=mock_client):
             results = _try_ahmia("forum")
 
         forum = next((r for r in results if r["title"] == "Forum Title"), None)
@@ -116,12 +97,14 @@ class TestTryAhmia:
     def test_returns_empty_list_when_http_raises(self):
         """If the HTTP request throws any exception, _try_ahmia returns [] without propagating."""
         from app import _try_ahmia
-
-        http_mock = MagicMock()
         import httpx
-        http_mock.get.side_effect = httpx.ConnectError("timeout")
 
-        with patch("app._get_http", return_value=http_mock):
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.get.side_effect = httpx.ConnectError("timeout")
+
+        with patch("httpx.Client", return_value=mock_client):
             results = _try_ahmia("any query")
 
         assert results == []
@@ -130,19 +113,8 @@ class TestTryAhmia:
         """Empty Ahmia HTML produces an empty result list."""
         from app import _try_ahmia
 
-        http_mock = MagicMock()
-        home_resp = MagicMock()
-        home_resp.raise_for_status = MagicMock()
-        home_resp.text = "<html></html>"
-        http_mock.get.return_value = home_resp
-
-        import httpx
-        search_resp = MagicMock()
-        search_resp.raise_for_status = MagicMock()
-        search_resp.text = EMPTY_AHMIA_HTML
-
-        with patch("app._get_http", return_value=http_mock), \
-             patch("httpx.get", return_value=search_resp):
+        mock_client = _make_ahmia_client_mock("<html></html>", EMPTY_AHMIA_HTML)
+        with patch("httpx.Client", return_value=mock_client):
             results = _try_ahmia("nothing here")
 
         assert results == []
@@ -151,19 +123,8 @@ class TestTryAhmia:
         """Each parsed result should carry the <p> text as its body."""
         from app import _try_ahmia
 
-        http_mock = MagicMock()
-        home_resp = MagicMock()
-        home_resp.raise_for_status = MagicMock()
-        home_resp.text = "<html></html>"
-        http_mock.get.return_value = home_resp
-
-        import httpx
-        search_resp = MagicMock()
-        search_resp.raise_for_status = MagicMock()
-        search_resp.text = SAMPLE_AHMIA_HTML
-
-        with patch("app._get_http", return_value=http_mock), \
-             patch("httpx.get", return_value=search_resp):
+        mock_client = _make_ahmia_client_mock("<html></html>", SAMPLE_AHMIA_HTML)
+        with patch("httpx.Client", return_value=mock_client):
             results = _try_ahmia("wiki")
 
         wiki = next(r for r in results if r["title"] == "Hidden Wiki")
