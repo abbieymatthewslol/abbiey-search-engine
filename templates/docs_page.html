@@ -4,8 +4,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="deploy-hash" content="{{ deploy_hash }}">
-    <title>{{ title }} — abbieysearch</title>
-    <meta name="description" content="{{ title }} — abbieysearch public documentation.">
+    <title>{{ title }} — abbieysearch docs</title>
+    <meta name="description" content="{{ description if description else title + ' — abbieysearch public documentation.' }}">
+    <meta property="og:type" content="article">
+    <meta property="og:site_name" content="abbieysearch">
+    <meta property="og:title" content="{{ title }} — abbieysearch docs">
+    <meta property="og:description" content="{{ description if description else title + ' — abbieysearch public documentation.' }}">
+    <meta property="og:url" content="{{ site_base_url }}/docs/{{ slug }}">
+    <meta property="og:image" content="{{ site_base_url }}/static/og-image.png">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="{{ title }} — abbieysearch docs">
+    <meta name="twitter:description" content="{{ description if description else title + ' — abbieysearch documentation.' }}">
     <link rel="canonical" href="{{ site_base_url }}/docs/{{ slug }}">
     <script nonce="{{ csp_nonce }}">
         (function() {

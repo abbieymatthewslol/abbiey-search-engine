@@ -1,5 +1,10 @@
 {% extends "auth_base.html" %}
-{% block title %}Welcome · abbieysearch{% endblock %}
+{% block title %}Welcome to abbieysearch{% endblock %}
+{% block meta_description %}Welcome to abbieysearch — private, unfiltered search with no tracking, no profiling, and no mandatory sign-in.{% endblock %}
+{% block og_title %}Welcome to abbieysearch{% endblock %}
+{% block og_description %}Private, unfiltered search. No tracking, no ads, no profiling.{% endblock %}
+{% block tw_title %}Welcome to abbieysearch{% endblock %}
+{% block tw_description %}Private, unfiltered search. No tracking, no ads, no profiling.{% endblock %}
 
 {% block auth_back_href %}{{ url_for('welcome_dismiss') }}{% endblock %}
 {% block auth_back_text %}Skip to search{% endblock %}
