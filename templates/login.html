@@ -5,12 +5,18 @@
 {% block og_description %}Sign in to your abbieysearch account. Private search, no tracking.{% endblock %}
 {% block tw_title %}Sign in · abbieysearch{% endblock %}
 {% block tw_description %}Sign in to your abbieysearch account. Private search, no tracking.{% endblock %}
+{% block robots_meta %}
+    <meta name="robots" content="noindex, nofollow">
+{% endblock %}
+{% block canonical %}
+    <link rel="canonical" href="{{ site_base_url }}/">
+{% endblock %}
 
 {% block auth_content %}
 
         <div class="auth-heading" id="auth-form-title">
-            <h1 class="auth-title">Welcome back</h1>
-            <p class="auth-subtitle">Sign in to your account.</p>
+            <h1 class="auth-title">Sign in</h1>
+            <p class="auth-subtitle">Use your email and password, or continue with Google.</p>
         </div>
 
         {% if error %}
