@@ -1,0 +1,28 @@
+tests/conftest.py
+  62c5feadf769fe72 96,105-110,116-121
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "be3e182fe09830c158404d8a1fb76112bbd849a0",
+  "prompts": {
+    "62c5feadf769fe72": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "8e92a7ea-f7d3-4d8d-a6fe-4f6f6e518402",
+        "model": "default"
+      },
+      "human_author": "abbiey",
+      "messages": [],
+      "total_additions": 719,
+      "total_deletions": 232,
+      "accepted_lines": 487,
+      "overriden_lines": 0
+    }
+  },
+  "humans": {
+    "h_c2f486820b99b6": {
+      "author": "abbiey"
+    }
+  }
+}
