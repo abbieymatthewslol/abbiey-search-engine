@@ -1,0 +1,23 @@
+templates/login.html
+  cbed5d3405f02634 167,170-171
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "89d9aa2092ad538599b3ab65c73e7f8dce2325b1",
+  "prompts": {
+    "cbed5d3405f02634": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "055712f8-6562-4380-8d31-6f1689e56eb7",
+        "model": "default"
+      },
+      "human_author": "Abbiey",
+      "messages": [],
+      "total_additions": 144,
+      "total_deletions": 247,
+      "accepted_lines": 3,
+      "overriden_lines": 0
+    }
+  }
+}

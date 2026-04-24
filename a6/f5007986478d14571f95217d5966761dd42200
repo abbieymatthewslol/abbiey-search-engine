@@ -1,0 +1,27 @@
+.github/PLATFORM_INTEGRATIONS.md
+  fb864f0daf6d8a95 51
+scripts/verify_production_env.py
+  fb864f0daf6d8a95 105,107-114,117-130,160,162
+.github/workflows/production-readiness.yml
+  fb864f0daf6d8a95 12-13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.3",
+  "base_commit_sha": "a6f5007986478d14571f95217d5966761dd42200",
+  "prompts": {
+    "fb864f0daf6d8a95": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "96dd2785-364f-4942-abec-ed7c3e76d04d",
+        "model": "default"
+      },
+      "human_author": "Abbiey",
+      "messages": [],
+      "total_additions": 280,
+      "total_deletions": 216,
+      "accepted_lines": 29,
+      "overriden_lines": 0
+    }
+  }
+}

@@ -1,0 +1,47 @@
+templates/profile.html
+  4ff625eb13a0fa2e 2
+templates/auth_confirm.html
+  4ff625eb13a0fa2e 2
+templates/login.html
+  4ff625eb13a0fa2e 2
+templates/breach_check.html
+  4ff625eb13a0fa2e 5
+templates/payment_return.html
+  4ff625eb13a0fa2e 6
+templates/signup.html
+  4ff625eb13a0fa2e 2
+templates/landing.html
+  4ff625eb13a0fa2e 6,15,19-21,26-27,35,37-44,53-61
+templates/terms.html
+  4ff625eb13a0fa2e 2-3
+templates/forgot_password.html
+  4ff625eb13a0fa2e 2
+templates/base.html
+  4ff625eb13a0fa2e 6,22,24-25,36,38,312
+templates/privacy.html
+  4ff625eb13a0fa2e 2-3
+templates/error.html
+  4ff625eb13a0fa2e 13,58-59
+templates/verify_email.html
+  4ff625eb13a0fa2e 2
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "30d5f2674558e0d32779f9e651b4385a79dd82c5",
+  "prompts": {
+    "4ff625eb13a0fa2e": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "b4fe1160-27d7-4eae-a03e-d4ff065b91ee",
+        "model": "default"
+      },
+      "human_author": "Abbiey",
+      "messages": [],
+      "total_additions": 1196,
+      "total_deletions": 1180,
+      "accepted_lines": 1003,
+      "overriden_lines": 23
+    }
+  }
+}

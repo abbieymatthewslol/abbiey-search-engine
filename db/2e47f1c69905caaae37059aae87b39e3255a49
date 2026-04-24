@@ -1,0 +1,27 @@
+templates/auth_confirm.html
+  cbed5d3405f02634 13
+templates/forgot_password.html
+  cbed5d3405f02634 29
+templates/signup.html
+  cbed5d3405f02634 115
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "db2e47f1c69905caaae37059aae87b39e3255a49",
+  "prompts": {
+    "cbed5d3405f02634": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "055712f8-6562-4380-8d31-6f1689e56eb7",
+        "model": "default"
+      },
+      "human_author": "Abbiey",
+      "messages": [],
+      "total_additions": 312,
+      "total_deletions": 312,
+      "accepted_lines": 265,
+      "overriden_lines": 16
+    }
+  }
+}

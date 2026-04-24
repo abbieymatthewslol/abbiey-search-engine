@@ -1,0 +1,23 @@
+.env.example
+  468b05e1a806d96b 73-74,76,79
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "8c9eae2ee9c4e86f67c132f0ee48c3094ec6aa91",
+  "prompts": {
+    "468b05e1a806d96b": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "947cd012-a2d7-4bac-88b7-e16affde850c",
+        "model": "default"
+      },
+      "human_author": "Abbiey",
+      "messages": [],
+      "total_additions": 4,
+      "total_deletions": 2,
+      "accepted_lines": 4,
+      "overriden_lines": 0
+    }
+  }
+}

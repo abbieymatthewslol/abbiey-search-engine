@@ -1,0 +1,23 @@
+tests/test_feature_gates.py
+  ff3065c012908dda 256-257,263,265-267,294,323-325
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "198905ed46d0b4a6ea9facbd8cb0e6dd530875f7",
+  "prompts": {
+    "ff3065c012908dda": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "20f7e4d6-bdb4-41c2-89ca-903d7a2230cb",
+        "model": "default"
+      },
+      "human_author": "Abbiey",
+      "messages": [],
+      "total_additions": 10,
+      "total_deletions": 3,
+      "accepted_lines": 10,
+      "overriden_lines": 0
+    }
+  }
+}

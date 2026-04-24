@@ -1,0 +1,25 @@
+templates/login.html
+  3adc2fc985b227aa 127-129
+templates/auth_confirm.html
+  3adc2fc985b227aa 78-80,136-145,175-176
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.6",
+  "base_commit_sha": "0c71e9407c0d3a8c2dfe2bfd4145d3f28ef6bae3",
+  "prompts": {
+    "3adc2fc985b227aa": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "ac5dcb2e-8805-43b0-aa08-0cddda870df2",
+        "model": "default"
+      },
+      "human_author": "Abbiey",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 198,
+      "overriden_lines": 12
+    }
+  }
+}

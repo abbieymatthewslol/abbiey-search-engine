@@ -1,0 +1,38 @@
+.env.example
+  3c2ab111e0bcbed2 106
+templates/signup.html
+  aa6a85b76f9aad34 20-29,31-34,36-38,46
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.6",
+  "base_commit_sha": "c63ebf20804bcaaad21dc41139d42edbdb57f16e",
+  "prompts": {
+    "3c2ab111e0bcbed2": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "a615e9f6-7030-49e9-acf9-91b29f5c23c2",
+        "model": "composer-2-fast"
+      },
+      "human_author": "Abbiey",
+      "messages": [],
+      "total_additions": 8555,
+      "total_deletions": 8531,
+      "accepted_lines": 127,
+      "overriden_lines": 0
+    },
+    "aa6a85b76f9aad34": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "115d923d-7050-444c-92b8-46d022efe407",
+        "model": "default"
+      },
+      "human_author": "Abbiey",
+      "messages": [],
+      "total_additions": 316,
+      "total_deletions": 316,
+      "accepted_lines": 291,
+      "overriden_lines": 0
+    }
+  }
+}
