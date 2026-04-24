@@ -2243,7 +2243,21 @@ document.addEventListener("DOMContentLoaded", () => {
     lightbox.removeAttribute("hidden");
     openLightbox = function(card) {
       lightboxReturnFocus = rememberFocus(card);
-      lightboxImg.src = card.dataset.full;
+      function endLightboxLoad() {
+        lightbox.classList.remove("lightbox-loading");
+        lightbox.removeAttribute("aria-busy");
+        lightboxImg.onload = null;
+        lightboxImg.onerror = null;
+      }
+      lightbox.classList.add("lightbox-loading");
+      lightbox.setAttribute("aria-busy", "true");
+      lightboxImg.onload = endLightboxLoad;
+      lightboxImg.onerror = endLightboxLoad;
+      const fullUrl = (card.dataset.full || "").trim();
+      lightboxImg.src = fullUrl;
+      if (!fullUrl || (lightboxImg.complete && lightboxImg.naturalWidth > 0)) {
+        endLightboxLoad();
+      }
       lightboxImg.alt = card.dataset.title;
       lightboxTitle.textContent = card.dataset.title;
       lightboxSource.href = card.dataset.url;
@@ -2263,6 +2277,10 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     };
     function closeLightbox({ restore = true } = {}) {
+      lightbox.classList.remove("lightbox-loading");
+      lightbox.removeAttribute("aria-busy");
+      lightboxImg.onload = null;
+      lightboxImg.onerror = null;
       lightbox.classList.remove("active");
       document.body.style.overflow = "";
       afterMotion(250, () => {
