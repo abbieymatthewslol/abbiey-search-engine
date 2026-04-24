@@ -1,0 +1,30 @@
+public/robots.txt
+  880647db6c274405 2-4,6,10-13,15-16
+templates/base.html
+  h_c2f486820b99b6 18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "d0ee8be4c8545de0bc72ca13dd41532ca047578f",
+  "prompts": {
+    "880647db6c274405": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "6af5f214-71db-4aa8-a3b8-ec608ee751e7",
+        "model": "default"
+      },
+      "human_author": "abbiey",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 16,
+      "overriden_lines": 0
+    }
+  },
+  "humans": {
+    "h_c2f486820b99b6": {
+      "author": "abbiey"
+    }
+  }
+}
