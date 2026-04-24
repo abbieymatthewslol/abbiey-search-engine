@@ -12,6 +12,9 @@ from app import (
     _try_calculator, _try_color_picker, _try_unit_convert,
     _try_knowledge_panel,
     _rank_anti_template_results,
+    _rank_neutral_query_aligned,
+    _query_implies_negative_intent,
+    _try_exa,
     search_safeguard_meta,
     _static_search_portal_links,
     _simplify_query_for_fallback,
@@ -88,10 +91,65 @@ class TestRoutes:
         assert resp.status_code == 200
         assert b"googletagmanager.com/gtag/js" not in resp.data
 
+    def test_google_adsense_script_when_configured(self, client):
+        import app as app_module
+
+        with patch.object(app_module, "_GOOGLE_ADSENSE_CLIENT", "ca-pub-test123"):
+            resp = client.get("/search?q=")
+        assert resp.status_code == 200
+        assert b"pagead2.googlesyndication.com/pagead/js/adsbygoogle.js" in resp.data
+        assert b"ca-pub-test123" in resp.data
+
+    def test_google_adsense_omitted_when_disabled(self, client):
+        import app as app_module
+
+        with patch.object(app_module, "_GOOGLE_ADSENSE_CLIENT", ""):
+            resp = client.get("/search?q=")
+        assert resp.status_code == 200
+        assert b"pagead2.googlesyndication.com" not in resp.data
+
+    def test_google_adsense_responsive_unit_when_slot_configured(self, client):
+        import app as app_module
+
+        with patch.object(app_module, "_GOOGLE_ADSENSE_CLIENT", "ca-pub-test123"), patch.object(
+            app_module, "_GOOGLE_ADSENSE_SLOT_HOME", "1111222233334444"
+        ):
+            resp = client.get("/search?q=")
+        assert resp.status_code == 200
+        assert b"adsbygoogle" in resp.data
+        assert b"data-ad-slot=\"1111222233334444\"" in resp.data
+
+    def test_support_footer_link_when_configured(self, client):
+        import app as app_module
+
+        with patch.object(app_module, "_SUPPORT_URL", "https://example.com/support"):
+            resp = client.get("/search?q=")
+        assert resp.status_code == 200
+        assert b"https://example.com/support" in resp.data
+        assert b">Support</a>" in resp.data
+
+    def test_csp_allows_adsense_frames_when_adsense_configured(self, client):
+        import app as app_module
+
+        with patch.object(app_module, "_GOOGLE_ADSENSE_CLIENT", "ca-pub-test123"):
+            resp = client.get("/search?q=")
+        assert resp.status_code == 200
+        csp = resp.headers.get("Content-Security-Policy", "")
+        assert "tpc.googlesyndication.com" in csp
+        assert "pagead2.googlesyndication.com" in csp
+
     def test_search_empty_query_shows_index(self, client):
         resp = client.get("/search?q=")
         assert resp.status_code == 200
         assert b"abbiey.search" in resp.data
+
+    def test_search_home_preserves_image_mode_from_url(self, client):
+        """Deep-link / empty home: ?type=images should set hidden type + show Images mode."""
+        resp = client.get("/search?type=images")
+        assert resp.status_code == 200
+        assert b'value="images"' in resp.data
+        assert b"home-search-modes" in resp.data
+        assert b'data-search-mode="images"' in resp.data
 
     def test_search_home_shows_creator_credit(self, client):
         resp = client.get("/search", follow_redirects=False)
@@ -144,6 +202,16 @@ class TestRoutes:
         resp = client.get("/search?q=cats&type=images")
         assert resp.status_code == 200
 
+    def test_image_search_skips_text_serp_query_rewrite(self, client, mock_ddg):
+        """Image tab must not use build_backend_search_query tutorial/local rewrites (unrelated thumbnails)."""
+        resp = client.get("/search?q=how+to+tie+a+tie&type=images")
+        assert resp.status_code == 200
+        assert mock_ddg.images.called
+        q_passed = mock_ddg.images.call_args[0][0]
+        assert "guide tutorial" not in q_passed.lower()
+        assert "step by step" not in q_passed.lower()
+        assert "nearest near me" not in q_passed.lower()
+
     def test_images_advanced_search_panel(self, client, mock_ddg):
         """Advanced image UI + img_adv=1 still returns results."""
         resp = client.get("/search?q=cats&type=images&img_adv=1&img_license=cc0")
@@ -189,6 +257,63 @@ class TestSuggestionsAPI:
     def test_long_query_returns_empty(self, client):
         resp = client.get(f"/api/suggestions?q={'a' * 201}")
         assert resp.get_json() == []
+
+
+class TestFeedbackAPI:
+    def test_result_feedback_accepts_payload(self, client):
+        resp = client.post(
+            "/api/feedback/result",
+            json={
+                "query": "python",
+                "search_type": "text",
+                "url": "https://example.com/1",
+                "title": "Example",
+                "rank": 0,
+                "rating": 1,
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data and "ok" in data
+
+    def test_suggestion_feedback_accepts_payload(self, client):
+        resp = client.post(
+            "/api/feedback/suggestion",
+            json={
+                "query_prefix": "pyt",
+                "suggestion": "python",
+                "action": "select",
+                "position": 0,
+                "rating": 1,
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data and "ok" in data
+
+    def test_search_reranks_using_feedback(self, client, mock_ddg):
+        mock_ddg.text.return_value = [
+            {"title": "Example 1", "href": "https://example.com/1", "body": "Body 1"},
+            {"title": "Other 2", "href": "https://other.com/2", "body": "Body 2"},
+        ]
+        fb = client.post(
+            "/api/feedback/result",
+            json={
+                "query": "python",
+                "search_type": "text",
+                "url": "https://other.com/2",
+                "title": "Other 2",
+                "rank": 1,
+                "rating": 1,
+            },
+        )
+        assert fb.status_code == 200
+        resp = client.get("/search?q=python&type=text")
+        assert resp.status_code == 200
+        html = resp.data.decode("utf-8", errors="ignore")
+        m = re.search(r'<article class="result[^"]*"[^>]*data-url="([^"]+)"', html)
+        assert m
+        assert m.group(1) == "https://other.com/2"
 
 
 class TestEntityAPI:
@@ -417,6 +542,31 @@ class TestApiPreview:
         assert data.get("url") == "https://example.com/page"
         get_mock.assert_called_once()
         assert get_mock.call_args[0][0] == "https://example.com/page"
+
+    def test_preview_includes_sanitized_snapshot_html(self, client):
+        from unittest.mock import MagicMock, patch
+
+        import httpx
+
+        html = (
+            "<html><head><title>T</title><script>alert(1)</script></head>"
+            "<body><p>Hello</p><iframe src=\"https://evil\"></iframe></body></html>"
+        )
+        mock_resp = MagicMock()
+        mock_resp.text = html
+        mock_resp.raise_for_status = MagicMock()
+        mock_resp.url = httpx.URL("https://example.com/page")
+        mock_resp.headers = {"content-type": "text/html; charset=utf-8"}
+        with patch.object(httpx, "get", return_value=mock_resp):
+            resp = client.get(
+                "/api/preview", query_string={"url": "https://example.com/page"}
+            )
+        assert resp.status_code == 200
+        data = resp.get_json()
+        snap = data.get("snapshot_html") or ""
+        assert "<script" not in snap.lower()
+        assert "iframe" not in snap.lower()
+        assert "Hello" in snap
 
 
 class TestChatAPI:
@@ -1349,6 +1499,27 @@ class TestSearchAccessPersistence:
         assert status.status_code == 200
         assert status.get_json()["unlocked"] is True
 
+    def test_claim_accepts_verified_checkout_token_without_pending_cookie(self, client):
+        def _users_execute_side_effect(sql, params=None):
+            s = (sql or "").strip().lower()
+            if s.startswith("select 1 as ok from payment_events"):
+                return [{"ok": 1}]
+            if s.startswith("update pending_checkouts"):
+                return []
+            return []
+
+        with patch("app._users_execute", side_effect=_users_execute_side_effect):
+            with patch("app._upsert_search_unlock", return_value="tok"):
+                resp = client.post(
+                    "/api/search-access/claim",
+                    json={"checkout_token": "tok_123"},
+                )
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["ok"] is True
+        assert data["unlocked"] is True
+        assert "abbiey_search_unlock=" in (resp.headers.get("Set-Cookie") or "")
+
 
 class TestHealthProbe:
     def test_public_health_endpoint_omits_sensitive_endpoint(self, client):
@@ -1374,6 +1545,7 @@ class TestOnionFallbackNotice:
             "has_more": False,
             "page": 1,
             "notice": "Ahmia is temporarily unavailable, so these results come from a web fallback and may reference onion sites rather than link to them directly.",
+            "sources": ["DuckDuckGo intel fallback"],
         }
         with patch("app._fetch_results", return_value=fallback_payload):
             resp = client.get("/search?q=test&type=onion")
@@ -1553,6 +1725,132 @@ class TestAntiTemplateRanking:
         assert out[0]["url"] == c["url"]
 
 
+class TestNeutralQueryAlignedRanking:
+    """Default text ranking: steer toward query terms, stay neutral unless asked."""
+
+    def test_boosts_result_that_actually_covers_query_tokens(self):
+        query = "rust ownership borrow checker"
+        on_topic = {
+            "title": "Rust ownership and the borrow checker explained",
+            "url": "https://doc.rust.example/ownership",
+            "body": "An overview of ownership and borrow checking in Rust.",
+        }
+        off_topic = {
+            "title": "Programming languages general overview",
+            "url": "https://misc.example/langs",
+            "body": "A broad article about many programming languages.",
+        }
+        out = _rank_neutral_query_aligned([off_topic, on_topic], query)
+        assert out[0]["url"] == on_topic["url"]
+
+    def test_dampens_negative_result_when_query_is_neutral(self):
+        query = "acme widgets"
+        negative = {
+            "title": "Acme widgets scam exposed: worst product ever",
+            "url": "https://rant.example/acme",
+            "body": "Scam, fraud, lawsuit, disaster.",
+        }
+        neutral = {
+            "title": "Acme widgets overview and specifications",
+            "url": "https://acme.example/widgets",
+            "body": "Technical overview of the Acme widgets product line.",
+        }
+        out = _rank_neutral_query_aligned([negative, neutral], query)
+        assert out[0]["url"] == neutral["url"]
+
+    def test_preserves_negative_results_when_user_asks_for_them(self):
+        query = "acme widgets scam complaints"
+        negative = {
+            "title": "Acme widgets scam exposed: complaints filed",
+            "url": "https://rant.example/acme",
+            "body": "Multiple scam reports and lawsuits from customers.",
+        }
+        neutral = {
+            "title": "Acme widgets overview and specifications",
+            "url": "https://acme.example/widgets",
+            "body": "Technical overview of the Acme widgets product line.",
+        }
+        out = _rank_neutral_query_aligned([neutral, negative], query)
+        assert out[0]["url"] == negative["url"]
+
+    def test_query_implies_negative_intent_detection(self):
+        assert _query_implies_negative_intent("acme widgets scam") is True
+        assert _query_implies_negative_intent("acme widgets problems") is True
+        assert _query_implies_negative_intent("cons of acme widgets") is True
+        assert _query_implies_negative_intent("acme widgets overview") is False
+        assert _query_implies_negative_intent("how does acme widgets work") is False
+
+    def test_short_result_list_returns_unchanged(self):
+        only = [{"title": "Solo", "url": "https://solo.example/x", "body": "only one"}]
+        assert _rank_neutral_query_aligned(only, "solo") == only
+        assert _rank_neutral_query_aligned([], "anything") == []
+
+
+class TestExaAdapter:
+    """Exa search backend: activates only when EXA_API_KEY is set."""
+
+    def test_returns_empty_when_api_key_missing(self, monkeypatch):
+        monkeypatch.delenv("EXA_API_KEY", raising=False)
+        assert _try_exa("anything", 5, "text") == []
+
+    def test_returns_empty_for_unsupported_search_type(self, monkeypatch):
+        monkeypatch.setenv("EXA_API_KEY", "test-key")
+        assert _try_exa("anything", 5, "images") == []
+        assert _try_exa("anything", 5, "videos") == []
+
+    def test_parses_exa_response_into_standard_shape(self, monkeypatch):
+        monkeypatch.setenv("EXA_API_KEY", "test-key")
+        fake_response = MagicMock()
+        fake_response.status_code = 200
+        fake_response.json.return_value = {
+            "results": [
+                {
+                    "title": "Rust Ownership",
+                    "url": "https://rust-lang.example/ownership",
+                    "text": "Ownership is Rust's most unique feature.",
+                    "publishedDate": "2024-06-01T00:00:00Z",
+                    "author": "Docs Team",
+                },
+                {
+                    "title": "Borrow checker intro",
+                    "url": "https://rust-lang.example/borrow",
+                    "highlights": ["The borrow checker enforces references safely."],
+                },
+                {
+                    # Missing URL — must be skipped.
+                    "title": "No URL row",
+                    "url": "",
+                },
+            ]
+        }
+        fake_client = MagicMock()
+        fake_client.post.return_value = fake_response
+        with patch("app._get_http", return_value=fake_client):
+            out = _try_exa("rust ownership", 10, "text")
+        assert len(out) == 2
+        assert out[0]["url"] == "https://rust-lang.example/ownership"
+        assert out[0]["source"] == "Exa"
+        assert out[0]["body"].startswith("Ownership is Rust")
+        assert out[0]["date"].startswith("2024-06-01")
+        assert out[1]["body"].startswith("The borrow checker")
+
+    def test_http_error_status_returns_empty(self, monkeypatch):
+        monkeypatch.setenv("EXA_API_KEY", "test-key")
+        fake_response = MagicMock()
+        fake_response.status_code = 401
+        fake_client = MagicMock()
+        fake_client.post.return_value = fake_response
+        with patch("app._get_http", return_value=fake_client):
+            assert _try_exa("q", 5, "text") == []
+
+    def test_network_exception_is_swallowed(self, monkeypatch):
+        monkeypatch.setenv("EXA_API_KEY", "test-key")
+        fake_client = MagicMock()
+        fake_client.post.side_effect = RuntimeError("boom")
+        with patch("app._get_http", return_value=fake_client):
+            assert _try_exa("q", 5, "text") == []
+
+
 class TestCheckoutCookieNotForgeable:
     """Checkout pending cookie requires SECRET_KEY to forge."""
 
@@ -1571,3 +1869,113 @@ class TestCheckoutCookieNotForgeable:
         assert resp.status_code == 409
         data = resp.get_json()
         assert data.get("error") == "checkout_not_pending"
+
+
+class TestOfficialSitePromotion:
+    """Short brand queries (Instagram, Facebook, Google, ...) must surface
+    the real homepage first, not SEO listicles or review farms."""
+
+    def test_exact_brand_query_matches(self):
+        entry = app._match_official_site_entry("instagram")
+        assert entry is not None
+        assert entry["url"] == "https://www.instagram.com/"
+
+    def test_match_is_case_and_whitespace_insensitive(self):
+        assert app._match_official_site_entry("  Instagram ") is not None
+        assert app._match_official_site_entry("SNAPCHAT") is not None
+
+    def test_alias_resolves_to_canonical_site(self):
+        # Twitter now aliases X.
+        entry = app._match_official_site_entry("twitter")
+        assert entry is not None
+        assert entry["url"] == "https://x.com/"
+        # NYT alias → nytimes.com.
+        assert app._match_official_site_entry("nyt")["url"] == "https://www.nytimes.com/"
+        # "bard" still lands on Gemini.
+        assert app._match_official_site_entry("bard")["url"].startswith("https://gemini.google.com")
+
+    def test_trailing_filler_words_are_stripped(self):
+        assert app._match_official_site_entry("instagram login")["url"] == "https://www.instagram.com/"
+        assert app._match_official_site_entry("snapchat app")["url"] == "https://www.snapchat.com/"
+        assert app._match_official_site_entry("facebook website")["url"] == "https://www.facebook.com/"
+        assert app._match_official_site_entry("apple official site")["url"] == "https://www.apple.com/"
+
+    def test_unrelated_query_returns_none(self):
+        assert app._match_official_site_entry("") is None
+        assert app._match_official_site_entry("best pizza near me") is None
+        assert app._match_official_site_entry("how to make sourdough bread") is None
+        assert app._match_official_site_entry("history of the roman empire") is None
+
+    def test_promotes_existing_official_result_to_top(self):
+        results = [
+            {"title": "10 Instagram marketing tips", "url": "https://seoblog.example/instagram-tips", "body": "…"},
+            {"title": "Instagram on Wikipedia", "url": "https://en.wikipedia.org/wiki/Instagram", "body": "…"},
+            {"title": "Instagram", "url": "https://www.instagram.com/", "body": "Create an account…"},
+        ]
+        out = app._promote_official_site("instagram", results)
+        assert out[0]["url"] == "https://www.instagram.com/"
+        assert out[0].get("official_site") is True
+        assert len(out) == len(results)
+        # Order of the remaining results is preserved.
+        assert out[1]["url"] == "https://seoblog.example/instagram-tips"
+        assert out[2]["url"].startswith("https://en.wikipedia.org")
+
+    def test_matches_subdomains_of_official_host(self):
+        results = [
+            {"title": "Facebook listicle", "url": "https://medium.example/facebook-guide", "body": "…"},
+            {"title": "Business Facebook", "url": "https://business.facebook.com/", "body": "…"},
+        ]
+        out = app._promote_official_site("facebook", results)
+        assert out[0]["url"] == "https://business.facebook.com/"
+
+    def test_synthesizes_card_when_official_missing(self):
+        results = [
+            {"title": "Best Snapchat tricks (2024)", "url": "https://seoblog.example/snapchat-guide", "body": "…"},
+            {"title": "Snapchat — Wikipedia", "url": "https://en.wikipedia.org/wiki/Snapchat", "body": "…"},
+        ]
+        out = app._promote_official_site("snapchat", results)
+        assert len(out) == len(results) + 1
+        assert out[0]["url"] == "https://www.snapchat.com/"
+        assert out[0]["source"] == "Official site"
+        assert out[0].get("official_site") is True
+        # Original results preserved after the synthesized card.
+        assert out[1]["url"].startswith("https://seoblog.example")
+        assert out[2]["url"].startswith("https://en.wikipedia.org")
+
+    def test_no_change_when_query_does_not_match_brand(self):
+        results = [
+            {"title": "A", "url": "https://a.example/", "body": "…"},
+            {"title": "B", "url": "https://b.example/", "body": "…"},
+        ]
+        out = app._promote_official_site("what is quantum entanglement", results)
+        assert out == results
+
+    def test_empty_results_list_is_returned_untouched(self):
+        assert app._promote_official_site("instagram", []) == []
+
+    def test_alias_twitter_finds_x_com_result(self):
+        results = [
+            {"title": "Twitter guide", "url": "https://seoblog.example/twitter", "body": "…"},
+            {"title": "X", "url": "https://x.com/", "body": "…"},
+        ]
+        out = app._promote_official_site("twitter", results)
+        assert out[0]["url"] == "https://x.com/"
+
+    def test_covers_many_top_mainstream_brands(self):
+        # Spot-check that we recognise a wide breadth of top-100 brands.
+        brands = [
+            "instagram", "facebook", "whatsapp", "tiktok", "snapchat",
+            "google", "apple", "microsoft", "amazon", "meta",
+            "youtube", "netflix", "spotify", "linkedin", "reddit",
+            "pinterest", "discord", "twitch", "x", "twitter",
+            "gmail", "outlook", "chatgpt", "openai", "github",
+            "ebay", "walmart", "target", "uber", "airbnb",
+            "paypal", "venmo", "stripe", "coinbase", "binance",
+            "slack", "zoom", "notion", "canva", "figma",
+            "wikipedia", "bbc", "cnn", "reuters", "nytimes",
+            "tinder", "bumble", "duckduckgo", "bing", "yahoo",
+        ]
+        for name in brands:
+            entry = app._match_official_site_entry(name)
+            assert entry is not None, f"expected {name!r} to be a known brand"
+            assert entry["url"].startswith("https://"), f"{name!r} must have an https URL"

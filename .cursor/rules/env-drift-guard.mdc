@@ -1,0 +1,16 @@
+---
+description: Keep .env.example and production env expectations aligned; no secrets in source
+alwaysApply: true
+---
+
+# Environment drift and secrets
+
+- **Do not** commit real API keys, JWTs, `whsec_`, `sk_live_`, or DB passwords in Python or templates. Use `os.environ` / `os.getenv` and document keys in [`.env.example`](../.env.example).
+
+- **Supabase:** `SUPABASE_URL` should be `https://<project-ref>.supabase.co` (no path). `SUPABASE_DB_URL` for serverless should use the **transaction pooler** (port **6543**) and user `postgres.<project-ref>` as in the Supabase connect UI.
+
+- After changing env usage in `app.py` or API modules, run:
+
+  `python scripts/verify_deployment_config.py`
+
+  Warnings list env vars used in code but missing from the `.env.example` key list; expand the example (commented is fine) when adding user-facing or deployment-critical vars.

@@ -7,6 +7,7 @@ import pytest
 from retrieval.aggregator import aggregate_sources
 from retrieval.dedup import deduplicate_results, normalize_url
 from retrieval.normalize import raw_dict_to_normalized
+from retrieval.intent import intent_alignment_delta
 from retrieval.pipeline import apply_pipeline_stages, query_time_sensitive, run_text_retrieval_pipeline_sync
 from retrieval.types import NormalizedResult, RetrievalParams
 
@@ -38,6 +39,64 @@ def test_dedup_drops_same_normalized_url():
     b = NormalizedResult("t", "https://x.com/", "s2", "src", None, "x.com", 1, {})
     out = deduplicate_results([a, b])
     assert len(out) == 1
+
+
+def test_people_search_intent_prefers_directory_over_forum():
+    """Navigational people-finder queries should not rank forum keyword matches first."""
+    hn = NormalizedResult(
+        title="Ask HN: How to monetize a travel site?",
+        url="https://news.ycombinator.com/item?id=1",
+        snippet="I've built a travel deals website in Australia over the past 7 months.",
+        source="hn",
+        published_at=None,
+        domain="news.ycombinator.com",
+        raw_rank=0,
+        extra={},
+    )
+    directory = NormalizedResult(
+        title="People Search - Australia's Free People Finder & Reunion Site",
+        url="https://www.peoplesearch.com.au/",
+        snippet="Free Australian search, people finder, and reunion site.",
+        source="ddg",
+        published_at=None,
+        domain="peoplesearch.com.au",
+        raw_rank=1,
+        extra={},
+    )
+    params = RetrievalParams(top_n_after_score=10)
+    hits = apply_pipeline_stages(
+        "person search aus",
+        "person search aus",
+        [hn, directory],
+        params=params,
+    )
+    assert len(hits) == 2
+    assert "peoplesearch.com.au" in hits[0]["url"]
+
+
+def test_intent_alignment_delta_people_search_forum_vs_directory():
+    q = "person search aus"
+    hn = NormalizedResult(
+        title="Ask HN: travel",
+        url="https://news.ycombinator.com/item?id=1",
+        snippet="Australia",
+        source="hn",
+        published_at=None,
+        domain="news.ycombinator.com",
+        raw_rank=0,
+        extra={},
+    )
+    good = NormalizedResult(
+        title="People Search Australia",
+        url="https://example.com.au/",
+        snippet="people finder reunion directory",
+        source="ddg",
+        published_at=None,
+        domain="example.com.au",
+        raw_rank=0,
+        extra={},
+    )
+    assert intent_alignment_delta(q, hn) < intent_alignment_delta(q, good)
 
 
 def test_apply_pipeline_prefers_high_authority_domain():

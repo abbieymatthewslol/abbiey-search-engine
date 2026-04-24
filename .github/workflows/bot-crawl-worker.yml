@@ -1,0 +1,55 @@
+name: bot-crawl-worker
+
+# Drain pending bot-crawl jobs. Each tick advances the oldest pending job by
+# up to ~3 pages; a full 30-page crawl finishes in ~10 ticks (~50 minutes at
+# the default 5-minute cadence). Lower the cron if you want faster drain.
+#
+# Required repo secrets:
+#   SITE_URL     - production origin, e.g. https://abbieysearch.com
+#   ADMIN_TOKEN  - must match the deployed app's ADMIN_TOKEN env var
+#
+# If either secret is missing the workflow is a no-op so forks do not fail.
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+    inputs:
+      ticks:
+        description: "How many crawl steps to advance in this manual run"
+        required: false
+        default: "6"
+
+permissions:
+  contents: read
+
+jobs:
+  drain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Drain bot-crawl queue
+        env:
+          SITE_URL: ${{ secrets.SITE_URL }}
+          ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
+          TICKS: ${{ github.event.inputs.ticks || '6' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SITE_URL:-}" ] || [ -z "${ADMIN_TOKEN:-}" ]; then
+            echo "SITE_URL or ADMIN_TOKEN missing - skipping drain (configure in repo secrets)."
+            exit 0
+          fi
+          for i in $(seq 1 "${TICKS}"); do
+            echo "--- tick ${i}/${TICKS}"
+            body=$(curl -sS -X POST \
+              -H "X-Admin-Token: ${ADMIN_TOKEN}" \
+              -H "Content-Type: application/json" \
+              --max-time 55 \
+              "${SITE_URL%/}/admin/api/bot-crawl-step?token=${ADMIN_TOKEN}" || true)
+            echo "${body}"
+            if echo "${body}" | grep -q '"idle":true'; then
+              echo "Queue idle - stopping."
+              exit 0
+            fi
+            sleep 3
+          done

@@ -1,0 +1,42 @@
+# Called by production-readiness.yml. Declares secrets here so editors validate
+# secrets.SITE_URL / secrets.ADMIN_TOKEN (workflow_call inputs), avoiding false
+# "Context access might be invalid" warnings on arbitrary repo secret names.
+
+name: Production readiness / verify-env
+
+on:
+  workflow_call:
+    secrets:
+      SITE_URL:
+        description: Production origin for optional live ping
+        required: false
+      ADMIN_TOKEN:
+        description: Token for /admin/api/health ping
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  verify-env:
+    name: Config check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install python-dotenv
+      - name: Advisory configuration check
+        run: python scripts/verify_production_env.py
+
+      - name: Live site health (optional)
+        env:
+          SITE_URL: ${{ secrets.SITE_URL }}
+          ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
+        run: |
+          if [ -z "${SITE_URL:-}" ] || [ -z "${ADMIN_TOKEN:-}" ]; then
+            echo "Skipping live ping: add SITE_URL and ADMIN_TOKEN as repository secrets to enable."
+            exit 0
+          fi
+          python scripts/verify_production_env.py --ping

@@ -51,6 +51,15 @@
             <span class="form-hint"> — earn XP from searches, saves, and shares</span>
         </p>
 
+        <nav class="profile-nav" aria-label="On this page">
+            <span class="profile-nav-label">Jump to</span>
+            <a href="#edit-section">Edit profile</a>
+            <a href="#search-bots">Custom bots</a>
+            <a href="#bookmarks-section">Bookmarks</a>
+            <a href="#history-section">Recent searches</a>
+            <a href="#account-section">Account</a>
+        </nav>
+
         {# ── Edit profile ── #}
         <section class="profile-section" id="edit-section">
             <h2 class="profile-section-title">
@@ -83,6 +92,51 @@
                 </div>
                 <button type="submit" class="auth-submit-btn">Save changes</button>
             </form>
+        </section>
+
+        {# ── Custom search bots (allowlisted crawl + search) ── #}
+        <section class="profile-section" id="search-bots">
+            <h2 class="profile-section-title">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+                Custom search bots
+            </h2>
+            <p class="form-hint" style="margin:-0.25rem 0 1rem">Create a bot that searches only the sites you list below (no special syntax—one site or URL per line). We save the text from those pages; on the search page use <strong>More → Your bots</strong> to pick a bot and search.</p>
+            <div class="auth-errors" id="sbots-err" role="alert" style="display:none;margin-bottom:0.75rem"></div>
+            <form id="sbots-form" class="profile-edit-form profile-sbots-form">
+                <div class="auth-field">
+                    <label for="sbot-name">Bot name</label>
+                    <div class="auth-input-pill"><input id="sbot-name" type="text" maxlength="80" required placeholder="e.g. Company help bot"></div>
+                    <span class="form-hint">Shown in your list when you choose which bot to use.</span>
+                </div>
+                <div class="auth-field">
+                    <label for="sbot-hosts">Websites to include</label>
+                    <div class="auth-input-pill"><textarea id="sbot-hosts" rows="3" required placeholder="docs.mycompany.com&#10;www.mycompany.com"></textarea></div>
+                    <span class="form-hint">Site addresses only—one per line, or separate with commas. You can paste full links; we’ll use the site name. List each subdomain you need (for example <code>help</code> and <code>www</code> separately if both apply).</span>
+                </div>
+                <div class="auth-field">
+                    <label for="sbot-seeds">Starting pages (full web addresses)</label>
+                    <div class="auth-input-pill"><textarea id="sbot-seeds" rows="3" required placeholder="https://docs.mycompany.com&#10;https://www.mycompany.com/support"></textarea></div>
+                    <span class="form-hint">The first pages we open—usually your home or help page, one per line. They must be on the sites you listed above. You can add links to simple data files (CSV, JSON) on those same sites if you use them.</span>
+                </div>
+                <div class="auth-field">
+                    <label for="sbot-depth">Following links</label>
+                    <div class="auth-input-pill" style="max-width:28rem">
+                        <select id="sbot-depth" style="width:100%;background:transparent;border:none;color:inherit;font:inherit;padding:0.35rem 0.25rem">
+                            <option value="0">Only the starting pages above</option>
+                            <option value="1" selected>Also open pages linked from those (one step)</option>
+                            <option value="2">Go two steps deep from the starting pages</option>
+                        </select>
+                    </div>
+                    <span class="form-hint">Deeper means more pages and a longer update. Most people use one step.</span>
+                </div>
+                <div class="auth-field">
+                    <label for="sbot-pages">How many pages to collect</label>
+                    <div class="auth-input-pill"><input id="sbot-pages" type="number" min="5" max="30" value="15" style="width:5rem" inputmode="numeric"></div>
+                    <span class="form-hint">Between 5 and 30. Lower is faster; higher covers more of the site.</span>
+                </div>
+                <button type="submit" class="auth-submit-btn" id="sbot-create">Create bot</button>
+            </form>
+            <ul class="bookmark-list" id="sbots-list" style="list-style:none;padding:0;margin:0"></ul>
         </section>
 
         {# ── Saved bookmarks ── #}
@@ -192,6 +246,231 @@
                 body: JSON.stringify({ bookmarks: items }),
             });
         } catch (_) {}
+    })();
+
+    // Custom search bots
+    (function () {
+        const errEl = document.getElementById('sbots-err');
+        const listEl = document.getElementById('sbots-list');
+        const form = document.getElementById('sbots-form');
+        function showErr(msg) {
+            if (!errEl) return;
+            errEl.style.display = 'block';
+            errEl.innerHTML = '<p>' + msg + '</p>';
+        }
+        function clearErr() {
+            if (!errEl) return;
+            errEl.style.display = 'none';
+            errEl.innerHTML = '';
+        }
+        async function loadBots() {
+            if (!listEl) return;
+            listEl.innerHTML = '<li class="profile-empty">Loading…</li>';
+            try {
+                const r = await fetch('/api/user/search-bots', { credentials: 'same-origin' });
+                const d = await r.json().catch(function () { return null; });
+                if (!r.ok || !d || !Array.isArray(d.bots)) {
+                    listEl.innerHTML = '<li class="profile-empty">Could not load bots.</li>';
+                    return;
+                }
+                if (!d.bots.length) {
+                    listEl.innerHTML = '<li class="profile-empty">No bots yet. Use the form above to create one, then tap <strong>Update index</strong> on that bot.</li>';
+                    return;
+                }
+                listEl.innerHTML = '';
+                d.bots.forEach(function (b) {
+                    const li = document.createElement('li');
+                    li.className = 'bookmark-item';
+                    li.style.marginBottom = '0.75rem';
+                    const st = (b.last_crawl_status || 'Never crawled').replace(/</g, '&lt;');
+                    li.innerHTML =
+                        '<div class="bookmark-main">' +
+                        '<span class="bookmark-title">' + String(b.name || '').replace(/</g, '&lt;') + '</span>' +
+                        '<p class="bookmark-snippet" style="font-size:.8rem;color:var(--text-dim)">' + st + '</p>' +
+                        '<p class="form-hint" style="margin:.35rem 0 0">' +
+                        '<a href="/search?type=mybot&amp;bot_id=' + encodeURIComponent(String(b.id)) + '">Search with this bot</a>' +
+                        '</p></div>' +
+                        '<div style="display:flex;flex-direction:column;gap:.35rem;align-items:flex-end">' +
+                        '<button type="button" class="auth-submit-btn sb-crawl" data-id="' + b.id + '" style="padding:.25rem .6rem;font-size:.78rem">Update index</button>' +
+                        '<button type="button" class="signout-link sb-del" data-id="' + b.id + '" style="font-size:.78rem;border:none;background:none;cursor:pointer">Delete</button>' +
+                        '</div>';
+                    listEl.appendChild(li);
+                });
+                listEl.querySelectorAll('.sb-crawl').forEach(function (btn) {
+                    btn.addEventListener('click', async function () {
+                        clearErr();
+                        btn.disabled = true;
+                        btn.textContent = 'Crawling…';
+                        const id = btn.dataset.id;
+                        const r = await fetch('/api/user/search-bots/' + id + '/crawl', {
+                            method: 'POST',
+                            credentials: 'same-origin',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: '{}',
+                        });
+                        const d = await r.json().catch(function () { return null; });
+                        if (!d || d.ok === false) {
+                            btn.disabled = false;
+                            btn.textContent = 'Update index';
+                            showErr((d && d.error) ? String(d.error) : 'Could not update the index.');
+                            loadBots();
+                            return;
+                        }
+                        var state = (d.status && d.status.state) || d.state || 'queued';
+                        if (state === 'done' || state === 'failed') {
+                            btn.disabled = false;
+                            btn.textContent = 'Update index';
+                            loadBots();
+                            return;
+                        }
+                        var attempts = 0;
+                        var maxAttempts = 40; // ~2 minutes at 3s each
+                        var poll = setInterval(async function () {
+                            attempts++;
+                            try {
+                                const sr = await fetch('/api/user/search-bots/' + id + '/status', {
+                                    credentials: 'same-origin',
+                                });
+                                const sd = await sr.json();
+                                var s = sd.status || {};
+                                if (s.pages_done != null && s.pages_total != null) {
+                                    btn.textContent = 'Crawling ' + s.pages_done + '/' + s.pages_total;
+                                }
+                                if (s.state === 'done' || s.state === 'failed' || attempts >= maxAttempts) {
+                                    clearInterval(poll);
+                                    btn.disabled = false;
+                                    btn.textContent = 'Update index';
+                                    if (s.state === 'failed' && s.error) showErr(String(s.error));
+                                    loadBots();
+                                }
+                            } catch (e) { /* keep polling */ }
+                        }, 3000);
+                    });
+                });
+                listEl.querySelectorAll('.sb-del').forEach(function (btn) {
+                    btn.addEventListener('click', async function () {
+                        if (!confirm('Delete this bot and all pages saved for it?')) return;
+                        await fetch('/api/user/search-bots/' + btn.dataset.id, { method: 'DELETE', credentials: 'same-origin' });
+                        loadBots();
+                    });
+                });
+            } catch (e) {
+                listEl.innerHTML = '<li class="profile-empty">Could not load bots.</li>';
+            }
+        }
+        var SB_MAX_HOSTS = 12;
+        var SB_MAX_SEEDS = 8;
+        function parseHostsInput(raw) {
+            var seen = {};
+            var out = [];
+            var lines = String(raw || '').split(/\r?\n/);
+            for (var li = 0; li < lines.length; li++) {
+                var line = lines[li];
+                var parts = line.split(',');
+                for (var pi = 0; pi < parts.length; pi++) {
+                    var s = parts[pi].trim();
+                    if (!s) continue;
+                    try {
+                        if (/^https?:\/\//i.test(s)) {
+                            s = new URL(s).hostname;
+                        } else {
+                            var slash = s.indexOf('/');
+                            if (slash !== -1) s = s.slice(0, slash);
+                            s = s.replace(/:\d+$/, '').trim();
+                        }
+                    } catch (e2) { continue; }
+                    s = s.replace(/^\.+|\.+$/g, '');
+                    if (!s) continue;
+                    var low = s.toLowerCase();
+                    if (!seen[low]) { seen[low] = true; out.push(s); }
+                }
+            }
+            return out;
+        }
+        function parseSeedUrlsInput(raw) {
+            var seen = {};
+            var out = [];
+            function pushUrl(s) {
+                s = String(s || '').trim().replace(/[,\s]+$/, '');
+                if (!s) return;
+                if (!/^https?:\/\//i.test(s)) {
+                    if (/^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}/i.test(s) || s.indexOf('/') !== -1) {
+                        s = 'https://' + s.replace(/^\/+/, '');
+                    } else {
+                        return;
+                    }
+                }
+                try {
+                    var u = new URL(s);
+                    if (u.protocol !== 'http:' && u.protocol !== 'https:') return;
+                    var key = u.href;
+                    if (!seen[key]) { seen[key] = true; out.push(u.href); }
+                } catch (e3) {}
+            }
+            var lines = String(raw || '').split(/\r?\n/);
+            for (var li = 0; li < lines.length; li++) {
+                var line = lines[li].trim();
+                if (!line) continue;
+                var found = line.match(/https?:\/\/[^\s]+/gi);
+                if (found && found.length > 1) {
+                    for (var fi = 0; fi < found.length; fi++) pushUrl(found[fi]);
+                    continue;
+                }
+                var chunks = [line];
+                if (line.indexOf('http') === -1 && line.indexOf(',') !== -1) {
+                    chunks = line.split(',').map(function (x) { return x.trim(); }).filter(Boolean);
+                }
+                for (var ci = 0; ci < chunks.length; ci++) pushUrl(chunks[ci]);
+            }
+            return out;
+        }
+        if (form) {
+            form.addEventListener('submit', async function (e) {
+                e.preventDefault();
+                clearErr();
+                var hosts = parseHostsInput(document.getElementById('sbot-hosts').value);
+                var seeds = parseSeedUrlsInput(document.getElementById('sbot-seeds').value);
+                if (!hosts.length) {
+                    showErr('Add at least one website (for example <code>yoursite.com</code>), one per line or separated by commas.');
+                    return;
+                }
+                if (hosts.length > SB_MAX_HOSTS) {
+                    showErr('You can list up to ' + SB_MAX_HOSTS + ' websites. Remove a few and try again.');
+                    return;
+                }
+                if (!seeds.length) {
+                    showErr('Add at least one full web address to start from (each line should begin with <code>https://</code>).');
+                    return;
+                }
+                if (seeds.length > SB_MAX_SEEDS) {
+                    showErr('You can add up to ' + SB_MAX_SEEDS + ' starting pages. Remove a few and try again.');
+                    return;
+                }
+                var body = {
+                    name: document.getElementById('sbot-name').value.trim(),
+                    allow_hosts: hosts,
+                    seed_urls: seeds,
+                    max_depth: parseInt(document.getElementById('sbot-depth').value, 10) || 1,
+                    max_pages: parseInt(document.getElementById('sbot-pages').value, 10) || 15,
+                };
+                var r = await fetch('/api/user/search-bots', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+                var d = await r.json().catch(function () { return null; });
+                if (r.ok && d && d.ok) {
+                    form.reset();
+                    document.getElementById('sbot-depth').value = '1';
+                    document.getElementById('sbot-pages').value = '15';
+                    loadBots();
+                    return;
+                }
+                showErr((d && d.error) ? String(d.error) : 'Could not create the bot.');
+            });
+        }
+        loadBots();
     })();
 </script>
 {% endblock %}

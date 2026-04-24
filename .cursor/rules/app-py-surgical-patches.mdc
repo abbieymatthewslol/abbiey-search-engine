@@ -1,0 +1,17 @@
+---
+description: When changing app.py, ≤30 line patches—no refactors, no moves, no scope creep
+globs: app.py
+alwaysApply: false
+---
+
+# `app.py` — surgical changes only
+
+This file is large and central. When you modify it:
+
+1. **Line budget: ≤ ~30 net lines** in `app.py` for a single fix. If you need more, split the work or confirm scope; do not slip in refactors to “use the space.”
+2. **Do not refactor** unrelated code, rename symbols for style, or “clean up” nearby blocks. **Do not restructure** control flow or extract helpers unless the user asked.
+3. **Do not move** functions, classes, or large sections to other files in the same change (unless the task explicitly asks to extract code).
+4. **Only patch the exact failing or requested logic**—the smallest change that fixes the bug or implements the request.
+5. **Prefer editing existing lines** over adding new ones (fewer new branches, less churn, easier review).
+
+See [pre-deployment.mdc](pre-deployment.mdc) for the deploy-time Vercel `includeFiles` check as well.

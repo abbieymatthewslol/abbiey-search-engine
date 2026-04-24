@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="deploy-hash" content="{{ deploy_hash }}">
+    <title>{{ title }} — abbieysearch docs</title>
+    <meta name="description" content="{{ description if description else title + ' — abbieysearch public documentation.' }}">
+    <meta property="og:type" content="article">
+    <meta property="og:site_name" content="abbieysearch">
+    <meta property="og:title" content="{{ title }} — abbieysearch docs">
+    <meta property="og:description" content="{{ description if description else title + ' — abbieysearch public documentation.' }}">
+    <meta property="og:url" content="{{ site_base_url }}/docs/{{ slug }}">
+    <meta property="og:image" content="{{ site_base_url }}/static/og-image.png">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="{{ title }} — abbieysearch docs">
+    <meta name="twitter:description" content="{{ description if description else title + ' — abbieysearch documentation.' }}">
+    <link rel="canonical" href="{{ site_base_url }}/docs/{{ slug }}">
+    <script nonce="{{ csp_nonce }}">
+        (function() {
+            var t = localStorage.getItem('theme') || 'dark';
+            var a = localStorage.getItem('accent-color') || localStorage.getItem('accentColor');
+            document.documentElement.setAttribute('data-theme', t);
+            if (a) document.documentElement.style.setProperty('--accent', a);
+        })();
+    </script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=deploy_hash) }}">
+    <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='icon-192.png', v=deploy_hash) }}">
+    <style nonce="{{ csp_nonce }}">
+        .docs-wrap {
+            max-width: 820px;
+            margin: 0 auto;
+            padding: 2.5rem 1.25rem 4rem;
+            line-height: 1.65;
+            font-size: 1rem;
+        }
+        .docs-wrap h1 { font-size: 1.7rem; margin: 0 0 1rem; }
+        .docs-wrap h2 { font-size: 1.25rem; margin: 2rem 0 .75rem; }
+        .docs-wrap h3 { font-size: 1.05rem; margin: 1.5rem 0 .5rem; }
+        .docs-wrap pre { background: rgba(255,255,255,.05); padding: .9rem 1rem; border-radius: 8px; overflow: auto; font-size: .88rem; }
+        .docs-wrap code { background: rgba(255,255,255,.08); padding: .05rem .35rem; border-radius: 4px; font-size: .92em; }
+        .docs-wrap pre code { background: none; padding: 0; }
+        .docs-wrap table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: .92rem; }
+        .docs-wrap th, .docs-wrap td { text-align: left; padding: .55rem .7rem; border-bottom: 1px solid var(--border, rgba(255,255,255,.12)); vertical-align: top; }
+        .docs-wrap th { font-weight: 600; opacity: .9; }
+        .docs-wrap blockquote { margin: 1rem 0; padding: .5rem 1rem; border-left: 3px solid var(--accent, #7c6cfc); opacity: .85; }
+        .docs-wrap ul, .docs-wrap ol { padding-left: 1.4rem; }
+        .docs-wrap a { color: var(--accent, #7c6cfc); }
+        .docs-wrap hr { border: 0; border-top: 1px solid var(--border, rgba(255,255,255,.1)); margin: 2rem 0; }
+    </style>
+</head>
+<body>
+    <header class="landing-header">
+        <a href="/" class="logo">abbiey<span>search</span></a>
+        <a href="/search" class="header-btn landing-cta">Open search</a>
+    </header>
+    <main class="docs-wrap" id="docs-content">
+        <pre id="docs-raw" hidden>{{ markdown }}</pre>
+        <div id="docs-rendered"></div>
+    </main>
+    <footer class="landing-footer">
+        <p class="footer-links">
+            <a href="/privacy">Privacy Policy</a>
+            &nbsp;&middot;&nbsp;
+            <a href="/terms">Terms of Service</a>
+            &nbsp;&middot;&nbsp;
+            <a href="/search">Search</a>
+        </p>
+    </footer>
+    <script nonce="{{ csp_nonce }}">
+    (function () {
+        'use strict';
+        // Tiny, dependency-free Markdown renderer for trusted in-repo docs only.
+        // Supports: headings, paragraphs, lists, tables, code fences, inline
+        // code, bold, italic, and links. Intentionally narrow to avoid pulling
+        // a heavy library into the serverless bundle.
+        function esc(s) {
+            return String(s)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+        }
+        function inline(s) {
+            s = esc(s);
+            s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
+            s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+            s = s.replace(/(^|[^*])\*([^*\s][^*]*[^*\s]|[^*\s])\*/g, '$1<em>$2</em>');
+            s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, function (_m, text, href) {
+                var safe = /^(https?:|mailto:|\/)/.test(href) ? href : '#';
+                return '<a href="' + safe + '" rel="noopener">' + text + '</a>';
+            });
+            return s;
+        }
+        function render(md) {
+            var lines = md.split(/\r?\n/);
+            var out = [];
+            var i = 0;
+            while (i < lines.length) {
+                var line = lines[i];
+                if (/^```/.test(line)) {
+                    var fence = [];
+                    i++;
+                    while (i < lines.length && !/^```/.test(lines[i])) {
+                        fence.push(esc(lines[i]));
+                        i++;
+                    }
+                    i++;
+                    out.push('<pre><code>' + fence.join('\n') + '</code></pre>');
+                    continue;
+                }
+                var h = line.match(/^(#{1,6})\s+(.+)$/);
+                if (h) { out.push('<h' + h[1].length + '>' + inline(h[2]) + '</h' + h[1].length + '>'); i++; continue; }
+                if (/^\s*\|.+\|\s*$/.test(line) && /^\s*\|[\s:-|]+\|\s*$/.test(lines[i + 1] || '')) {
+                    var headers = line.split('|').slice(1, -1).map(function (s) { return s.trim(); });
+                    i += 2;
+                    var rows = [];
+                    while (i < lines.length && /^\s*\|.+\|\s*$/.test(lines[i])) {
+                        rows.push(lines[i].split('|').slice(1, -1).map(function (s) { return s.trim(); }));
+                        i++;
+                    }
+                    out.push('<table><thead><tr>' + headers.map(function (h2) { return '<th>' + inline(h2) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+                        rows.map(function (r) { return '<tr>' + r.map(function (c) { return '<td>' + inline(c) + '</td>'; }).join('') + '</tr>'; }).join('') +
+                        '</tbody></table>');
+                    continue;
+                }
+                if (/^\s*[-*]\s+/.test(line)) {
+                    var items = [];
+                    while (i < lines.length && /^\s*[-*]\s+/.test(lines[i])) {
+                        items.push('<li>' + inline(lines[i].replace(/^\s*[-*]\s+/, '')) + '</li>');
+                        i++;
+                    }
+                    out.push('<ul>' + items.join('') + '</ul>');
+                    continue;
+                }
+                if (/^\s*\d+\.\s+/.test(line)) {
+                    var oitems = [];
+                    while (i < lines.length && /^\s*\d+\.\s+/.test(lines[i])) {
+                        oitems.push('<li>' + inline(lines[i].replace(/^\s*\d+\.\s+/, '')) + '</li>');
+                        i++;
+                    }
+                    out.push('<ol>' + oitems.join('') + '</ol>');
+                    continue;
+                }
+                if (line.trim() === '') { i++; continue; }
+                if (/^---+$/.test(line.trim())) { out.push('<hr>'); i++; continue; }
+                var para = [line];
+                i++;
+                while (i < lines.length && lines[i].trim() !== '' && !/^```/.test(lines[i]) && !/^(#{1,6})\s/.test(lines[i]) && !/^\s*[-*]\s+/.test(lines[i]) && !/^\s*\d+\.\s+/.test(lines[i]) && !/^\s*\|.+\|\s*$/.test(lines[i])) {
+                    para.push(lines[i]);
+                    i++;
+                }
+                out.push('<p>' + inline(para.join(' ')) + '</p>');
+            }
+            return out.join('\n');
+        }
+        var raw = document.getElementById('docs-raw').textContent;
+        document.getElementById('docs-rendered').innerHTML = render(raw);
+    })();
+    </script>
+</body>
+</html>

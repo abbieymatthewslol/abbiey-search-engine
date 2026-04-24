@@ -44,7 +44,7 @@ def _load_dotenv() -> None:
             os.environ[key] = value
 
     try:
-        from dotenv import load_dotenv
+        from dotenv import load_dotenv  # pyright: ignore[reportMissingImports]
 
         load_dotenv(repo_root / ".env", override=False)
         load_dotenv(repo_root / ".env.local", override=True)

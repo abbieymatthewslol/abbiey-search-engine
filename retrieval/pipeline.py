@@ -109,7 +109,7 @@ def run_text_retrieval_pipeline_sync(
         time_filter=time_filter,
         safesearch=safesearch,
         time_sensitive_query=query_time_sensitive(user_query),
-        top_n_after_score=min(max_results, 100),
+        top_n_after_score=min(max_results, 150),
         per_source_timeout=4.0,
         overall_timeout=9.0,
     )

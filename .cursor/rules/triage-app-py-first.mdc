@@ -1,0 +1,14 @@
+---
+description: When something fails, assume the cause is in app.py until evidence points elsewhere
+alwaysApply: true
+---
+
+# Failure triage: `app.py` first
+
+When tests, production, or local runs fail (500s, wrong behavior, timeouts, auth, search):
+
+1. **Assume the bug or regression lives in `app.py`** until you have concrete proof it does not (stack trace in another module, failing test file that only imports one non-app module, bisect, etc.).
+2. Search routes, `before_request` / `after_request`, error handlers, and the code path for the failing URL or feature **in `app.py` first**.
+3. Only then inspect `engine/`, `retrieval/`, `osint/`, root helpers, templates, or `static/`.
+
+This reduces wasted churn: most HTTP-facing behavior and wiring still lives in the monolithic entry file.

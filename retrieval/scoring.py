@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from typing import Iterable
 
 from retrieval.embeddings import cosine_similarity, embed_text
+from retrieval.intent import intent_alignment_delta
 from retrieval.types import NormalizedResult
 
 # Tunable weights (env override)
@@ -85,9 +86,11 @@ def score_results(query: str, results: Iterable[NormalizedResult], *, time_sensi
         fsc = freshness_score(r.published_at, time_sensitive=time_sensitive)
         asc = authority_score(r.domain)
         ssc = semantic_score(query, r)
-        final = (w_f * fsc + w_a * asc + w_s * ssc) / total_w
+        base = (w_f * fsc + w_a * asc + w_s * ssc) / total_w
         # Slight boost for earlier raw_rank within same source (stability)
         tie = 1.0 / (1.0 + r.raw_rank * 0.02)
-        ranked.append((final * tie, r))
+        adj = intent_alignment_delta(query, r)
+        final = min(1.0, max(0.0, base * tie + adj))
+        ranked.append((final, r))
     ranked.sort(key=lambda x: x[0], reverse=True)
     return [r for _, r in ranked]

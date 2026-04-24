@@ -1,11 +1,14 @@
 name: Deploy to Vercel
 
-# Deploys the single production project for https://abbieysearch.com (see .github/PLATFORM_INTEGRATIONS.md).
+# Automatic: every push to master runs tests, then `vercel build` + `vercel deploy --prebuilt --prod`.
+# Requires secret VERCEL_TOKEN. Manual re-run: Actions → this workflow → Run workflow.
+# Vercel Git builds on `main` are skipped (vercel.json ignoreCommand) so "sync main" + this workflow do not double-deploy.
+# See .github/PLATFORM_INTEGRATIONS.md
 on:
   push:
     branches:
       - master
-  # GitHub → Actions → "Deploy to Vercel" → Run workflow (no code change needed)
+  # GitHub → Actions → "Deploy to Vercel" → Run workflow (manual CLI deploy / rollback)
   workflow_dispatch:
 
 concurrency:
@@ -22,6 +25,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
@@ -33,8 +38,11 @@ jobs:
           pip install pytest
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-      - name: Run tests
-        run: pytest tests/ -v --tb=short
+      - name: Run tests (changed files only)
+        env:
+          DIFF_BASE: ${{ github.event.before }}
+          DIFF_HEAD: ${{ github.sha }}
+        run: python scripts/run_tests_for_changes.py
 
   deploy:
     needs: test
@@ -56,3 +64,11 @@ jobs:
 
       - name: Deploy to production
         run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
+
+      # Attack Challenge Mode shows a browser checkpoint (HTTP 429) instead of the app.
+      - name: Ensure Attack Challenge Mode is off
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ env.VERCEL_PROJECT_ID }}
+          VERCEL_ORG_ID: ${{ env.VERCEL_ORG_ID }}
+        run: python3 scripts/disable_vercel_attack_challenge.py

@@ -594,6 +594,53 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  // ===== Custom search-bar colour =====
+  // Independent from --accent so users can theme the search pill without
+  // dragging every other accent-tinted element along. Empty string = reset.
+  const SEARCH_ACCENT_KEY = "abbiey_search_accent";
+  const savedSearchAccent = localStorage.getItem(SEARCH_ACCENT_KEY) || "";
+  applySearchAccent(savedSearchAccent);
+
+  function applySearchAccent(color) {
+    const vars = [
+      "--search-accent-border",
+      "--search-accent-border-hover",
+      "--search-accent-focus",
+      "--search-accent-ring",
+      "--search-accent-focus-icon",
+    ];
+    if (!color) {
+      vars.forEach(v => html.style.removeProperty(v));
+      localStorage.removeItem(SEARCH_ACCENT_KEY);
+    } else {
+      // Idle border: 45% of picked colour blended onto transparent.
+      html.style.setProperty("--search-accent-border", _mix(color, 0.45));
+      html.style.setProperty("--search-accent-border-hover", _mix(color, 0.75));
+      html.style.setProperty("--search-accent-focus", color);
+      html.style.setProperty("--search-accent-ring", _mix(color, 0.22));
+      html.style.setProperty("--search-accent-focus-icon", _mix(color, 1.0, true));
+      localStorage.setItem(SEARCH_ACCENT_KEY, color);
+    }
+    document.querySelectorAll(".search-color-swatch").forEach(s => {
+      s.classList.toggle("active", s.dataset.color === color);
+    });
+  }
+
+  function _mix(hex, alpha, brighten) {
+    const h = String(hex || "").replace("#", "");
+    if (h.length !== 6) return hex;
+    let r = parseInt(h.slice(0, 2), 16);
+    let g = parseInt(h.slice(2, 4), 16);
+    let b = parseInt(h.slice(4, 6), 16);
+    if (brighten) {
+      r = Math.min(255, Math.round(r + (255 - r) * 0.35));
+      g = Math.min(255, Math.round(g + (255 - g) * 0.35));
+      b = Math.min(255, Math.round(b + (255 - b) * 0.35));
+      return `rgb(${r}, ${g}, ${b})`;
+    }
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+
   function adjustBrightness(hex, amount) {
     hex = hex.replace("#", "");
     const r = Math.max(0, Math.min(255, parseInt(hex.slice(0, 2), 16) + amount));
@@ -602,24 +649,54 @@ document.addEventListener("DOMContentLoaded", () => {
     return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
   }
 
+  // Wrap URL paths in a span so CSS can hide just the path, leaving the domain visible
+  function applyDomainUrlStyle() {
+    document.querySelectorAll("cite.result-url").forEach(el => {
+      if (el.dataset.urlProcessed) return;
+      el.dataset.urlProcessed = "1";
+      const raw = el.textContent.trim();
+      try {
+        const u = new URL(raw.startsWith("http") ? raw : "https://" + raw);
+        const domain = u.protocol + "//" + u.host;
+        const path   = u.pathname + u.search + u.hash;
+        if (path && path !== "/") {
+          el.innerHTML = "";
+          el.appendChild(document.createTextNode(domain));
+          const pathSpan = document.createElement("span");
+          pathSpan.className = "result-url-path";
+          pathSpan.textContent = path;
+          el.appendChild(pathSpan);
+        }
+      } catch {}
+    });
+  }
+
   // Theme settings popover
   // ===== Settings Modal =====
   const _S = {
-    theme:         { key: "theme",                 def: "dark"   },
-    accent:        { key: "accent-color",          def: "#e7e5e4"},
-    density:       { key: "density",               def: "default"},
-    fontSize:      { key: "abbiey_font_size",      def: "medium" },
-    fontFamily:    { key: "abbiey_font_family",    def: "system" },
-    safesearch:    { key: "abbiey_safesearch",     def: "off"    },
-    newTab:        { key: "abbiey_new_tab",        def: "true"   },
-    defaultTab:    { key: "abbiey_default_tab",    def: "text"   },
-    aiSummary:     { key: "abbiey_ai_summary",     def: "true"   },
-    autocomplete:  { key: "abbiey_autocomplete",   def: "true"   },
-    persistRegion: { key: "abbiey_region_persist", def: "false"  },
-    history:       { key: "abbiey_history",        def: "false"  },
-    showCards:     { key: "abbiey_show_cards",     def: "true"   },
-    showFavicons:  { key: "abbiey_show_favicons",  def: "true"   },
-    showDates:     { key: "abbiey_show_dates",     def: "true"   },
+    theme:         { key: "theme",                 def: "dark"    },
+    accent:        { key: "accent-color",          def: "#e7e5e4" },
+    density:       { key: "density",               def: "default" },
+    fontSize:      { key: "abbiey_font_size",      def: "medium"  },
+    fontFamily:    { key: "abbiey_font_family",    def: "system"  },
+    safesearch:    { key: "abbiey_safesearch",     def: "off"     },
+    newTab:        { key: "abbiey_new_tab",        def: "true"    },
+    defaultTab:    { key: "abbiey_default_tab",    def: "text"    },
+    aiSummary:     { key: "abbiey_ai_summary",     def: "true"    },
+    autocomplete:  { key: "abbiey_autocomplete",   def: "true"    },
+    persistRegion: { key: "abbiey_region_persist", def: "false"   },
+    history:       { key: "abbiey_history",        def: "false"   },
+    incognito:     { key: "abbiey_incognito",      def: "false"   },
+    showCards:     { key: "abbiey_show_cards",     def: "true"    },
+    showFavicons:  { key: "abbiey_show_favicons",  def: "true"    },
+    showDates:     { key: "abbiey_show_dates",     def: "true"    },
+    // New customisation settings
+    radius:        { key: "abbiey_radius",         def: "default" },
+    motion:        { key: "abbiey_motion",         def: "full"    },
+    width:         { key: "abbiey_width",          def: "default" },
+    urlStyle:      { key: "abbiey_url_style",      def: "full"    },
+    snippetStyle:  { key: "abbiey_snippet_style",  def: "full"    },
+    searchBar:     { key: "abbiey_searchbar",      def: "default" },
   };
   function gs(name) { return localStorage.getItem(_S[name].key) ?? _S[name].def; }
   function ss(name, val) { localStorage.setItem(_S[name].key, val); }
@@ -676,10 +753,15 @@ document.addEventListener("DOMContentLoaded", () => {
     // Answer cards
     if (gs("showCards") === "false") {
       [".calculator-card",".color-card",".unit-convert-card",".knowledge-panel",
-       ".weather-card",".dictionary-card",".qr-card"].forEach(sel => {
+       ".weather-card",".dictionary-card",".qr-card",".knowledge-graph-root"].forEach(sel => {
         document.querySelectorAll(sel).forEach(el => { el.style.display = "none"; });
       });
+    } else {
+      document.querySelectorAll(".knowledge-graph-root").forEach(el => { el.style.display = ""; });
     }
+
+    const _incBadge = document.getElementById("incognito-badge");
+    if (_incBadge) _incBadge.hidden = gs("incognito") !== "true";
 
     // Favicons
     if (gs("showFavicons") === "false") {
@@ -760,6 +842,33 @@ document.addEventListener("DOMContentLoaded", () => {
         if (_alr) _alr.hidden = false;
       }
     }
+
+    // Corner radius
+    const _radius = gs("radius");
+    if (_radius !== "default") html.setAttribute("data-radius", _radius);
+
+    // Animation speed
+    const _motion = gs("motion");
+    if (_motion !== "full") html.setAttribute("data-motion", _motion);
+
+    // Results width
+    const _width = gs("width");
+    if (_width !== "default") html.setAttribute("data-width", _width);
+
+    // URL display
+    const _urlStyle = gs("urlStyle");
+    if (_urlStyle !== "full") {
+      html.setAttribute("data-url-style", _urlStyle);
+      if (_urlStyle === "domain") applyDomainUrlStyle();
+    }
+
+    // Snippet style
+    const _snippetStyle = gs("snippetStyle");
+    if (_snippetStyle !== "full") html.setAttribute("data-snippet-style", _snippetStyle);
+
+    // Search bar style
+    const _searchBar = gs("searchBar");
+    if (_searchBar !== "default") html.setAttribute("data-searchbar", _searchBar);
   }
 
   applyAllSettings();
@@ -866,6 +975,35 @@ document.addEventListener("DOMContentLoaded", () => {
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") { menu.setAttribute("hidden", ""); btn.setAttribute("aria-expanded", "false"); }
     });
+
+    fetch("/api/user/search-bots", { credentials: "same-origin" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d || !Array.isArray(d.bots) || !d.bots.length) return;
+        const qEl = document.getElementById("search-input") || document.querySelector('input[name="q"]');
+        const q = (qEl && qEl.value) ? qEl.value.trim() : "";
+        const sub = document.createElement("div");
+        sub.className = "tab-more-mybot-sub";
+        sub.setAttribute("role", "group");
+        sub.setAttribute("aria-label", "Your custom search bots");
+        const cap = document.createElement("span");
+        cap.className = "tab-more-subcap";
+        cap.textContent = "Your bots";
+        sub.appendChild(cap);
+        d.bots.forEach((b) => {
+          const a = document.createElement("a");
+          a.className = "tab-more-item tab-more-mybot-item";
+          const p = new URLSearchParams();
+          p.set("type", "mybot");
+          p.set("bot_id", String(b.id));
+          if (q) p.set("q", q);
+          a.href = `/search?${p.toString()}`;
+          a.textContent = b.name || `Bot ${b.id}`;
+          sub.appendChild(a);
+        });
+        menu.appendChild(sub);
+      })
+      .catch(() => {});
   })();
 
   // ===== Filters toggle =====
@@ -902,10 +1040,17 @@ document.addEventListener("DOMContentLoaded", () => {
     syncBtnGroup("safesearch-group",   gs("safesearch"));
     syncBtnGroup("default-tab-group",  gs("defaultTab"));
     syncBtnGroup("newtab-group",       gs("newTab"));
+    syncBtnGroup("radius-group",       gs("radius"));
+    syncBtnGroup("motion-group",       gs("motion"));
+    syncBtnGroup("width-group",        gs("width"));
+    syncBtnGroup("url-style-group",    gs("urlStyle"));
+    syncBtnGroup("snippet-style-group",gs("snippetStyle"));
+    syncBtnGroup("searchbar-group",    gs("searchBar"));
     syncToggle("ai-summary-toggle",    gs("aiSummary")     === "true");
     syncToggle("autocomplete-toggle",  gs("autocomplete")  === "true");
     syncToggle("persist-region-toggle",gs("persistRegion") === "true");
     syncToggle("history-toggle",       gs("history")       === "true");
+    syncToggle("incognito-toggle",     gs("incognito")     === "true");
     syncToggle("cards-toggle",         gs("showCards")     === "true");
     syncToggle("favicons-toggle",      gs("showFavicons")  === "true");
     syncToggle("dates-toggle",         gs("showDates")     === "true");
@@ -973,6 +1118,25 @@ document.addEventListener("DOMContentLoaded", () => {
       else a.removeAttribute("target");
     });
   });
+  wireBtnGroup("radius-group", "radius", (val) => {
+    html.setAttribute("data-radius", val);
+  });
+  wireBtnGroup("motion-group", "motion", (val) => {
+    html.setAttribute("data-motion", val);
+  });
+  wireBtnGroup("width-group", "width", (val) => {
+    html.setAttribute("data-width", val);
+  });
+  wireBtnGroup("url-style-group", "urlStyle", (val) => {
+    html.setAttribute("data-url-style", val);
+    if (val === "domain") applyDomainUrlStyle();
+  });
+  wireBtnGroup("snippet-style-group", "snippetStyle", (val) => {
+    html.setAttribute("data-snippet-style", val);
+  });
+  wireBtnGroup("searchbar-group", "searchBar", (val) => {
+    html.setAttribute("data-searchbar", val);
+  });
 
   wireToggle("ai-summary-toggle", "aiSummary", (checked) => {
     const c = document.getElementById("ai-summary-card");
@@ -996,9 +1160,14 @@ document.addEventListener("DOMContentLoaded", () => {
       document.getElementById("history-panel")?.setAttribute("hidden", "");
     }
   });
+  wireToggle("incognito-toggle", "incognito", (checked) => {
+    const badge = document.getElementById("incognito-badge");
+    if (badge) badge.hidden = !checked;
+    if (checked) clearStoredSearchHistory(false);
+  });
   wireToggle("cards-toggle", "showCards", (checked) => {
     [".calculator-card",".color-card",".unit-convert-card",".knowledge-panel",
-     ".weather-card",".dictionary-card",".qr-card"].forEach(sel => {
+     ".weather-card",".dictionary-card",".qr-card",".knowledge-graph-root"].forEach(sel => {
       document.querySelectorAll(sel).forEach(el => { el.style.display = checked ? "" : "none"; });
     });
   });
@@ -1037,13 +1206,30 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  // ===== Search-bar colour (in settings modal) =====
+  document.querySelectorAll(".search-color-swatch").forEach(swatch => {
+    swatch.addEventListener("click", () => {
+      const c = swatch.dataset.color || "";
+      applySearchAccent(c);
+      const sc = document.getElementById("search-custom-color");
+      if (sc && c) sc.value = c;
+    });
+  });
+  const searchCustomColor = document.getElementById("search-custom-color");
+  if (searchCustomColor) {
+    if (savedSearchAccent) searchCustomColor.value = savedSearchAccent;
+    searchCustomColor.addEventListener("input", () => {
+      applySearchAccent(searchCustomColor.value);
+    });
+  }
+
   // ===== History panel (Settings → Privacy) =====
   (function () {
     const HISTORY_KEY_PANEL = "abbiey_search_history";
     const CLOCK_SVG = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`;
 
     function panelGetHistory() {
-      if (gs("history") !== "true") return [];
+      if (gs("history") !== "true" || gs("incognito") === "true") return [];
       try { return JSON.parse(localStorage.getItem(HISTORY_KEY_PANEL)) || []; } catch { return []; }
     }
     function isLoggedInUi() {
@@ -1051,7 +1237,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     /** Server-first order, then local-only queries (logged-in); else localStorage only. */
     async function panelHistoryQueries() {
-      if (gs("history") !== "true") return [];
+      if (gs("history") !== "true" || gs("incognito") === "true") return [];
       const local = panelGetHistory();
       if (!isLoggedInUi()) return local;
       try {
@@ -1091,7 +1277,9 @@ document.addEventListener("DOMContentLoaded", () => {
       list.innerHTML = `<div class="history-panel-empty">Loading…</div>`;
       const items = await panelHistoryQueries();
       if (!items.length) {
-        list.innerHTML = `<div class="history-panel-empty">No recent searches</div>`;
+        list.innerHTML = gs("incognito") === "true"
+          ? `<div class="history-panel-empty">Incognito is on — new searches are not saved. Turn it off in Settings to build history again.</div>`
+          : `<div class="history-panel-empty">No recent searches</div>`;
         return;
       }
       list.innerHTML = items.map((text, i) =>
@@ -1625,17 +1813,17 @@ document.addEventListener("DOMContentLoaded", () => {
     const MAX_HISTORY = 20;
 
     function getHistory() {
-      if (gs("history") !== "true") return [];
+      if (gs("history") !== "true" || gs("incognito") === "true") return [];
       try { return JSON.parse(localStorage.getItem(HISTORY_KEY)) || []; }
       catch { return []; }
     }
     function saveHistory(items) {
-      if (gs("history") !== "true") { clearStoredSearchHistory(); return; }
+      if (gs("history") !== "true" || gs("incognito") === "true") { clearStoredSearchHistory(); return; }
       try { localStorage.setItem(HISTORY_KEY, JSON.stringify(items)); }
       catch {}
     }
     function addHistory(term) {
-      if (gs("history") === "false") return;
+      if (gs("history") === "false" || gs("incognito") === "true") return;
       const t = term.trim();
       if (!t) return;
       let items = getHistory().filter(i => i !== t);
@@ -1647,7 +1835,7 @@ document.addEventListener("DOMContentLoaded", () => {
     function clearHistory() { clearStoredSearchHistory(true); }
 
     function syncServerUserHistory(q) {
-      if (gs("history") !== "true") return;
+      if (gs("history") !== "true" || gs("incognito") === "true") return;
       if (!document.querySelector(".user-avatar-chip")) return;
       const t = (q || "").trim();
       if (!t) return;
@@ -1672,7 +1860,7 @@ document.addEventListener("DOMContentLoaded", () => {
     function renderSuggestions(items) {
       if (!items.length) { hideDropdown(); return; }
       dropdown.innerHTML = items.map((text, i) =>
-        `<div class="ac-item" data-idx="${i}"><span class="ac-item-icon ac-item-icon-search">${ICON_SEARCH_GLASS_SVG}</span><span class="ac-item-text">${esc(text)}</span></div>`
+        `<div class="ac-item" data-idx="${i}"><span class="ac-item-icon ac-item-icon-search">${ICON_SEARCH_GLASS_SVG}</span><span class="ac-item-text">${esc(text)}</span><button class="ac-dismiss-btn" data-dismiss-idx="${i}" type="button" title="Not relevant" aria-label="Hide suggestion ${esc(text)}">${CLOSE_ICON_SVG}</button></div>`
       ).join("");
       activeIdx = -1;
       showDropdown();
@@ -1699,7 +1887,30 @@ document.addEventListener("DOMContentLoaded", () => {
       if (idx >= 0 && idx < items.length) { items[idx].classList.add("active"); items[idx].scrollIntoView({ block: "nearest" }); }
       activeIdx = idx;
     }
-    function selectItem(text) { input.value = text; hideDropdown(); addHistory(text); form.submit(); }
+    function postSuggestionFeedback(payload) {
+      fetch("/api/feedback/suggestion", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify(payload),
+      }).catch(() => {});
+    }
+    function selectItem(text, meta) {
+      const prefix = meta && meta.prefix ? meta.prefix : input.value.trim();
+      input.value = text;
+      hideDropdown();
+      addHistory(text);
+      if (meta && meta.source === "suggestion") {
+        postSuggestionFeedback({
+          query_prefix: prefix,
+          suggestion: text,
+          action: "select",
+          position: meta.idx || 0,
+          rating: 1,
+        });
+      }
+      form.submit();
+    }
 
     let acController = null;
     function fetchSuggestions(q) {
@@ -1726,11 +1937,17 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!dropdown.classList.contains("open") || !items.length) return;
       if (e.key === "ArrowDown") { e.preventDefault(); setActive(activeIdx < items.length - 1 ? activeIdx + 1 : 0); }
       else if (e.key === "ArrowUp") { e.preventDefault(); setActive(activeIdx > 0 ? activeIdx - 1 : items.length - 1); }
-      else if (e.key === "Enter" && activeIdx >= 0) { e.preventDefault(); selectItem(items[activeIdx].querySelector(".ac-item-text").textContent); }
+      else if (e.key === "Enter" && activeIdx >= 0) {
+        e.preventDefault();
+        const it = items[activeIdx];
+        const text = it.querySelector(".ac-item-text").textContent;
+        const isHistory = it.getAttribute("data-history") === "1";
+        selectItem(text, { idx: activeIdx, source: isHistory ? "history" : "suggestion", prefix: input.value.trim() });
+      }
       else if (e.key === "Escape") hideDropdown();
     });
     dropdown.addEventListener("mousedown", (e) => {
-      if (e.target.closest(".ac-item, .ac-delete-btn, .ac-clear-btn")) {
+      if (e.target.closest(".ac-item, .ac-delete-btn, .ac-clear-btn, .ac-dismiss-btn")) {
         e.preventDefault();
       }
     });
@@ -1745,8 +1962,33 @@ document.addEventListener("DOMContentLoaded", () => {
       }
       const delBtn = e.target.closest(".ac-delete-btn");
       if (delBtn) { e.preventDefault(); e.stopPropagation(); const idx = parseInt(delBtn.getAttribute("data-del-idx")); const items = getHistory(); if (idx >= 0 && idx < items.length) removeHistory(items[idx]); renderHistory(); return; }
+      const dismissBtn = e.target.closest(".ac-dismiss-btn");
+      if (dismissBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        const item = dismissBtn.closest(".ac-item");
+        const idx = parseInt(dismissBtn.getAttribute("data-dismiss-idx") || "0");
+        const text = item ? item.querySelector(".ac-item-text").textContent : "";
+        if (text) {
+          postSuggestionFeedback({
+            query_prefix: input.value.trim(),
+            suggestion: text,
+            action: "dismiss",
+            position: idx,
+            rating: -1,
+          });
+        }
+        if (item) item.remove();
+        if (!getItems().length) hideDropdown();
+        return;
+      }
       const item = e.target.closest(".ac-item");
-      if (item) { e.preventDefault(); selectItem(item.querySelector(".ac-item-text").textContent); }
+      if (item) {
+        e.preventDefault();
+        const idx = parseInt(item.getAttribute("data-idx") || "0");
+        const isHistory = item.getAttribute("data-history") === "1";
+        selectItem(item.querySelector(".ac-item-text").textContent, { idx, source: isHistory ? "history" : "suggestion", prefix: input.value.trim() });
+      }
     });
 
     // '/' keyboard shortcut to focus search (when not already in an input)
@@ -1821,6 +2063,26 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     }
 
+    // Deep web mode toggles
+    const onionScopeBar = document.getElementById("onion-scope-bar");
+    const onionModeInput = document.getElementById("onion-mode-input");
+    if (onionScopeBar && onionModeInput && filterForm) {
+      const modeBtns = onionScopeBar.querySelectorAll(".onion-scope-btn");
+      onionScopeBar.addEventListener("click", (e) => {
+        const btn = e.target.closest(".onion-scope-btn");
+        if (!btn || !onionScopeBar.contains(btn)) return;
+        const mode = (btn.dataset.onionMode || "").trim();
+        if (!mode || mode === onionModeInput.value) return;
+        onionModeInput.value = mode;
+        modeBtns.forEach((b) => {
+          const active = b === btn;
+          b.classList.toggle("active", active);
+          b.setAttribute("aria-pressed", active ? "true" : "false");
+        });
+        applyFilter();
+      });
+    }
+
     // Site filter
     const siteInput = document.getElementById("filter-site");
     if (siteInput) {
@@ -1885,12 +2147,21 @@ document.addEventListener("DOMContentLoaded", () => {
     const langVal = document.getElementById("lang-input")?.value || "";
     const dfVal = document.getElementById("df-input")?.value || "";
     let scrollUrl = `/search?q=${encodeURIComponent(query)}&page=${page}&type=${type}`;
+    if (type === "mybot" && sentinel.dataset.botId) {
+      scrollUrl += `&bot_id=${encodeURIComponent(sentinel.dataset.botId)}`;
+    }
     if (regionVal) scrollUrl += `&region=${encodeURIComponent(regionVal)}`;
     if (langVal) scrollUrl += `&lang=${encodeURIComponent(langVal)}`;
     if (dfVal) scrollUrl += `&df=${encodeURIComponent(dfVal)}`;
     if (sentinel.dataset.cleanweb === "1") scrollUrl += "&cleanweb=1";
     const imgExtra = sentinel.dataset.imgExtra;
     if (type === "images" && imgExtra) scrollUrl += `&${imgExtra}`;
+    if (type === "images" && sentinel.dataset.imgRevKey) {
+      scrollUrl += `&img_rev_key=${encodeURIComponent(sentinel.dataset.imgRevKey)}`;
+    }
+    if (type === "onion" && sentinel.dataset.onionMode) {
+      scrollUrl += `&onion_mode=${encodeURIComponent(sentinel.dataset.onionMode)}`;
+    }
     let geoSuf = geoQuerySuffix();
     if (!geoSuf && sentinel.dataset.lat && sentinel.dataset.lon) {
       geoSuf = `&lat=${encodeURIComponent(sentinel.dataset.lat)}&lon=${encodeURIComponent(sentinel.dataset.lon)}`;
@@ -1908,6 +2179,7 @@ document.addEventListener("DOMContentLoaded", () => {
           const el = document.createElement(type === "images" ? "div" : "article");
           el.style.animationDelay = `${delay}ms`;
           el.dataset.url = r.url || "";
+          if (type !== "images") el.dataset.rank = String(idx);
 
           if (type === "images") {
             el.className = "image-card";
@@ -1916,21 +2188,26 @@ document.addEventListener("DOMContentLoaded", () => {
             el.dataset.source = r.source || "";
             el.dataset.license = r.license || "";
             const lic = r.license ? `<span class="image-license" title="License">${esc(r.license)}</span>` : "";
-            el.innerHTML = `<img src="${esc(r.thumbnail || r.image)}" alt="${esc(r.title)}" loading="lazy"><div class="image-card-info"><span class="image-title">${esc(r.title)}</span>${r.source ? `<span class="image-source">${esc(r.source)}</span>` : ""}${lic}</div>`;
+            const desc = r.body ? `<p class="image-result-desc">${esc(r.body)}</p>` : "";
+            el.innerHTML = `<img src="${esc(r.thumbnail || r.image)}" alt="${esc(r.title)}" loading="lazy"><div class="image-card-info"><span class="image-title">${esc(r.title)}</span>${r.source ? `<span class="image-source">${esc(r.source)}</span>` : ""}${desc}${lic}</div>`;
           } else if (type === "videos") {
             el.className = "result video-result";
-            el.innerHTML = `${r.thumbnail ? `<a href="${esc(r.url)}" target="_blank" rel="noopener" class="video-thumb"><img src="${esc(r.thumbnail)}" alt="${esc(r.title)}" loading="lazy">${r.duration ? `<span class="duration">${esc(r.duration)}</span>` : ""}</a>` : ""}<div class="result-text"><a href="${esc(r.url)}" target="_blank" rel="noopener" class="result-title">${esc(r.title)}</a>${faviconImg(r.url)}<cite class="result-url">${esc(r.publisher || "")}</cite><p class="result-snippet">${esc(r.description || "")}</p></div>`;
+            el.innerHTML = `${r.thumbnail ? `<a href="${esc(r.url)}" target="_blank" rel="noopener" class="video-thumb"><img src="${esc(r.thumbnail)}" alt="${esc(r.title)}" loading="lazy">${r.duration ? `<span class="duration">${esc(r.duration)}</span>` : ""}</a>` : ""}<div class="result-text"><a href="${esc(r.url)}" target="_blank" rel="noopener" class="result-title">${esc(r.title)}</a>${faviconImg(r.url)}<cite class="result-url">${esc(r.publisher || "")}</cite><p class="result-snippet">${esc(r.description || "")}</p><div class="result-actions" data-feedback="1"><button type="button" class="result-action-btn feedback-btn" data-rating="up">Helpful</button><button type="button" class="result-action-btn feedback-btn" data-rating="down">Not relevant</button></div></div>`;
           } else if (type === "onion") {
             el.className = "result onion-result";
             const isOnion = r.onion || (r.url && /\.onion(\/|$)/i.test(r.url));
-            el.innerHTML = `<div class="onion-result-header"><a href="${esc(r.url)}" target="_blank" rel="noopener" class="result-title">${esc(r.title)}</a>${isOnion ? '<span class="onion-badge">.onion</span>' : ""}</div><cite class="result-url">${esc(r.url)}</cite><p class="result-snippet">${esc(r.body || "")}</p>`;
+            const sourceLabel = r.source_label ? `<span class="onion-source-badge">${esc(r.source_label)}</span>` : "";
+            const accessLabel = r.access === "clearnet"
+              ? '<span class="onion-access-badge onion-access-badge-clearnet">Clearnet reference</span>'
+              : '<span class="onion-access-badge">Tor</span>';
+            el.innerHTML = `<div class="onion-result-header"><a href="${esc(r.url)}" target="_blank" rel="noopener" class="result-title">${esc(r.title)}</a>${isOnion ? '<span class="onion-badge">.onion</span>' : ""}${sourceLabel}</div><cite class="result-url">${esc(r.url)}</cite><p class="result-snippet">${esc(r.body || "")}</p><div class="onion-meta-row">${accessLabel}${r.source ? `<span class="onion-meta-source">${esc(String(r.source).replace(/-/g, " "))}</span>` : ""}</div><div class="result-actions" data-feedback="1"><button type="button" class="result-action-btn feedback-btn" data-rating="up">Helpful</button><button type="button" class="result-action-btn feedback-btn" data-rating="down">Not relevant</button></div>`;
           } else if (type === "code") {
             el.className = "result code-result";
-            el.innerHTML = `<div class="code-result-header"><a href="${esc(r.url)}" target="_blank" rel="noopener" class="result-title">${esc(r.title)}</a>${r.language ? `<span class="code-lang-badge">${esc(r.language)}</span>` : ""}<span class="code-source-badge">${esc(r.source || "")}</span></div>${faviconImg(r.url)}<cite class="result-url">${esc(r.url)}</cite><p class="result-snippet">${esc(r.body || "")}</p><div class="code-meta">${r.stars ? `<span class="code-stat">&#9733; ${esc(r.stars)}</span>` : ""}${r.forks ? `<span class="code-stat">&#9906; ${esc(r.forks)}</span>` : ""}</div>`;
+            el.innerHTML = `<div class="code-result-header"><a href="${esc(r.url)}" target="_blank" rel="noopener" class="result-title">${esc(r.title)}</a>${r.language ? `<span class="code-lang-badge">${esc(r.language)}</span>` : ""}<span class="code-source-badge">${esc(r.source || "")}</span></div>${faviconImg(r.url)}<cite class="result-url">${esc(r.url)}</cite><p class="result-snippet">${esc(r.body || "")}</p><div class="code-meta">${r.stars ? `<span class="code-stat">&#9733; ${esc(r.stars)}</span>` : ""}${r.forks ? `<span class="code-stat">&#9906; ${esc(r.forks)}</span>` : ""}</div><div class="result-actions" data-feedback="1"><button type="button" class="result-action-btn feedback-btn" data-rating="up">Helpful</button><button type="button" class="result-action-btn feedback-btn" data-rating="down">Not relevant</button></div>`;
           } else {
             el.className = "result";
             el.setAttribute("data-source-type", r.source_type || "");
-            el.innerHTML = `<button class="bookmark-btn" data-url="${esc(r.url)}" data-title="${esc(r.title)}" data-snippet="${esc(r.body || "")}" aria-label="Save result" title="Save"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg></button>${resultDomainRow(r.url, r.source_type, r.source)}<a href="${esc(r.url)}" target="_blank" rel="noopener" class="result-title">${esc(r.title)}</a><p class="result-snippet">${esc(r.body || "")}</p>${r.date ? `<time class="result-date">${esc(r.date)}</time>` : ""}`;
+            el.innerHTML = `<button class="bookmark-btn" data-url="${esc(r.url)}" data-title="${esc(r.title)}" data-snippet="${esc(r.body || "")}" aria-label="Save result" title="Save"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg></button>${resultDomainRow(r.url, r.source_type, r.source)}<a href="${esc(r.url)}" target="_blank" rel="noopener" class="result-title">${esc(r.title)}</a><p class="result-snippet">${esc(r.body || "")}</p>${r.date ? `<time class="result-date">${esc(r.date)}</time>` : ""}<div class="result-actions" data-feedback="1"><button type="button" class="result-action-btn feedback-btn" data-rating="up">Helpful</button><button type="button" class="result-action-btn feedback-btn" data-rating="down">Not relevant</button></div>`;
           }
           frag.appendChild(el);
         });
@@ -2210,6 +2487,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const _previewSite = document.getElementById("preview-site");
   const _previewDesc = document.getElementById("preview-desc");
   const _previewExcerpt = document.getElementById("preview-excerpt");
+  const _previewSnapshot = document.getElementById("preview-snapshot");
   const _previewLink = document.getElementById("preview-link");
 
   if (previewPanel && previewClose) {
@@ -2418,6 +2696,10 @@ document.addEventListener("DOMContentLoaded", () => {
               _previewExcerpt.textContent = "";
               _previewSite.textContent = "";
               _previewImg.style.display = "none";
+              if (_previewSnapshot) {
+                _previewSnapshot.removeAttribute("srcdoc");
+                _previewSnapshot.style.display = "none";
+              }
               _previewLink.href = u;
               schedulePreviewFocusFromKeyboard();
             });
@@ -2446,6 +2728,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
         if (hasImage) { _previewImg.src = data.image; _previewImg.style.display = "block"; }
         else { _previewImg.style.display = "none"; _previewImg.src = ""; }
+
+        if (_previewSnapshot) {
+          if (data.snapshot_html) {
+            _previewSnapshot.srcdoc = data.snapshot_html;
+            _previewSnapshot.style.display = "block";
+          } else {
+            _previewSnapshot.removeAttribute("srcdoc");
+            _previewSnapshot.style.display = "none";
+          }
+        }
 
         _previewTitle.textContent = data.title || "";
         _previewSite.textContent = siteName;
@@ -3144,6 +3436,43 @@ document.addEventListener("DOMContentLoaded", () => {
     syncBookmarksWithServer({ silent: true }).catch(() => {});
   }
 
+  (function initResultFeedback() {
+    const container = document.getElementById("results");
+    const q = window.__searchQuery;
+    const st = window.__searchType || "text";
+    if (!container || !q || st === "images" || st === "saved") return;
+    container.addEventListener("click", (e) => {
+      const btn = e.target.closest(".feedback-btn");
+      if (!btn) return;
+      const article = btn.closest("[data-url]");
+      if (!article) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const url = article.dataset.url || "";
+      const title = (article.querySelector(".result-title")?.textContent || "").trim();
+      const rank = parseInt(article.dataset.rank || "0", 10) || 0;
+      const rating = btn.dataset.rating === "up" ? 1 : -1;
+      fetch("/api/feedback/result", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          query: q,
+          search_type: st,
+          url,
+          title,
+          rank,
+          rating,
+        }),
+      }).catch(() => {});
+      const wrap = btn.closest(".result-actions");
+      if (wrap) {
+        wrap.querySelectorAll(".feedback-btn").forEach(b => { b.disabled = true; });
+      }
+      btn.textContent = "Thanks";
+    });
+  })();
+
   // ===== Related Searches =====
   const relatedContainer = document.getElementById("related-searches");
   const searchQuery = window.__searchQuery;
@@ -3159,6 +3488,59 @@ document.addEventListener("DOMContentLoaded", () => {
       })
       .catch(() => {});
   }
+
+  // ===== Knowledge graph (Wikipedia + Wikidata + categories; client-rendered) =====
+  (function initKnowledgeGraph() {
+    const root = document.getElementById("knowledge-graph-root");
+    const q = window.__searchQuery;
+    if (!root || !q || window.__searchType !== "text") return;
+    if (gs("showCards") === "false") return;
+    fetch(`/api/knowledge-graph?q=${encodeURIComponent(q)}`)
+      .then(r => r.json())
+      .then(data => {
+        if (!data || typeof data !== "object") return;
+        const topics = Array.isArray(data.topics) ? data.topics : [];
+        const cats = Array.isArray(data.categories) ? data.categories : [];
+        const wiki = data.wikipedia;
+        const hasPanel = document.querySelector(".knowledge-panel");
+        const showWikiMini = !hasPanel && wiki && wiki.extract;
+        if (!topics.length && !cats.length && !showWikiMini) return;
+        let html = `<article class="knowledge-graph-card" aria-label="Knowledge graph">`;
+        html += `<div class="kg-header"><span class="kg-title">Knowledge graph</span><span class="kg-sub">Topics and categories from public knowledge bases — not a custom crawl.</span></div>`;
+        if (showWikiMini) {
+          const ex = String(wiki.extract);
+          const short = ex.length > 560 ? `${ex.slice(0, 560)}…` : ex;
+          html += `<div class="kg-wiki-mini">`;
+          if (wiki.image_url) {
+            html += `<img src="${esc(wiki.image_url)}" alt="" class="kg-wiki-thumb" loading="lazy"/>`;
+          }
+          html += `<div class="kg-wiki-mini-text"><h3 class="kg-wiki-title">${esc(wiki.title)}</h3>`;
+          html += `<p class="kg-wiki-extract">${esc(short)}</p>`;
+          if (wiki.page_url) {
+            html += `<a class="kg-wiki-more" href="${esc(wiki.page_url)}" target="_blank" rel="noopener">Read on Wikipedia →</a>`;
+          }
+          html += `</div></div>`;
+        }
+        if (topics.length) {
+          html += `<div class="kg-block"><span class="kg-block-label">Related topics</span><div class="kg-pills">`;
+          topics.forEach(t => {
+            html += `<a class="kg-pill" href="/search?q=${encodeURIComponent(t)}&type=text">${esc(t)}</a>`;
+          });
+          html += `</div></div>`;
+        }
+        if (cats.length) {
+          html += `<div class="kg-block"><span class="kg-block-label">Wikipedia categories</span><div class="kg-pills kg-pills-muted">`;
+          cats.forEach(c => {
+            html += `<a class="kg-pill" href="/search?q=${encodeURIComponent(c)}&type=text">${esc(c)}</a>`;
+          });
+          html += `</div></div>`;
+        }
+        html += `</article>`;
+        root.innerHTML = html;
+        root.hidden = false;
+      })
+      .catch(() => {});
+  })();
 
   // ===== Trending Searches =====
   (function initTrending() {
@@ -3244,9 +3626,14 @@ document.addEventListener("DOMContentLoaded", () => {
     const stopIcon = voiceBtn.querySelector(".voice-icon-stop");
     const input    = document.getElementById("search-input");
     let listening  = false;
+    /** Committed finals for this mic session (see result handler). */
+    let voiceFinalAccum = "";
+
+    if (!input) return;
 
     function startListening() {
       listening = true;
+      voiceFinalAccum = "";
       voiceBtn.classList.add("listening");
       micIcon.style.display  = "none";
       stopIcon.style.display = "";
@@ -3269,14 +3656,31 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     recognition.addEventListener("result", (e) => {
-      const transcript = Array.from(e.results)
-        .map(r => r[0].transcript)
-        .join("");
+      // Build transcript like MDN: only new slices (resultIndex), keep finals across
+      // events, and recompute interim each fire so refinements do not duplicate text.
+      // Joining every result with "" used to glue words ("hello" + "world" → "helloworld").
+      let interimTranscript = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const res = e.results[i];
+        const piece = res[0] ? res[0].transcript : "";
+        if (res.isFinal) {
+          const needsSpace =
+            voiceFinalAccum &&
+            piece &&
+            !/\s$/.test(voiceFinalAccum) &&
+            !/^\s/.test(piece);
+          voiceFinalAccum += (needsSpace ? " " : "") + piece;
+        } else {
+          interimTranscript += piece;
+        }
+      }
+      const transcript = (voiceFinalAccum + interimTranscript).replace(/\s{2,}/g, " ");
       input.value = transcript;
-      // Auto-submit on final result
-      if (e.results[e.results.length - 1].isFinal) {
+      const last = e.results[e.results.length - 1];
+      if (last && last.isFinal) {
         stopListening();
-        if (transcript.trim()) document.getElementById("search-form").submit();
+        const form = document.getElementById("search-form");
+        if (transcript.trim() && form) form.submit();
       }
     });
 
@@ -3343,6 +3747,157 @@ document.addEventListener("DOMContentLoaded", () => {
       filterInput.value = "";
       applyFilter("");
       filterInput.focus();
+    });
+  })();
+
+  // ===== Home: Web / Images / News / Videos before first query =====
+  (function initReverseImageSearch() {
+    const btn = document.getElementById("reverse-image-btn");
+    const panel = document.getElementById("reverse-image-panel");
+    const urlEntryBtn = document.getElementById("reverse-image-url-entry");
+    const pickBtn = document.getElementById("reverse-image-pick-btn");
+    const closeBtn = document.getElementById("reverse-image-close");
+    const submitBtn = document.getElementById("reverse-image-submit");
+    const urlInput = document.getElementById("reverse-image-url");
+    const fileInput = document.getElementById("reverse-image-file");
+    const capInput = document.getElementById("reverse-image-caption");
+    const fileHint = document.getElementById("reverse-image-file-hint");
+    if (!btn || !panel || !fileInput) return;
+
+    let busy = false;
+
+    function openImageFilePicker() {
+      fileInput.value = "";
+      if (fileHint) fileHint.textContent = "";
+      if (typeof fileInput.showPicker === "function") {
+        fileInput.showPicker().catch(() => {
+          fileInput.click();
+        });
+      } else {
+        fileInput.click();
+      }
+    }
+
+    function setOpen(open) {
+      panel.hidden = !open;
+      urlEntryBtn?.setAttribute("aria-expanded", open ? "true" : "false");
+      if (open) {
+        requestAnimationFrame(() => {
+          urlInput?.focus();
+        });
+      }
+    }
+
+    function setBusy(on) {
+      busy = on;
+      btn.disabled = on;
+      submitBtn && (submitBtn.disabled = on);
+      pickBtn && (pickBtn.disabled = on);
+      btn.setAttribute("aria-busy", on ? "true" : "false");
+    }
+
+    async function runReverseImageSubmit() {
+      if (busy) return;
+      const cap = (capInput?.value || "").trim();
+      const file = fileInput.files && fileInput.files[0];
+      const url = (urlInput?.value || "").trim();
+      if (!file && !url) {
+        window.alert("Add an HTTPS image link or choose a photo from your device.");
+        return;
+      }
+      if (fileHint) fileHint.textContent = file ? "Searching…" : "";
+      setBusy(true);
+      try {
+        let resp;
+        if (file) {
+          const fd = new FormData();
+          fd.append("image", file);
+          if (cap) fd.append("caption", cap);
+          resp = await fetch("/api/reverse-image", { method: "POST", body: fd });
+        } else {
+          resp = await fetch("/api/reverse-image", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ image_url: url, caption: cap || undefined }),
+          });
+        }
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok || !data.ok) {
+          window.alert(data.message || data.error || "Could not look up that image.");
+          fileInput.value = "";
+          if (fileHint) fileHint.textContent = "";
+          return;
+        }
+        if (data.redirect) window.location.href = data.redirect;
+      } finally {
+        setBusy(false);
+        if (fileHint && fileHint.textContent === "Searching…") fileHint.textContent = "";
+      }
+    }
+
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (busy) return;
+      openImageFilePicker();
+    });
+
+    pickBtn?.addEventListener("click", () => {
+      if (busy) return;
+      openImageFilePicker();
+    });
+
+    urlEntryBtn?.addEventListener("click", () => {
+      if (busy) return;
+      setOpen(panel.hidden);
+    });
+
+    closeBtn?.addEventListener("click", () => {
+      setOpen(false);
+      urlEntryBtn?.focus();
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !panel.hidden) {
+        setOpen(false);
+        urlEntryBtn?.focus();
+      }
+    });
+
+    fileInput.addEventListener("change", () => {
+      const f = fileInput.files && fileInput.files[0];
+      if (!f) return;
+      if (fileHint) fileHint.textContent = f.name || "Selected";
+      runReverseImageSubmit();
+    });
+
+    submitBtn?.addEventListener("click", () => runReverseImageSubmit());
+  })();
+
+  (function initHomeSearchModes() {
+    const row = document.querySelector(".home-search-modes-row");
+    const typeInput = document.getElementById("search-type-input");
+    if (!row || !typeInput) return;
+
+    function syncPressed(activeBtn) {
+      row.querySelectorAll(".home-mode-btn").forEach((b) => {
+        const on = b === activeBtn;
+        b.classList.toggle("active", on);
+        b.setAttribute("aria-pressed", on ? "true" : "false");
+      });
+    }
+
+    const initial = (typeInput.value || "text").trim() || "text";
+    const match = row.querySelector(`.home-mode-btn[data-search-mode="${initial}"]`);
+    if (match) syncPressed(match);
+
+    row.addEventListener("click", (e) => {
+      const btn = e.target.closest(".home-mode-btn");
+      if (!btn || !row.contains(btn)) return;
+      const mode = (btn.dataset.searchMode || "").trim();
+      if (!mode) return;
+      typeInput.value = mode;
+      syncPressed(btn);
     });
   })();
 

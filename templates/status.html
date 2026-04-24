@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}Service status · abbieysearch{% endblock %}
+{% block meta_description %}Live abbieysearch service status — check uptime and health for search, AI summaries, OSINT, and deep web features.{% endblock %}
+{% block og_title %}Service status · abbieysearch{% endblock %}
+{% block og_description %}Live status of all abbieysearch features: search, AI, OSINT, deep web.{% endblock %}
+{% block tw_title %}Service status · abbieysearch{% endblock %}
+{% block tw_description %}Live status of all abbieysearch features: search, AI, OSINT, deep web.{% endblock %}
+{% block content %}
+<main class="legal-page" style="max-width:820px;margin:0 auto;padding:2.5rem 1.25rem 4rem;line-height:1.6">
+    <h1 style="font-size:1.7rem;margin:0 0 .5rem">Service status</h1>
+    <p style="opacity:.8;margin:0 0 1.5rem">
+        Live health of every user-facing feature. Auto-refreshes every 30 seconds.
+    </p>
+
+    <style nonce="{{ csp_nonce }}">
+        .status-grid {
+            display: grid;
+            grid-template-columns: 1fr auto auto;
+            gap: .5rem 1rem;
+            align-items: center;
+            border: 1px solid var(--border, rgba(255,255,255,.12));
+            border-radius: 12px;
+            padding: 1rem 1.25rem;
+        }
+        .status-grid > .status-head {
+            font-size: .78rem;
+            text-transform: uppercase;
+            letter-spacing: .07em;
+            opacity: .55;
+            padding-bottom: .45rem;
+            border-bottom: 1px solid var(--border, rgba(255,255,255,.08));
+        }
+        .status-grid .status-name { font-weight: 600; }
+        .status-grid .status-detail { opacity: .65; font-size: .85rem; grid-column: 1 / -1; margin-top: -.2rem; margin-bottom: .6rem; }
+        .status-pill {
+            display: inline-block;
+            font-size: .78rem;
+            font-weight: 600;
+            padding: .25rem .65rem;
+            border-radius: 999px;
+            text-transform: uppercase;
+            letter-spacing: .05em;
+        }
+        .status-pill.ok { background: rgba(34,197,94,.18); color: #86efac; }
+        .status-pill.degraded { background: rgba(234,179,8,.18); color: #fde047; }
+        .status-pill.down { background: rgba(239,68,68,.18); color: #fca5a5; }
+        .status-pill.unknown { background: rgba(148,163,184,.18); color: #e2e8f0; }
+        .status-meta { font-size: .82rem; opacity: .6; margin-top: 1.25rem; }
+    </style>
+
+    <div class="status-grid" id="status-grid" aria-live="polite">
+        <span class="status-head">Feature</span>
+        <span class="status-head">Status</span>
+        <span class="status-head">Last checked</span>
+        <div class="status-detail" id="status-loading">Loading live status…</div>
+    </div>
+
+    <p class="status-meta" id="status-meta">
+        Data region: <strong>{{ data_region_label }}</strong>.
+        For historical uptime and incident notes see
+        <a href="/changelog">the changelog</a>.
+    </p>
+
+    <script nonce="{{ csp_nonce }}">
+    (function () {
+        'use strict';
+        var grid = document.getElementById('status-grid');
+        var loading = document.getElementById('status-loading');
+        var order = ['search', 'image_upload', 'chatbots', 'bots', 'deep_web', 'api_v1', 'stripe_webhook', 'users_db', 'analytics_db'];
+        var labels = {
+            search: 'Web search',
+            image_upload: 'Image upload + reverse lookup',
+            chatbots: 'AI chatbots',
+            bots: 'Custom crawl bots',
+            deep_web: 'Onion / Tor search',
+            api_v1: 'Public /api/v1',
+            stripe_webhook: 'Stripe webhook',
+            users_db: 'User database',
+            analytics_db: 'Analytics database'
+        };
+        function render(health) {
+            loading && loading.remove();
+            while (grid.children.length > 3) grid.removeChild(grid.lastChild);
+            var features = (health && health.features) || {};
+            // Map legacy top-level keys into features if not present.
+            ['users_db', 'analytics_db'].forEach(function (k) {
+                if (!(k in features) && k in health) {
+                    features[k] = (health[k] === 'ok') ? { state: 'ok' } : { state: 'down', reason: String(health[k]) };
+                }
+            });
+            order.forEach(function (key) {
+                var entry = features[key];
+                if (!entry) entry = { state: 'unknown', reason: 'not reported' };
+                var state = (entry.state || 'unknown').toLowerCase();
+                var name = document.createElement('span');
+                name.className = 'status-name';
+                name.textContent = labels[key] || key;
+                var pill = document.createElement('span');
+                pill.className = 'status-pill ' + state;
+                pill.textContent = state;
+                var seen = document.createElement('span');
+                seen.style.opacity = '.55';
+                seen.style.fontSize = '.8rem';
+                seen.textContent = health.server_time ? new Date(health.server_time).toLocaleTimeString() : '';
+                grid.appendChild(name); grid.appendChild(pill); grid.appendChild(seen);
+                if (entry.reason) {
+                    var reason = document.createElement('div');
+                    reason.className = 'status-detail';
+                    reason.textContent = entry.reason;
+                    grid.appendChild(reason);
+                }
+            });
+        }
+        function poll() {
+            fetch('/health', { cache: 'no-store' })
+                .then(function (r) { return r.json(); })
+                .then(render)
+                .catch(function () {
+                    loading && (loading.textContent = 'Could not reach /health.');
+                });
+        }
+        poll();
+        setInterval(poll, 30000);
+    })();
+    </script>
+</main>
+{% endblock %}

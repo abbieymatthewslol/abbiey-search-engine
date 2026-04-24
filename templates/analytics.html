@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="deploy-hash" content="{{ deploy_hash }}">
-    {% include 'includes/google_analytics.html' %}
     <!-- Vercel Speed Insights -->
     <script nonce="{{ csp_nonce }}">
         window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
@@ -76,6 +75,7 @@
     </style>
 </head>
 <body>
+    {% include 'includes/google_analytics.html' %}
     <a href="/search" class="back-link">&larr; Back to search</a>
     <h1 style="margin-top:.75rem">Search Analytics</h1>
     <p class="page-sub">abbiey.search — admin dashboard</p>

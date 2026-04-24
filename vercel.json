@@ -1,5 +1,6 @@
 {
   "version": 2,
+  "ignoreCommand": "if [ \"${VERCEL_GIT_COMMIT_REF:-}\" = \"main\" ]; then echo \"[vercel] skip: production deploys from GitHub Actions (see .github/workflows/deploy.yml)\"; exit 0; fi; exit 1",
   "builds": [
     {
       "src": "api/index.py",
@@ -9,13 +10,41 @@
         "includeFiles": [
           "templates/**",
           "static/**",
+          "engine/**",
+          "osint/**",
           "retrieval/**",
+          "api_v1.py",
+          "billing.py",
+          "bot_crawler.py",
+          "digital_pet.py",
           "entity_parser.py",
           "query_understanding.py",
-          "digital_pet.py",
+          "reverse_image.py",
+          "reverse_image_storage.py",
+          "search_bots.py",
+          "search_protocol.py",
+          "startup_checks.py",
           "app.py"
         ]
       }
+    }
+  ],
+  "functions": {
+    "api/index.py": {
+      "maxDuration": 60
+    }
+  },
+  "redirects": [
+    {
+      "source": "/(.*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "www.abbieysearch.com"
+        }
+      ],
+      "destination": "https://abbieysearch.com/$1",
+      "permanent": true
     }
   ],
   "routes": [

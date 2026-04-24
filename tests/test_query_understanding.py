@@ -11,6 +11,7 @@ from query_understanding import (
     place_category_matches,
     preprocess_query,
     query_ui_hints,
+    refine_query_for_search,
     resolve_location_for_search,
     should_enable_ai_summary,
     detect_query_clarification,
@@ -99,8 +100,22 @@ def test_build_backend_query_closest_op_shop():
     prep = preprocess_query("closest op shop")
     loc = resolve_location_for_search(prep, None, None, None)
     q = build_backend_search_query("closest op shop", prep, loc)
-    assert "near me" in q.lower() and "sorted by distance" in q.lower()
-    assert "thrift" in q.lower()
+    assert "near me" in q.lower() and "thrift" in q.lower()
+    assert "sorted by distance" not in q.lower()
+
+
+def test_build_backend_how_to_pattern():
+    prep = preprocess_query("how do I reset network settings")
+    assert prep.pattern is not None and prep.pattern.kind == "how_to"
+    loc = resolve_location_for_search(prep, None, None, None)
+    q = build_backend_search_query("how do I reset network settings", prep, loc)
+    assert "guide" in q.lower() or "tutorial" in q.lower()
+
+
+def test_refine_query_fixes_common_typo():
+    refined, notes = refine_query_for_search("teh best python tutorial")
+    assert "the" in refined.lower()
+    assert notes
 
 
 def test_ai_summary_disabled_for_closest_pizza():
@@ -120,6 +135,7 @@ def test_query_ui_hints_local():
     assert ui["show_ai_summary"] is False
     assert ui.get("clarify") is None
     assert ui.get("answer_mode") == "standard"
+    assert ui.get("understanding", {}).get("line")
 
 
 def test_clarify_polysemous_python():

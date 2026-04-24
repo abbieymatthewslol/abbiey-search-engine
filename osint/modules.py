@@ -15,9 +15,8 @@ from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import quote
 
-import httpx
-from cryptography import x509
-from cryptography.hazmat.backends import default_backend
+import httpx  # pyright: ignore[reportMissingImports]
+from cryptography import x509  # pyright: ignore[reportMissingImports]
 
 from osint.schema import fact
 
@@ -102,7 +101,16 @@ def dns_facts(hostname: str, client: httpx.Client) -> list[dict[str, Any]]:
             raw = ans.get("data")
             if raw is None:
                 continue
-            key = type_map.get(int(t) if isinstance(t, int) else -1)
+            ti: int | None
+            if isinstance(t, int):
+                ti = t
+            elif isinstance(t, str) and t.strip().isdigit():
+                ti = int(t.strip())
+            else:
+                ti = None
+            if ti is None:
+                continue
+            key = type_map.get(ti)
             if not key:
                 continue
             val = str(raw).strip().strip('"')
@@ -172,7 +180,7 @@ def rdap_domain_facts(hostname: str, client: httpx.Client) -> list[dict[str, Any
     ts = _now_iso()
     url = _RDAP_DOMAIN + quote(host, safe=".")
     try:
-        r = client.get(url, headers={"User-Agent": _UA, "Accept": "application/rdap+json"}, timeout=12.0)
+        r = client.get(url, headers={"User-Agent": _UA, "Accept": "application/rdap+json"}, timeout=10.0)
         if r.status_code != 200:
             return []
         data = r.json()
@@ -231,7 +239,7 @@ def rdap_ip_facts(ip: str, client: httpx.Client) -> list[dict[str, Any]]:
     ts = _now_iso()
     url = _RDAP_IP + quote(addr, safe=":")
     try:
-        r = client.get(url, headers={"User-Agent": _UA, "Accept": "application/rdap+json"}, timeout=12.0)
+        r = client.get(url, headers={"User-Agent": _UA, "Accept": "application/rdap+json"}, timeout=10.0)
         if r.status_code != 200:
             return []
         data = r.json()
@@ -271,7 +279,13 @@ def rdap_ip_facts(ip: str, client: httpx.Client) -> list[dict[str, Any]]:
     for ent in ents:
         if not isinstance(ent, dict):
             continue
-        roles = ent.get("roles") or []
+        raw_roles = ent.get("roles") or []
+        if isinstance(raw_roles, list):
+            roles = raw_roles
+        elif isinstance(raw_roles, tuple):
+            roles = list(raw_roles)
+        else:
+            roles = []
         if "abuse" not in roles:
             continue
         vcard = ent.get("vcardArray")
@@ -311,7 +325,7 @@ def tls_cert_facts(hostname: str, *, port: int = 443, timeout: float = 8.0) -> l
         logger.debug("tls_get_cert_failed host=%s port=%s", host, p, exc_info=True)
         return []
     try:
-        cert = x509.load_pem_x509_certificate(pem.encode("ascii", errors="replace"), default_backend())
+        cert = x509.load_pem_x509_certificate(pem.encode("ascii", errors="replace"))
     except Exception:
         logger.debug("tls_parse_failed host=%s", host, exc_info=True)
         return []

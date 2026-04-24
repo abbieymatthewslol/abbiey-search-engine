@@ -4,4 +4,4 @@ Get-Content .env | ForEach-Object {
     }
 }
 
-python verify_db.py
+python scripts/verify_supabase_connection.py
