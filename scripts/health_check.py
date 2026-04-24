@@ -323,10 +323,20 @@ VERCEL_TEAM_ID = "team_YeguIG4NHm4Kp0Jf5AbOwgFN"
 vercel_token = env.get("VERCEL_TOKEN", "")
 if not vercel_token:
     auth_path = Path(os.environ.get("APPDATA", "")) / "com.vercel.cli" / "Data" / "auth.json"
-    if auth_path.exists():
+    auth_path_exists = False
+    try:
+        auth_path_exists = auth_path.exists()
+    except PermissionError:
+        warn(f"Cannot access Vercel auth file ({auth_path}) — set VERCEL_TOKEN for deployment checks")
+    except OSError as exc:
+        warn(f"Could not inspect Vercel auth file ({auth_path}): {exc}")
+
+    if auth_path_exists:
         try:
             auth_data = json.loads(auth_path.read_text())
             vercel_token = auth_data.get("token", "")
+        except PermissionError:
+            warn(f"Cannot read Vercel auth file ({auth_path}) — set VERCEL_TOKEN for deployment checks")
         except Exception:
             pass
 

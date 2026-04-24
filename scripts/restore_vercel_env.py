@@ -142,9 +142,19 @@ print(f"  Pushing {len(to_push)} non-placeholder variables")
 vercel_token = os.environ.get("VERCEL_TOKEN", "")
 if not vercel_token:
     auth_path = Path(os.environ.get("APPDATA", "")) / "com.vercel.cli" / "Data" / "auth.json"
-    if auth_path.exists():
+    auth_path_exists = False
+    try:
+        auth_path_exists = auth_path.exists()
+    except PermissionError:
+        print(f"  {YELLOW}Warning: access denied reading {auth_path}; set VERCEL_TOKEN instead{RESET}")
+    except OSError as exc:
+        print(f"  {YELLOW}Warning: could not inspect {auth_path}: {exc}{RESET}")
+
+    if auth_path_exists:
         try:
             vercel_token = json.loads(auth_path.read_text()).get("token", "")
+        except PermissionError:
+            print(f"  {YELLOW}Warning: access denied loading {auth_path}; set VERCEL_TOKEN instead{RESET}")
         except Exception:
             pass
 
