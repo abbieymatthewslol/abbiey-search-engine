@@ -93,6 +93,7 @@ def mock_httpx():
 def disable_retrieval_pipeline(monkeypatch):
     """Avoid live multi-source HTTP in unit tests (DDG mock only applies to legacy path)."""
     monkeypatch.setenv("ABBIEY_RETRIEVAL_PIPELINE", "0")
+    monkeypatch.setenv("ABBIEY_SEARCH_AGGREGATOR", "0")
 
 
 @pytest.fixture(autouse=True)
@@ -101,10 +102,22 @@ def clear_cache():
     from app import _cache, _cache_lock, _search_counters, _search_counter_lock
     with _cache_lock:
         _cache.clear()
+    try:
+        from services.search_aggregator import clear_aggregator_cache
+
+        clear_aggregator_cache()
+    except Exception:
+        pass
     with _search_counter_lock:
         _search_counters.clear()
     yield
     with _cache_lock:
         _cache.clear()
+    try:
+        from services.search_aggregator import clear_aggregator_cache
+
+        clear_aggregator_cache()
+    except Exception:
+        pass
     with _search_counter_lock:
         _search_counters.clear()
