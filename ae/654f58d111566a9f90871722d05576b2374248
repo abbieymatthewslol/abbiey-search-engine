@@ -1,0 +1,28 @@
+templates/login.html
+  880647db6c274405 8-13,18-19
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "ae654f58d111566a9f90871722d05576b2374248",
+  "prompts": {
+    "880647db6c274405": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "6af5f214-71db-4aa8-a3b8-ec608ee751e7",
+        "model": "default"
+      },
+      "human_author": "abbiey",
+      "messages": [],
+      "total_additions": 18,
+      "total_deletions": 4,
+      "accepted_lines": 25,
+      "overriden_lines": 0
+    }
+  },
+  "humans": {
+    "h_c2f486820b99b6": {
+      "author": "abbiey"
+    }
+  }
+}
