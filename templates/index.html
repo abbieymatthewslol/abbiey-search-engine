@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>{% if query %}{{ query }} — abbieysearch{% else %}abbieysearch — unfiltered answers with receipts{% endif %}</title>
+    <title>{% if query %}{{ query }} — abbieysearch{% else %}Abbiey Search – Unfiltered Search Engine{% endif %}</title>
     <script nonce="{{ csp_nonce }}">
         (function() {
             var t  = localStorage.getItem('theme') || 'dark';
@@ -47,10 +47,10 @@
     <meta property="og:description" content="Direct, sourced search results for: {{ query }}">
     <meta property="og:url" content="{{ site_base_url }}/search?q={{ query|urlencode }}">
     {% else %}
-    <meta name="description" content="abbieysearch goes deeper than the first page with direct answers, source-backed context, and configurable depth.">
-    <meta property="og:title" content="abbieysearch — unfiltered answers with receipts">
-    <meta property="og:description" content="Direct answers, deeper context, and source-backed receipts for people who want the why, not just the link list.">
-    <meta property="og:url" content="{{ site_base_url }}/search">
+    <meta name="description" content="A privacy-focused search engine delivering direct, unfiltered answers without tracking.">
+    <meta property="og:title" content="Abbiey Search – Unfiltered Search Engine">
+    <meta property="og:description" content="A privacy-focused search engine delivering direct, unfiltered answers without tracking.">
+    <meta property="og:url" content="{{ site_base_url }}/">
     {% endif %}
     <meta name="keywords" content="deep search engine, sourced answers, research search, direct answers, full-context search">
     <meta name="author" content="abbieysearch">
@@ -62,11 +62,11 @@
     <meta name="twitter:title" content="{{ query }} — abbieysearch">
     <meta name="twitter:description" content="Direct, sourced search results for: {{ query }}">
     {% else %}
-    <meta name="twitter:title" content="abbieysearch — unfiltered answers with receipts">
-    <meta name="twitter:description" content="Direct answers, deeper context, and sources you can inspect. Built for people who want the why.">
+    <meta name="twitter:title" content="Abbiey Search – Unfiltered Search Engine">
+    <meta name="twitter:description" content="A privacy-focused search engine delivering direct, unfiltered answers without tracking.">
     {% endif %}
     <meta name="twitter:image" content="{{ site_base_url }}/static/og-image.png">
-    {% if not query %}<link rel="canonical" href="{{ site_base_url }}/search">{% endif %}
+    {% if not query %}<link rel="canonical" href="{{ site_base_url }}/">{% endif %}
     <!-- PWA -->
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#000000">

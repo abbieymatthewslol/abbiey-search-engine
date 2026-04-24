@@ -12480,11 +12480,14 @@ Allow: /community
 Allow: /docs/
 Allow: /changelog
 Allow: /status
+Disallow: /login
+Disallow: /api
 Disallow: /api/
 Disallow: /admin
 Disallow: /profile
 Disallow: /profile/update
 Disallow: /logout
+Disallow: /auth
 Disallow: /auth/
 Disallow: /verify-email
 Disallow: /payment-return
@@ -12508,7 +12511,6 @@ def sitemap():
         ("/privacy",   "monthly", "0.85"),
         ("/terms",     "monthly", "0.85"),
         ("/signup",    "monthly", "0.80"),
-        ("/login",     "monthly", "0.60"),
         ("/developer", "weekly",  "0.75"),
         ("/community", "weekly",  "0.75"),
         ("/docs/api",  "weekly",  "0.70"),

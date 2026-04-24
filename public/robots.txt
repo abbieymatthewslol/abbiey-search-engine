@@ -1,9 +1,17 @@
 User-agent: *
-Allow: /
-Allow: /search
+Disallow: /login
+Disallow: /auth
+Disallow: /api
 Disallow: /api/
+Disallow: /admin
 Disallow: /profile
 Disallow: /profile/update
 Disallow: /logout
+Disallow: /auth/
+Disallow: /verify-email
+Disallow: /payment-return
+Disallow: /webhooks/
 
+Allow: /
+Allow: /search
 Sitemap: https://abbieysearch.com/sitemap.xml
