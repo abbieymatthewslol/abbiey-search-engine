@@ -272,6 +272,16 @@ def _retrieval_pipeline_enabled() -> bool:
     )
 
 
+def _search_aggregator_enabled() -> bool:
+    """Parallel multi-source merge (``services.search_aggregator``); off in pytest by default."""
+    return os.environ.get("ABBIEY_SEARCH_AGGREGATOR", "1").strip().lower() not in (
+        "0",
+        "false",
+        "no",
+        "off",
+    )
+
+
 def _max_query_length() -> int:
     raw = os.environ.get("ABBIEY_MAX_QUERY_LENGTH", "8000").strip()
     try:
@@ -10483,7 +10493,27 @@ def _fetch_results(
             skip_ddg = bool(results)
 
         pipeline_used = False
-        if search_type == "text" and _retrieval_pipeline_enabled():
+        aggregator_hit = False
+        if search_type == "text" and _search_aggregator_enabled():
+            try:
+                from services.search_aggregator import aggregate_text_search_sync
+
+                _agg_hits = aggregate_text_search_sync(
+                    user_query=query,
+                    effective_query=effective_query,
+                    ddg_fetcher=lambda: _try_ddg(
+                        effective_query, max_results, "text", region, time_filter, safesearch
+                    ),
+                    lang=lang,
+                )
+                if _agg_hits:
+                    results = _agg_hits
+                    aggregator_hit = True
+                    skip_ddg = True
+            except Exception:
+                logger.exception("search_aggregator_failed")
+
+        if search_type == "text" and _retrieval_pipeline_enabled() and not aggregator_hit:
             try:
                 _rp_fetchers = {
                     "ddg": lambda: _try_ddg(
@@ -10541,11 +10571,12 @@ def _fetch_results(
                 _deep_futures = {
                     _deep_pool.submit(_try_marginalia, query): "marginalia",
                     _deep_pool.submit(_try_stract, query): "stract",
-                    _deep_pool.submit(_try_searxng, query): "searxng",
-                    _deep_pool.submit(_try_hackernews_text, query): "hn",
-                    _deep_pool.submit(_try_reddit_text, query): "reddit",
                     _deep_pool.submit(_try_internet_archive_text, query): "archive",
                 }
+                if not aggregator_hit:
+                    _deep_futures[_deep_pool.submit(_try_searxng, query)] = "searxng"
+                    _deep_futures[_deep_pool.submit(_try_hackernews_text, query)] = "hn"
+                    _deep_futures[_deep_pool.submit(_try_reddit_text, query)] = "reddit"
                 if _exa_api_key():
                     _deep_futures[
                         _deep_pool.submit(
