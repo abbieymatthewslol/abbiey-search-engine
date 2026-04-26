@@ -1,0 +1,33 @@
+scripts/verify_vercel_include_files.py
+  284e6fec7963a65f 6,32,35,214
+AGENTS.md
+  284e6fec7963a65f 4,8,10
+scripts/verify_env_drift.py
+  284e6fec7963a65f 35
+.cursor/rules/pre-deployment.mdc
+  284e6fec7963a65f 14,18
+.cursor/rules/triage-app-py-first.mdc
+  284e6fec7963a65f 12
+.cursor/rules/vercel-include-files.mdc
+  284e6fec7963a65f 14,17
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "1b07d141958fdf478c49e20607bd58d0b780f6fd",
+  "prompts": {
+    "284e6fec7963a65f": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "1a33aec9-9151-44b6-a4e2-eada77c5bb73",
+        "model": "default"
+      },
+      "human_author": "abbiey",
+      "messages": [],
+      "total_additions": 13,
+      "total_deletions": 358,
+      "accepted_lines": 13545,
+      "overriden_lines": 0
+    }
+  }
+}
