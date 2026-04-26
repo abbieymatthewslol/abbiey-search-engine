@@ -13,18 +13,20 @@ Production for **abbiey.search** is meant to be a **single Vercel project** serv
 
 ## Local `push-and-notify.ps1` and Vercel
 
-`[scripts/push-and-notify.ps1](../scripts/push-and-notify.ps1)` polls the Vercel API with **`GET /v6/deployments?...&sha=<git HEAD>`** (see [List deployments](https://vercel.com/docs/rest-api/reference/endpoints/deployments/list-deployments)) so the post-push deploy (from **GitHub Actions** after tests) is found. Set **`VERCEL_TOKEN`** in your Windows user environment. Allow **a few minutes** for Actions to run `vercel deploy` before the new SHA appears in the API.
+`[scripts/push-and-notify.ps1](../scripts/push-and-notify.ps1)` polls the Vercel API with **`GET /v6/deployments?...&sha=<git HEAD>`** (see [List deployments](https://vercel.com/docs/rest-api/reference/endpoints/deployments/list-deployments)) so the post-push deploy (from **GitHub Actions** after tests) is found. Set **`VERCEL_TOKEN`** in your Windows user environment. The helper only waits for production when the pushed branch matches the configured production branch (`main` by default; override locally with `ABBIEY_PRODUCTION_BRANCH` if you intentionally change it later). Allow **a few minutes** for Actions to run `vercel deploy` before the new SHA appears in the API.
 
 ## GitHub → Vercel (automatic production)
 
 - **On every push to `**main`**: `[.github/workflows/deploy.yml](workflows/deploy.yml)` runs `python scripts/run_tests_for_changes.py` (tests scoped to the pushed commit; set `RUN_FULL_TESTS=1` in the job to force a full `pytest tests/`), then `vercel build` and `vercel deploy --prebuilt --prod` (requires the repository secret **`VERCEL_TOKEN`**; same token as the Vercel CLI). No manual “Run workflow” is required to ship to production.
 - **Duplicate build guard** — Root `[vercel.json](../vercel.json)` `ignoreCommand` **skips** Vercel’s Git build when `VERCEL_GIT_COMMIT_REF=main`, so there is a single production path (GitHub Actions + CLI). Preview deployments from other branches are unaffected.
+- **Post-deploy verification** — after the production deploy finishes, the same workflow runs a live `/admin/api/health` check when **`SITE_URL`** and **`ADMIN_TOKEN`** are available as repository or environment secrets, then runs the Playwright smoke workflow when **`SITE_URL`** is configured (and uses **`API_TEST_KEY`** when present).
 - **Optional** — you can still **Run workflow** on `Deploy to Vercel` to redeploy from the current default branch (e.g. after fixing secrets).
 
 ## GitHub → branch model
 
 - Day-to-day development and production deploys use `**main**`.
 - Pushes from Cursor or any other git client only affect the live site after they are pushed to `**origin/main**` and the deploy workflow succeeds.
+- In GitHub repository settings, set the **default branch to `main`** as well, so GitHub UI, Cursor integrations, and local clones all default to the same production branch.
 
 ## Supabase → Vercel
 
@@ -98,6 +100,8 @@ To audit: `grep -rn "<script" templates/` — every `<script` line should be fol
 - Domain **abbieysearch.com** assigned to that project. If `www.abbieysearch.com` is attached, it should redirect there.
 - Production env vars on Vercel include `**SUPABASE_DB_URL`** (or `**DATABASE_URL**`) and secrets above.
 - **GitHub** repository secret `**VERCEL_TOKEN**` is set (required for automatic production deploys on every push to `**main**`).
+- **GitHub** repository default branch is `**main**` (Settings → Branches). If it still points to `master`, update it so local tools and GitHub UI align with production.
+- **GitHub** repository or environment secrets `**SITE_URL**` and `**ADMIN_TOKEN**` are set to enforce the post-deploy live health check; add `**API_TEST_KEY**` to enable the authenticated smoke route.
 - `**vercel.json**` `ignoreCommand` prevents Vercel from also building the `**main**` branch from Git, so you do not get two production builds (see *GitHub → Vercel* above).
 
 ## Automated checks
@@ -107,4 +111,12 @@ To audit: `grep -rn "<script" templates/` — every `<script` line should be fol
 - **Local:** `python scripts/verify_production_env.py` or `python scripts/verify_production_env.py --strict` before you deploy.
 
 Vercel, Resend, and Supabase still must be configured in their own dashboards (or `vercel env`); nothing in GitHub can create those accounts for you.
+
+## Failure recovery
+
+1. **Deploy failed in Actions** — open `Deploy to Vercel` for the commit on `main`, fix the blocking issue, then rerun the workflow or push a follow-up commit.
+2. **Deploy succeeded but site looks stale** — run `python scripts/check_deploy.py` locally to compare local HEAD, GitHub production branch, and the live site fingerprint.
+3. **Environment drift suspected** — run `python scripts/verify_deployment_config.py` and `python scripts/verify_production_env.py --strict`, then sync Vercel with `python scripts/restore_vercel_env.py --apply`.
+4. **Live health check failing** — confirm `SITE_URL`, `ADMIN_TOKEN`, and Supabase pooler credentials are correct in Vercel, then rerun `python scripts/verify_production_env.py --ping`.
+5. **Branch model changes later** — update `deploy.yml`, `vercel.json`, and `ABBIEY_PRODUCTION_BRANCH` for local scripts together; do not split those invariants.
 

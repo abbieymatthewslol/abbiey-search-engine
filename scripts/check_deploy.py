@@ -8,8 +8,13 @@ Compares:
   3. Live site template fingerprint (CSS class names + deploy-hash meta)
 
 Exits 0 if all in sync, 1 if drift detected.
+
+Optional env:
+  ABBIEY_PRODUCTION_BRANCH  Production branch to compare against (default: main)
+  SITE_URL / CANONICAL_URL  Live site origin override (default: https://abbieysearch.com)
 """
 
+import os
 import re
 import subprocess
 import sys
@@ -17,8 +22,9 @@ import urllib.request
 import urllib.error
 import json
 
-LIVE_URL   = "https://www.abbieysearch.com"
-GITHUB_API = "https://api.github.com/repos/abbieymatthewslol/abbiey-search-engine-2/commits/main"
+PRODUCTION_BRANCH = (os.environ.get("ABBIEY_PRODUCTION_BRANCH") or "main").strip() or "main"
+LIVE_URL   = ((os.environ.get("SITE_URL") or os.environ.get("CANONICAL_URL") or "https://abbieysearch.com").strip().rstrip("/"))
+GITHUB_API = f"https://api.github.com/repos/abbieymatthewslol/abbiey-search-engine-2/commits/{PRODUCTION_BRANCH}"
 REPO_ROOT  = subprocess.check_output(
     ["git", "rev-parse", "--show-toplevel"]
 ).decode().strip()
@@ -101,7 +107,7 @@ def main():
     github_ok = bool(github_hash and github_hash.startswith(local_s))
 
     print(f"  Local HEAD    {local_s}")
-    print(f"  GitHub main   {github_s}  {symbol(github_ok)}")
+    print(f"  GitHub {PRODUCTION_BRANCH:<6} {github_s}  {symbol(github_ok)}")
     print()
 
     # --- Template fingerprint checks ---
@@ -127,7 +133,7 @@ def main():
 
     if not github_ok:
         print(f"{RED}  ✗ Local commits NOT pushed to GitHub.{RESET}")
-        print(f"    Run: git push origin main")
+        print(f"    Run: git push origin {PRODUCTION_BRANCH}")
         drift = True
 
     if not all_templates_ok:

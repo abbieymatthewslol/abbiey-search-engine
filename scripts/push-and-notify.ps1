@@ -14,6 +14,10 @@
 
 .PARAMETER MaxWaitMinutes
   Max minutes to poll Vercel API for READY (default: 15).
+
+.NOTES
+  Set ABBIEY_PRODUCTION_BRANCH to override the production branch this helper
+  waits on (defaults to main).
 #>
 [CmdletBinding()]
 param(
@@ -90,6 +94,11 @@ if (-not $Branch) {
     throw "Detached HEAD or empty branch; checkout a branch first."
 }
 
+$productionBranch = $env:ABBIEY_PRODUCTION_BRANCH
+if (-not $productionBranch) {
+    $productionBranch = "main"
+}
+
 $commitSha = (git rev-parse HEAD).Trim()
 
 Write-Host "Pushing $Branch to $Remote (commit $commitSha) ..." -ForegroundColor Cyan
@@ -102,6 +111,13 @@ if ($LASTEXITCODE -ne 0) {
 if ($SkipVercelWait) {
     Show-DeployNotification -Title "abbiey.search - GitHub" -Body "Pushed $Branch to $Remote." -Kind Info
     Write-Host "Done." -ForegroundColor Green
+    exit 0
+}
+
+if ($Branch -ne $productionBranch) {
+    $msg = "Pushed $Branch to $Remote. Production deploy tracking only runs for $productionBranch."
+    Show-DeployNotification -Title "abbiey.search - GitHub" -Body $msg -Kind Info
+    Write-Host $msg -ForegroundColor DarkYellow
     exit 0
 }
 
@@ -118,7 +134,7 @@ $headers = @{ Authorization = "Bearer $tok" }
 $deadline = (Get-Date).AddMinutes($MaxWaitMinutes)
 # Vercel REST: filter by full git SHA (reliable; walking meta.githubCommitSha in list items was unreliable in PowerShell)
 $encSha = [System.Uri]::EscapeDataString($commitSha)
-# Production on abbieysearch.com: Git is usually on `main`; "Sync main from master" may delay the deploy by ~1 min after push
+# Production on abbieysearch.com follows the configured production branch (main by default).
 $uri = "https://api.vercel.com/v6/deployments?projectId=$projectId&teamId=$teamId&sha=$encSha&limit=5"
 $shortSha = if ($commitSha.Length -ge 7) { $commitSha.Substring(0, 7) } else { $commitSha }
 Write-Host "Polling Vercel (project=$projectId, sha=$shortSha...)" -ForegroundColor DarkGray
@@ -138,7 +154,7 @@ do {
     $list = @($resp.deployments)
     if ($list.Count -lt 1) {
         if ($poll -eq 1) {
-            Write-Host "No deployment for this SHA yet. If you use Git: production is often on branch `main`; this repo fast-forwards `main` from `master` in GitHub Actions (one minute is normal)." -ForegroundColor DarkYellow
+            Write-Host "No production deployment for this SHA yet. GitHub Actions may still be building; a short delay before the SHA appears in Vercel is normal." -ForegroundColor DarkYellow
         }
         if ($poll % 3 -eq 0) {
             Write-Host ("Still waiting for Vercel to register commit {0}... {1}" -f $shortSha, (Get-Date -Format "HH:mm:ss"))

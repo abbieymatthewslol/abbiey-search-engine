@@ -1,7 +1,9 @@
 name: Deploy to Vercel
 
 # Automatic: every push to main runs tests, then `vercel build` + `vercel deploy --prebuilt --prod`.
-# Requires secret VERCEL_TOKEN. Manual re-run: Actions → this workflow → Run workflow.
+# Requires secret VERCEL_TOKEN. Optional post-deploy verification uses SITE_URL,
+# ADMIN_TOKEN, and API_TEST_KEY when present as repository or environment secrets.
+# Manual re-run: Actions → this workflow → Run workflow.
 # Vercel Git builds on `main` are skipped (vercel.json ignoreCommand) so GitHub Actions remains the single production path.
 # See .github/PLATFORM_INTEGRATIONS.md
 on:
@@ -47,6 +49,7 @@ jobs:
   deploy:
     needs: test
     runs-on: ubuntu-latest
+    environment: production
     steps:
       - uses: actions/checkout@v4
 
@@ -72,3 +75,29 @@ jobs:
           VERCEL_PROJECT_ID: ${{ env.VERCEL_PROJECT_ID }}
           VERCEL_ORG_ID: ${{ env.VERCEL_ORG_ID }}
         run: python3 scripts/disable_vercel_attack_challenge.py
+
+  verify-live:
+    needs: deploy
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install python-dotenv
+      - name: Live health check (optional)
+        env:
+          SITE_URL: ${{ secrets.SITE_URL }}
+          ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
+        run: |
+          if [ -z "${SITE_URL:-}" ] || [ -z "${ADMIN_TOKEN:-}" ]; then
+            echo "Skipping post-deploy health: add SITE_URL and ADMIN_TOKEN repo/environment secrets to enforce live verification."
+            exit 0
+          fi
+          python scripts/verify_production_env.py --ping
+
+  smoke-live:
+    needs: verify-live
+    uses: ./.github/workflows/_production-readiness-smoke.yml
+    secrets: inherit
