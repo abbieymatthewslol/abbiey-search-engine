@@ -3,7 +3,7 @@
 Policy (see .cursor/rules/vercel-include-files.mdc)
 --------------------------------------------------
 Only code under these paths is exempt (no includeFiles line required):
-  app.py, engine/**, retrieval/**, osint/**, api/**
+  app.py, retrieval/**, osint/**, api/**
 
 Any other first-party module (e.g. root ``billing.py``) MUST appear in
 ``vercel.json`` ``builds[0].config.includeFiles`` as that file or a single
@@ -29,10 +29,10 @@ ROOT = Path(__file__).resolve().parent.parent
 VERCEL_JSON = ROOT / "vercel.json"
 APP_PY = ROOT / "app.py"
 # Parse imports from these trees (plus BFS follow) so includeFiles matches the full app graph.
-_SCAN_SEED_DIRS = ("engine", "retrieval", "osint", "api")
+_SCAN_SEED_DIRS = ("retrieval", "osint", "api")
 
 EXEMPT_EXACT = frozenset({"app.py"})
-EXEMPT_PREFIXES = ("engine/", "retrieval/", "osint/", "api/")
+EXEMPT_PREFIXES = ("retrieval/", "osint/", "api/")
 
 # Top-level third-party and tooling — not resolved as repo modules.
 _TOP_SKIP = frozenset(
@@ -211,7 +211,7 @@ def _scan_seed_py_files() -> list[Path]:
 def _discover_files(warn: list[str]) -> set[Path]:
     """BFS: module name -> .py under ROOT -> parse imports, repeat.
 
-    Seeds imports from ``app.py`` and every ``*.py`` under engine/, retrieval/,
+    Seeds imports from ``app.py`` and every ``*.py`` under retrieval/,
     osint/, and api/ (per project policy).
     """
     from collections import deque

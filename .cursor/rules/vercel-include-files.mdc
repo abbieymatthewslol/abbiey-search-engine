@@ -11,10 +11,10 @@ The serverless entry is `api/index.py` → `from app import app`. The Vercel Pyt
 
 ## Exempt paths (no extra root-level file line required)
 
-`vercel.json` already includes explicit globs `engine/**`, `osint/**`, `retrieval/**`, `templates/**`, and `static/**`. If the import resolves only under one of these trees or `api/`, you normally only add a new line for **new root modules** (e.g. `foo.py` at repo root) or a new top-level package (one `newpkg/**` entry).
+`vercel.json` already includes explicit globs `osint/**`, `retrieval/**`, `templates/**`, and `static/**`. If the import resolves only under one of these trees or `api/`, you normally only add a new line for **new root modules** (e.g. `foo.py` at repo root) or a new top-level package (one `newpkg/**` entry).
 
 - `app.py` (always shipped)
-- `engine/**`, `retrieval/**`, `osint/**` (globs in `vercel.json`)
+- `retrieval/**`, `osint/**` (globs in `vercel.json`)
 - `api/` (serverless `src` + tree)
 
 ## Must update `includeFiles`

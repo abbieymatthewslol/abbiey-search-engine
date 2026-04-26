@@ -49,7 +49,6 @@ PATH_HINTS: list[tuple[str, tuple[str, ...]]] = [
     ("entity_parser.py", ("tests/test_entity_parser.py",)),
     ("query_understanding.py", ("tests/test_query_understanding.py",)),
     ("retrieval/", ("tests/test_retrieval.py",)),
-    ("engine/", ("tests/test_zero_click.py", "tests/test_knowledge_graph_api.py")),
     ("osint/", ("tests/test_osint.py",)),
     ("search_bots.py", ("tests/test_search_bots_api.py",)),
     ("bot_crawler.py", ("tests/test_search_bots_api.py",)),
