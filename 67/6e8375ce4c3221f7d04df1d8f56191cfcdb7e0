@@ -1,0 +1,46 @@
+templates/pricing.html
+  284e6fec7963a65f 1-59
+templates/base.html
+  284e6fec7963a65f 31
+templates/index.html
+  284e6fec7963a65f 45,47,50,52,63,66
+templates/about.html
+  284e6fec7963a65f 13,18,23,81-86
+templates/contact.html
+  284e6fec7963a65f 1-63
+templates/blog.html
+  284e6fec7963a65f 1-57
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "676e8375ce4c3221f7d04df1d8f56191cfcdb7e0",
+  "prompts": {
+    "284e6fec7963a65f": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "1a33aec9-9151-44b6-a4e2-eada77c5bb73",
+        "model": "composer-2"
+      },
+      "human_author": "abbiey",
+      "messages": [],
+      "total_additions": 215,
+      "total_deletions": 11,
+      "accepted_lines": 15183,
+      "overriden_lines": 0
+    },
+    "ca09273110bb5d54": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "b3736a83-29bf-471d-8cf2-621f946d4227",
+        "model": "composer-2-fast"
+      },
+      "human_author": "abbiey",
+      "messages": [],
+      "total_additions": 25,
+      "total_deletions": 0,
+      "accepted_lines": 43,
+      "overriden_lines": 0
+    }
+  }
+}
