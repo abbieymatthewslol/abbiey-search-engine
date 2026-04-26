@@ -10,13 +10,11 @@
         "includeFiles": [
           "templates/**",
           "static/**",
-          "engine/**",
           "osint/**",
           "retrieval/**",
           "api_v1.py",
           "billing.py",
           "bot_crawler.py",
-          "digital_pet.py",
           "entity_parser.py",
           "query_understanding.py",
           "reverse_image.py",
