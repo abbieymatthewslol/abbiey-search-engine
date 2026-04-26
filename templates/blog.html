@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" data-density="default">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>abbieysearch — Blog</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=deploy_hash) }}">
+    {% include 'includes/google_site_verification.html' %}
+    <script nonce="{{ csp_nonce }}">
+        window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
+    </script>
+    <script defer src="/_vercel/speed-insights/script.js"></script>
+    <meta name="description" content="abbieysearch blog: product updates, search tips, and links to the changelog, documentation, and deep web help.">
+    <link rel="canonical" href="{{ site_base_url }}/blog">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="abbieysearch">
+    <meta property="og:title" content="abbieysearch — Blog">
+    <meta property="og:description" content="News from abbieysearch, plus the changelog, API docs, and how to use research and .onion search safely.">
+    <meta property="og:image" content="{{ site_base_url }}/static/og-image.png">
+    <meta property="og:url" content="{{ site_base_url }}/blog">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="abbieysearch — Blog">
+    <meta name="twitter:description" content="Updates, tips, and links to our changelog and public documentation.">
+</head>
+<body>
+    <header class="landing-header">
+        <a href="/search" class="logo">abbiey<span>search</span></a>
+        <a href="/search" class="header-btn landing-cta">Open search</a>
+    </header>
+    {% include 'includes/google_analytics.html' %}
+    <main class="landing-main about-main">
+        <h1>Blog</h1>
+        <p class="landing-lead">
+            Long-form posts will appear here. In the meantime, follow product changes in the
+            <a href="/changelog">Changelog</a> and how-to content in
+            <a href="/docs/deep-web">Deep web</a> and <a href="/docs/api">API</a> docs.
+        </p>
+        <p class="landing-lead">
+            For feature discussion and source code, use <a href="/community">Community</a>.
+        </p>
+        <p><a href="/search" class="header-btn">Open search</a></p>
+    </main>
+    <footer class="landing-footer">
+        <p class="footer-links">
+            <a href="/about">About</a>
+            &nbsp;&middot;&nbsp;
+            <a href="/pricing">Pricing</a>
+            &nbsp;&middot;&nbsp;
+            <a href="/contact">Contact</a>
+            &nbsp;&middot;&nbsp;
+            <a href="/privacy">Privacy</a>
+            &nbsp;&middot;&nbsp;
+            <a href="/search">Search</a>
+        </p>
+    </footer>
+</body>
+</html>

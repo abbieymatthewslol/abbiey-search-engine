@@ -3,24 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>abbieysearch — Pricing</title>
+    <title>abbieysearch — Contact</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=deploy_hash) }}">
     {% include 'includes/google_site_verification.html' %}
     <script nonce="{{ csp_nonce }}">
         window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
     </script>
     <script defer src="/_vercel/speed-insights/script.js"></script>
-    <meta name="description" content="abbieysearch pricing: search free with a generous cap, optional paid search unlock for heavy use, and metered /api/v1 access billed through Stripe. No ads in results.">
-    <link rel="canonical" href="{{ site_base_url }}/pricing">
+    <meta name="description" content="How to reach abbieysearch: support email, GitHub and community, plus links for API access, billing, and refund policy.">
+    <link rel="canonical" href="{{ site_base_url }}/contact">
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="abbieysearch">
-    <meta property="og:title" content="abbieysearch — Pricing">
-    <meta property="og:description" content="Free and paid options: generous anonymous search, optional unlock for high volume, and API metering for developers.">
+    <meta property="og:title" content="abbieysearch — Contact">
+    <meta property="og:description" content="Support email, open-source community links, and where to get help with accounts, search unlock, and the public API.">
     <meta property="og:image" content="{{ site_base_url }}/static/og-image.png">
-    <meta property="og:url" content="{{ site_base_url }}/pricing">
+    <meta property="og:url" content="{{ site_base_url }}/contact">
     <meta name="twitter:card" content="summary">
-    <meta name="twitter:title" content="abbieysearch — Pricing">
-    <meta name="twitter:description" content="How free search, optional paid unlock, and API billing work on abbieysearch.">
+    <meta name="twitter:title" content="abbieysearch — Contact">
+    <meta name="twitter:description" content="Reach the team, report issues, and find links for API and billing help.">
 </head>
 <body>
     <header class="landing-header">
@@ -29,24 +29,28 @@
     </header>
     {% include 'includes/google_analytics.html' %}
     <main class="landing-main about-main">
-        <h1>Pricing</h1>
+        <h1>Contact</h1>
         <p class="landing-lead">
-            <strong>Search</strong> is free for typical use, with a soft limit for anonymous and signed-in free accounts.
-            Heavy users can <strong>unlock</strong> higher limits when checkout is enabled. There are no ad slots in the result list.
+            For <strong>support and abuse reports</strong>, email
+            <a href="mailto:support@abbieysearch.com">support@abbieysearch.com</a>.
+            Refund questions: see <a href="/refund">Refunds</a> and
+            <a href="mailto:refunds@abbieysearch.com">refunds@abbieysearch.com</a>.
         </p>
         <p class="landing-lead">
-            <strong>Developers</strong> can use the public <a href="/docs/api">JSON API</a> with a monthly free allowance; usage beyond that is metered via Stripe as described in the API docs.
+            <strong>Community &amp; code:</strong> visit the
+            <a href="/community">Community</a> page for the GitHub repo, discussions, and contribution guidelines.
         </p>
         <p class="landing-lead">
-            See <a href="/refund">refunds</a> and <a href="/terms">terms</a> for billing and eligibility. For questions, use <a href="/contact">contact</a>.
+            <strong>API &amp; billing:</strong> start with <a href="/docs/api">API documentation</a> and
+            <a href="/developer">Developer</a> for keys and usage.
         </p>
-        <p><a href="/search" class="header-btn">Start searching</a></p>
+        <p><a href="/search" class="header-btn">Back to search</a></p>
     </main>
     <footer class="landing-footer">
         <p class="footer-links">
             <a href="/about">About</a>
             &nbsp;&middot;&nbsp;
-            <a href="/contact">Contact</a>
+            <a href="/pricing">Pricing</a>
             &nbsp;&middot;&nbsp;
             <a href="/blog">Blog</a>
             &nbsp;&middot;&nbsp;

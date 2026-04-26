@@ -42,14 +42,14 @@
     <script defer src="/_vercel/speed-insights/script.js"></script>
     <!-- SEO meta tags -->
     {% if query %}
-    <meta name="description" content="Direct, sourced search results for {{ query }} — deeper context, stronger receipts, fewer dead ends.">
+    <meta name="description" content="Search results for &quot;{{ query }}&quot; on abbieysearch — sourced snippets, optional AI summary, and privacy-first search with no server-side query logging.">
     <meta property="og:title" content="{{ query }} — abbieysearch">
-    <meta property="og:description" content="Direct, sourced search results for: {{ query }}">
+    <meta property="og:description" content="Sourced search results for &quot;{{ query }}&quot; on abbieysearch — read snippets and evidence without ad-tech tracking.">
     <meta property="og:url" content="{{ site_base_url }}/search?q={{ query|urlencode }}">
     {% else %}
-    <meta name="description" content="abbieysearch goes deeper than the first page with direct answers, source-backed context, and configurable depth.">
+    <meta name="description" content="Search the web on abbieysearch: no server-side query logs, AI summaries, deep web and image modes, and optional sign-in for bookmarks and the API.">
     <meta property="og:title" content="abbieysearch — unfiltered answers with receipts">
-    <meta property="og:description" content="Direct answers, deeper context, and source-backed receipts for people who want the why, not just the link list.">
+    <meta property="og:description" content="Private search with source-backed context, .onion search, and research tools. No mandatory account; generous free tier, optional paid unlock for heavy use.">
     <meta property="og:url" content="{{ site_base_url }}/search">
     {% endif %}
     <meta name="keywords" content="deep search engine, sourced answers, research search, direct answers, full-context search">
@@ -60,10 +60,10 @@
     <meta name="twitter:card" content="summary_large_image">
     {% if query %}
     <meta name="twitter:title" content="{{ query }} — abbieysearch">
-    <meta name="twitter:description" content="Direct, sourced search results for: {{ query }}">
+    <meta name="twitter:description" content="Sourced results for “{{ query }}” on abbieysearch — private search, no server-side query logging.">
     {% else %}
     <meta name="twitter:title" content="abbieysearch — unfiltered answers with receipts">
-    <meta name="twitter:description" content="Direct answers, deeper context, and sources you can inspect. Built for people who want the why.">
+    <meta name="twitter:description" content="Private search: AI summaries, deep web, and source-backed context. Free tier with optional paid unlock.">
     {% endif %}
     <meta name="twitter:image" content="{{ site_base_url }}/static/og-image.png">
     {% if not query %}<link rel="canonical" href="{{ site_base_url }}/search">{% endif %}
