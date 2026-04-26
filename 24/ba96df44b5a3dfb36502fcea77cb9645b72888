@@ -1,0 +1,27 @@
+reverse_image.py
+  e6e268052bb187f3 1-2,5,12,22-26,83-84,86-147,163-173
+.env.example
+  e6e268052bb187f3 200-204
+tests/test_reverse_image.py
+  e6e268052bb187f3 8-13,28,30-32,91-143
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "24ba96df44b5a3dfb36502fcea77cb9645b72888",
+  "prompts": {
+    "e6e268052bb187f3": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "60d215bb-4056-4f2e-8a49-ae8924415a53",
+        "model": "composer-2"
+      },
+      "human_author": "abbiey",
+      "messages": [],
+      "total_additions": 153,
+      "total_deletions": 9,
+      "accepted_lines": 632,
+      "overriden_lines": 0
+    }
+  }
+}
