@@ -15,7 +15,7 @@ Fly.io, Railway, or self-hosted with one `docker compose up`.
 | Self-host via Docker                  | Shipping |
 | Stripe unlocks + metered API billing  | Shipping |
 
-Live: <https://abbieysearch.com> · Docs: [`docs/`](./docs) · Changelog:
+Live: <https://abbieysearch.com> · Docs: [`docs/README.md`](./docs/README.md) · Changelog:
 [`CHANGELOG.md`](./CHANGELOG.md)
 
 ---
@@ -90,12 +90,22 @@ accounts only), `none` (hard kill-switch).
 
 ## Documentation
 
+- [`docs/README.md`](docs/README.md) — docs index and contributor navigation
 - [`docs/SELF-HOSTING.md`](docs/SELF-HOSTING.md) — deploy it yourself, any mode
 - [`docs/deep-web.md`](docs/deep-web.md) — what the Onion / Tor tab actually does
 - [`docs/API.md`](docs/API.md) — `GET /api/v1/search`, auth, billing, rate limits
+- [`docs/PROJECT-INDEX.md`](docs/PROJECT-INDEX.md) — current architecture, features, and endpoint inventory
+- [`docs/TODO.md`](docs/TODO.md) — completed roadmap and recent project checklist
 - [`CHANGELOG.md`](./CHANGELOG.md) — human-readable release notes (also at `/changelog`)
 - [`CLAUDE.md`](./CLAUDE.md) — deep architecture notes for contributors
 - [`.env.example`](./.env.example) — annotated environment variables
+
+## Repository layout
+
+- **Root:** runtime entrypoints and deployment config only (`app.py`, `api/`, `vercel.json`, `Dockerfile`, `render.yaml`)
+- **`docs/`:** self-hosting, API, architecture, and project-tracking docs
+- **`scripts/`:** local verification, deploy, and environment-management helpers
+- **`retrieval/`, `osint/`, `templates/`, `static/`, `tests/`:** search pipeline, enrichment, UI, assets, and automated coverage
 
 ## Running the test suite
 
