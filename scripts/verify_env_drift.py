@@ -32,7 +32,7 @@ PY_SCAN_ROOTS = (
     "reverse_image_storage.py",
     "startup_checks.py",
 )
-PY_SCAN_DIRS = ("engine", "retrieval", "osint", "api")
+PY_SCAN_DIRS = ("retrieval", "osint", "api")
 ENV_FILES = (".env.example", ".env")
 
 # All env var names referenced in app code

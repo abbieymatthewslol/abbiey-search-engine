@@ -1,7 +1,7 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-`app.py` is the main Flask entrypoint and wires routes, auth, and rendering. Retrieval and ranking stages live in `retrieval/`, and OSINT enrichment lives in `osint/`. HTML templates are in `templates/`, browser assets are in `static/`, and public metadata files such as `robots.txt` are in `public/`. Tests live in `tests/`; helper and verification scripts live in `scripts/`. Vercel uses `api/index.py` as the serverless entrypoint.
+`app.py` is the main Flask entrypoint and wires routes, auth, rendering, and most search orchestration. Retrieval and ranking stages live in `retrieval/`, and OSINT enrichment lives in `osint/`. HTML templates are in `templates/`, browser assets are in `static/`, and public metadata files such as `robots.txt` are in `public/`. Tests live in `tests/`; helper and verification scripts live in `scripts/`. Vercel uses `api/index.py` as the serverless entrypoint.
 
 **Triage:** When something breaks, **assume the cause is in `app.py` until you have evidence it is not** (stack frame, test isolation, or a fix confined to another file). Most request paths and glue still go through that file.
 

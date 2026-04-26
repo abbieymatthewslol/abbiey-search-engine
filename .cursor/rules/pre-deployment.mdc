@@ -11,11 +11,11 @@ Before shipping (or in the same PR as deployment-related changes):
 
 1. **Scan** for new first-party modules or new import edges: from the repo root run  
    `python scripts/verify_deployment_config.py`  
-   (includes `verify_vercel_include_files.py`, which seeds from `app.py` plus `engine/`, `retrieval/`, `osint/`, `api/`).
+   (includes `verify_vercel_include_files.py`, which seeds from `app.py` plus `retrieval/`, `osint/`, `api/`).
 2. If the check reports missing paths, **add only the minimal** `includeFiles` entries: one file (e.g. `"foo.py"`) or one package glob (e.g. `"newpkg/**"`). **Do not** replace the list with `**/*` or a repo-wide wildcard.
 3. Re-run the script until it exits **0**.
 
-Exempt from extra lines (already covered by globs or entry): `app.py`, `engine/**`, `retrieval/**`, `osint/**`, `api/`, `templates/**`, `static/**`—see [vercel-include-files.mdc](vercel-include-files.mdc).
+Exempt from extra lines (already covered by globs or entry): `app.py`, `retrieval/**`, `osint/**`, `api/`, `templates/**`, `static/**`—see [vercel-include-files.mdc](vercel-include-files.mdc).
 
 ## 2) Editing `app.py` (when that file must change)
 
