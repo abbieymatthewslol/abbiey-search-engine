@@ -1,0 +1,25 @@
+tests/test_business_pages.py
+  ca09273110bb5d54 1,5-38
+public/sitemap.xml
+  ca09273110bb5d54 18-42
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "20e70fbd81e8afcb3cf8dee05c6d3cbc750073a7",
+  "prompts": {
+    "ca09273110bb5d54": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "b3736a83-29bf-471d-8cf2-621f946d4227",
+        "model": "composer-2-fast"
+      },
+      "human_author": "abbiey",
+      "messages": [],
+      "total_additions": 60,
+      "total_deletions": 1,
+      "accepted_lines": 145,
+      "overriden_lines": 0
+    }
+  }
+}
