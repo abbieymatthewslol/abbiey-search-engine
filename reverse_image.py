@@ -1,13 +1,15 @@
-"""Reverse image lookup via Bing Images HTML (imgurl:…).
+"""Reverse image lookup: OpenWeb Ninja (Google Lens) when ``OPENWEBNINJA_API_KEY`` is
+set, otherwise Bing Images HTML (``imgurl:``).
 
 Used when a user pastes a direct HTTPS image URL, or when an upload is exposed
-temporarily at ``/api/reverse-image/preview/<token>`` so Bing can fetch it once.
+temporarily at ``/api/reverse-image/preview/<token>`` so the upstream can fetch it once.
 """
 
 from __future__ import annotations
 
 import html as html_lib
 import logging
+import os
 import re
 from urllib.parse import urlparse
 
@@ -16,6 +18,11 @@ import httpx
 logger = logging.getLogger(__name__)
 
 BING_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0 Safari/537.36"
+
+# https://api.openwebninja.com (OpenAPI) — key is sent as the ``x-api-key`` header.
+OPENWEBNINJA_REVERSE_URL = (
+    "https://api.openwebninja.com/reverse-image-search/reverse-image-search"
+)
 
 # Bing embeds image rows as JSON-ish strings with purl (page), murl (image file), t (caption).
 _PAIR_RE = re.compile(
@@ -73,11 +80,71 @@ def parse_bing_reverse_html(page_html: str) -> list[dict]:
     return out
 
 
-def fetch_reverse_hits_for_image_url(image_url: str, *, client: httpx.Client) -> list[dict]:
-    """GET Bing Images reverse search for a publicly reachable image URL."""
-    image_url = (image_url or "").strip()
-    if not image_url.lower().startswith("https://"):
+def _reverse_hits_from_openwebninja_json(payload: object) -> list[dict]:
+    if not isinstance(payload, dict):
         return []
+    st = (payload.get("status") or "").upper()
+    if st and st not in ("OK", "SUCCESS"):
+        return []
+    data = payload.get("data")
+    if not isinstance(data, list):
+        return []
+    out: list[dict] = []
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        link = (item.get("link") or "").strip()
+        murl = (item.get("image") or "").strip()
+        if not link:
+            continue
+        title = (item.get("title") or "Image result").strip() or "Image result"
+        domain = (item.get("domain") or "").strip()
+        out.append(
+            {
+                "title": title[:220],
+                "url": link,
+                "image": murl or link,
+                "thumbnail": murl or link,
+                "source": domain,
+                "body": title[:900],
+            }
+        )
+        if len(out) >= 40:
+            break
+    return out
+
+
+def _fetch_openwebninja_hits(image_url: str, *, client: httpx.Client) -> list[dict]:
+    key = (os.environ.get("OPENWEBNINJA_API_KEY") or os.environ.get("OPENWEBNINJA_REVERSE_IMAGE_KEY") or "").strip()
+    if not key:
+        return []
+    try:
+        lim = int(os.environ.get("ABBIEY_REVERSE_IMAGE_OPENWEBNINJA_LIMIT", "40"))
+    except ValueError:
+        lim = 40
+    lim = max(1, min(500, lim))
+    try:
+        r = client.get(
+            OPENWEBNINJA_REVERSE_URL,
+            params={"url": image_url, "limit": lim, "safe_search": "blur"},
+            headers={
+                "x-api-key": key,
+                "Accept": "application/json",
+                "User-Agent": f"{BING_UA} (abbiey.search; reverse-image)",
+            },
+            timeout=35.0,
+            follow_redirects=True,
+        )
+        if r.status_code != 200:
+            logger.warning("openwebninja_reverse_image_http status=%s", r.status_code)
+            return []
+        return _reverse_hits_from_openwebninja_json(r.json())
+    except Exception:
+        logger.warning("openwebninja_reverse_image_failed", exc_info=True)
+        return []
+
+
+def _fetch_bing_hits_for_image_url(image_url: str, *, client: httpx.Client) -> list[dict]:
     try:
         r = client.get(
             "https://www.bing.com/images/search",
@@ -91,6 +158,17 @@ def fetch_reverse_hits_for_image_url(image_url: str, *, client: httpx.Client) ->
     except Exception:
         logger.warning("bing_reverse_image_failed", exc_info=True)
         return []
+
+
+def fetch_reverse_hits_for_image_url(image_url: str, *, client: httpx.Client) -> list[dict]:
+    """Reverse search for a publicly reachable HTTPS image URL (Lens when configured, else Bing)."""
+    image_url = (image_url or "").strip()
+    if not image_url.lower().startswith("https://"):
+        return []
+    owh = _fetch_openwebninja_hits(image_url, client=client)
+    if owh:
+        return owh
+    return _fetch_bing_hits_for_image_url(image_url, client=client)
 
 
 def validate_client_image_url(url: str) -> tuple[bool, str]:

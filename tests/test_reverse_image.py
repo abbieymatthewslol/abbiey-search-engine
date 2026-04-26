@@ -5,7 +5,12 @@ from unittest.mock import patch
 
 import app as app_module
 import reverse_image_storage as _ris
-from reverse_image import parse_bing_reverse_html, validate_client_image_url
+from reverse_image import (
+    _reverse_hits_from_openwebninja_json,
+    fetch_reverse_hits_for_image_url,
+    parse_bing_reverse_html,
+    validate_client_image_url,
+)
 
 
 def test_validate_client_image_url_https_only():
@@ -20,8 +25,11 @@ def test_sniff_image_magic_avif_ftyp():
     assert app_module._sniff_image_magic(blob) == "image/avif"
 
 
-def test_api_reverse_image_multipart_localhost_without_storage_fallback_errors(client):
+def test_api_reverse_image_multipart_localhost_without_storage_fallback_errors(client, monkeypatch):
     """With no Supabase creds *and* no SITE_URL, uploads 422 with an explicit message."""
+    monkeypatch.delenv("OPENWEBNINJA_API_KEY", raising=False)
+    monkeypatch.delenv("OPENWEBNINJA_REVERSE_IMAGE_KEY", raising=False)
+    monkeypatch.delenv("SITE_URL", raising=False)
     jpeg = b"\xff\xd8\xff\xe0" + b"\x00" * 200
     with patch.object(_ris, "put_object", return_value=None):
         resp = client.post(
@@ -78,6 +86,59 @@ def test_reverse_image_storage_put_object_without_env_returns_none(monkeypatch):
     monkeypatch.delenv("SUPABASE_SECRET_KEY", raising=False)
     assert _ris.put_object(b"\xff\xd8\xff\xe0", "image/jpeg") is None
     assert _ris.is_configured() is False
+
+
+def test_openwebninja_response_maps_to_hits():
+    out = _reverse_hits_from_openwebninja_json(
+        {
+            "status": "OK",
+            "data": [
+                {
+                    "title": "Page title",
+                    "link": "https://example.com/p",
+                    "domain": "example.com",
+                    "image": "https://thumb.example/t.jpg",
+                }
+            ],
+        }
+    )
+    assert len(out) == 1
+    assert out[0]["url"] == "https://example.com/p"
+    assert out[0]["image"] == "https://thumb.example/t.jpg"
+    assert out[0]["source"] == "example.com"
+
+
+def test_fetch_reverse_uses_openwebninja_when_key_set(monkeypatch):
+    """When OPENWEBNINJA_API_KEY is set, the OpenWeb Ninja path is used (not Bing)."""
+    monkeypatch.setenv("OPENWEBNINJA_API_KEY", "ak_testkey")
+
+    class FakeResp:
+        status_code = 200
+
+        def json(self):
+            return {
+                "status": "OK",
+                "data": [
+                    {
+                        "title": "From API",
+                        "link": "https://page.example/hi",
+                        "domain": "page.example",
+                        "image": "https://img.example/x.png",
+                    }
+                ],
+            }
+
+    class FakeClient:
+        def get(self, *a, **k):
+            return FakeResp()
+
+    hits = fetch_reverse_hits_for_image_url(
+        "https://upload.wikimedia.org/wikipedia/commons/3/3a/Cat03.jpg",
+        client=FakeClient(),
+    )
+    assert len(hits) == 1
+    assert hits[0]["url"] == "https://page.example/hi"
+    assert hits[0]["title"] == "From API"
 
 
 def test_parse_bing_reverse_html_extracts_rows():
