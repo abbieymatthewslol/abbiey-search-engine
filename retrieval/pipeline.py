@@ -8,7 +8,6 @@ from collections.abc import Callable
 from typing import Dict, List
 
 from retrieval.aggregator import aggregate_sources
-from retrieval.clustering import cluster_results
 from retrieval.dedup import deduplicate_results
 from retrieval.scoring import score_results
 from retrieval.types import NormalizedResult, RetrievalParams
@@ -43,7 +42,7 @@ def apply_pipeline_stages(
     *,
     params: RetrievalParams,
 ) -> List[dict]:
-    """Dedupe, score, truncate, cluster; return Flask hit dicts."""
+    """Dedupe, score, truncate; return Flask hit dicts."""
     if not normalized:
         return []
     d = deduplicate_results(normalized)
@@ -53,8 +52,7 @@ def apply_pipeline_stages(
         time_sensitive=query_time_sensitive(user_query),
     )
     top = scored[: max(1, params.top_n_after_score)]
-    clustered = cluster_results(top)
-    return [r.to_hit() for r in clustered]
+    return [r.to_hit() for r in top]
 
 
 async def run_text_retrieval_pipeline_async(

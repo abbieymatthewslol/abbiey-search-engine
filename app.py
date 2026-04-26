@@ -69,7 +69,6 @@ import bot_crawler as _bot_crawler
 import billing as _billing
 from api_v1 import api_v1 as _api_v1_bp
 import startup_checks as _startup_checks
-import digital_pet as _digital_pet
 from osint.service import enrich as _osint_enrich_run
 from osint.service import enrich_from_query as _osint_enrich_from_query
 from osint.service import is_osint_enabled as _abbiey_osint_enabled
@@ -870,33 +869,6 @@ def _init_pg_tables():
             created_at TIMESTAMPTZ DEFAULT NOW()
         );
 
-        CREATE TABLE IF NOT EXISTS user_pet (
-            user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-            species TEXT NOT NULL DEFAULT 'hummingbird',
-            xp_total INTEGER NOT NULL DEFAULT 0,
-            last_activity_at TIMESTAMPTZ DEFAULT NOW(),
-            created_at TIMESTAMPTZ DEFAULT NOW(),
-            CONSTRAINT chk_user_pet_species CHECK (
-                species IN ('hummingbird', 'firefly', 'snake', 'dolphin')
-            )
-        );
-        CREATE INDEX IF NOT EXISTS idx_user_pet_xp ON user_pet (xp_total DESC);
-
-        CREATE TABLE IF NOT EXISTS pet_activity_log (
-            id SERIAL PRIMARY KEY,
-            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-            action TEXT NOT NULL,
-            xp INTEGER NOT NULL,
-            created_at TIMESTAMPTZ DEFAULT NOW()
-        );
-        CREATE INDEX IF NOT EXISTS idx_pal_user_time ON pet_activity_log (user_id, created_at DESC);
-
-        CREATE TABLE IF NOT EXISTS pet_daily_xp (
-            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-            day_utc TEXT NOT NULL,
-            xp INTEGER NOT NULL DEFAULT 0,
-            PRIMARY KEY (user_id, day_utc)
-        );
 
         CREATE TABLE IF NOT EXISTS oauth_user_binding (
             user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
@@ -1267,31 +1239,6 @@ def _init_users_db():
             );
             CREATE INDEX IF NOT EXISTS idx_pe_checkout ON payment_events(checkout_token);
 
-            CREATE TABLE IF NOT EXISTS user_pet (
-                user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-                species TEXT NOT NULL DEFAULT 'hummingbird',
-                xp_total INTEGER NOT NULL DEFAULT 0,
-                last_activity_at TEXT DEFAULT (datetime('now')),
-                created_at TEXT DEFAULT (datetime('now')),
-                CHECK (species IN ('hummingbird', 'firefly', 'snake', 'dolphin'))
-            );
-            CREATE INDEX IF NOT EXISTS idx_user_pet_xp ON user_pet (xp_total DESC);
-
-            CREATE TABLE IF NOT EXISTS pet_activity_log (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                action TEXT NOT NULL,
-                xp INTEGER NOT NULL,
-                created_at TEXT DEFAULT (datetime('now'))
-            );
-            CREATE INDEX IF NOT EXISTS idx_pal_user_time ON pet_activity_log (user_id, created_at DESC);
-
-            CREATE TABLE IF NOT EXISTS pet_daily_xp (
-                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                day_utc TEXT NOT NULL,
-                xp INTEGER NOT NULL DEFAULT 0,
-                PRIMARY KEY (user_id, day_utc)
-            );
             CREATE TABLE IF NOT EXISTS oauth_user_binding (
                 user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
                 supabase_auth_uid TEXT NOT NULL,
@@ -5081,11 +5028,7 @@ def search():
         _ajax_ms = int((time.perf_counter() - _t_ajax) * 1000)
         if page == 1:
             _log_search(query, search_type, region or "", len(results.get("results", [])), _ajax_ms, request=request)
-            if current_uid and query and search_type != "saved":
-                try:
-                    _pet_try_award(current_uid, "search")
-                except Exception:
-                    pass
+
         return jsonify(results)
 
     _t0 = time.perf_counter()
@@ -5120,11 +5063,7 @@ def search():
     # Log search analytics (non-blocking, never fails)
     if page == 1:
         _log_search(query, search_type, region or "", len(results.get("results", [])), _latency_ms, request=request)
-        if current_uid and query and search_type != "saved":
-            try:
-                _pet_try_award(current_uid, "search")
-            except Exception:
-                pass
+
 
     # Fetch entity-specific results on page 1 (text only) — parallel
     entity_results = []
@@ -11485,251 +11424,6 @@ def developer_api_key_revoke(key_id):
     return redirect(url_for("developer"))
 
 
-# ---------------------------------------------------------------------------
-# Digital animal (gamified avatar) — XP, leaderboard, tiers
-# ---------------------------------------------------------------------------
-def _pet_day_utc() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
-
-
-def _pet_ensure_row(uid: int) -> None:
-    _users_execute(
-        "INSERT OR IGNORE INTO user_pet (user_id) VALUES (?)",
-        [uid],
-    )
-
-
-def _pet_try_award(uid: int, action: str) -> dict:
-    """Award XP when daily / rate limits allow."""
-    if action not in _digital_pet.PET_ACTION_XP:
-        return {"ok": False, "xp_awarded": 0, "reason": "unknown_action"}
-    base = _digital_pet.PET_ACTION_XP[action]
-    try:
-        _pet_ensure_row(uid)
-    except Exception:
-        logger.exception("pet_ensure_failed")
-        return {"ok": False, "xp_awarded": 0, "reason": "db"}
-
-    if action == "share":
-        recent = _users_execute(
-            "SELECT id FROM pet_activity_log WHERE user_id=? AND action='share' "
-            "AND created_at > datetime('now', '-2 minutes') LIMIT 1",
-            [uid],
-        )
-        if recent:
-            return {"ok": False, "xp_awarded": 0, "reason": "share_cooldown"}
-
-    if action == "search":
-        cnt_rows = _users_execute(
-            "SELECT COUNT(*) AS c FROM pet_activity_log WHERE user_id=? AND action='search' "
-            "AND created_at > datetime('now', '-1 hour')",
-            [uid],
-        )
-        n = int(cnt_rows[0].get("c", 0) or 0) if cnt_rows else 0
-        if n >= _digital_pet.SEARCH_MAX_PER_HOUR:
-            return {"ok": False, "xp_awarded": 0, "reason": "search_hourly_cap"}
-
-    day = _pet_day_utc()
-    daily_rows = _users_execute(
-        "SELECT xp FROM pet_daily_xp WHERE user_id=? AND day_utc=?",
-        [uid, day],
-    )
-    daily_so_far = int(daily_rows[0]["xp"]) if daily_rows else 0
-    room = max(0, _digital_pet.DAILY_XP_CAP - daily_so_far)
-    if room <= 0:
-        return {"ok": False, "xp_awarded": 0, "reason": "daily_cap", "daily_remaining": 0}
-    grant = min(base, room)
-
-    try:
-        _users_execute(
-            "INSERT INTO pet_activity_log (user_id, action, xp) VALUES (?,?,?)",
-            [uid, action, grant],
-        )
-        _users_execute(
-            "UPDATE user_pet SET xp_total = xp_total + ?, last_activity_at = datetime('now') WHERE user_id=?",
-            [grant, uid],
-        )
-        dr = _users_execute("SELECT xp FROM pet_daily_xp WHERE user_id=? AND day_utc=?", [uid, day])
-        if dr:
-            _users_execute(
-                "UPDATE pet_daily_xp SET xp = xp + ? WHERE user_id=? AND day_utc=?",
-                [grant, uid, day],
-            )
-        else:
-            _users_execute(
-                "INSERT INTO pet_daily_xp (user_id, day_utc, xp) VALUES (?,?,?)",
-                [uid, day, grant],
-            )
-    except Exception:
-        logger.exception("pet_award_failed uid=%s action=%s", uid, action)
-        return {"ok": False, "xp_awarded": 0, "reason": "db"}
-
-    return {"ok": True, "xp_awarded": grant, "daily_remaining": room - grant}
-
-
-def _pet_rank_and_tier(uid: int, xp_total: int) -> tuple[int, float, str]:
-    """Rank among users with XP > 0; percentile 0 = best. Returns (rank, pct, tier)."""
-    if xp_total <= 0:
-        return (0, 1.0, "novice")
-    tot_rows = _users_execute("SELECT COUNT(*) AS c FROM user_pet WHERE xp_total > 0", [])
-    total = int(tot_rows[0]["c"]) if tot_rows else 0
-    if total <= 0:
-        return (1, 0.0, "platinum")
-    better = _users_execute(
-        "SELECT COUNT(*) AS c FROM user_pet WHERE xp_total > ? OR (xp_total = ? AND user_id < ?)",
-        [xp_total, xp_total, uid],
-    )
-    n_better = int(better[0]["c"]) if better else 0
-    rank = n_better + 1
-    pct = (rank - 1) / max(total - 1, 1) if total > 1 else 0.0
-    return (rank, pct, _digital_pet.tier_from_percentile_rank(pct))
-
-
-def _pet_bookmark_cap_for_uid(uid: int) -> int:
-    rows = _users_execute("SELECT xp_total FROM user_pet WHERE user_id=?", [uid])
-    if not rows:
-        return _digital_pet.bookmark_cap_for_tier("novice")
-    xp = int(rows[0].get("xp_total") or 0)
-    _r, _p, tier = _pet_rank_and_tier(uid, xp)
-    return _digital_pet.bookmark_cap_for_tier(tier)
-
-
-_PET_SPECIES_LABELS = {
-    "hummingbird": "Hummingbird",
-    "firefly": "Firefly",
-    "snake": "Snake",
-    "dolphin": "Dolphin",
-}
-
-
-def _pet_snapshot_for_user(uid: int) -> dict:
-    rows = _users_execute(
-        "SELECT species, xp_total FROM user_pet WHERE user_id=?",
-        [uid],
-    )
-    if not rows:
-        return {
-            "has_pet": False,
-            "species": "hummingbird",
-            "species_label": _PET_SPECIES_LABELS["hummingbird"],
-            "xp_total": 0,
-            "level": 1,
-            "stage": 0,
-            "tier": "novice",
-            "rank": 0,
-        }
-    species = (rows[0].get("species") or "hummingbird").lower()
-    if species not in _digital_pet.PET_SPECIES:
-        species = "hummingbird"
-    xp = int(rows[0].get("xp_total") or 0)
-    rank, _pct, tier = _pet_rank_and_tier(uid, xp)
-    return {
-        "has_pet": True,
-        "species": species,
-        "species_label": _PET_SPECIES_LABELS.get(species, species.title()),
-        "xp_total": xp,
-        "level": _digital_pet.level_from_xp(xp),
-        "stage": _digital_pet.stage_from_xp(xp),
-        "tier": tier,
-        "rank": rank,
-    }
-
-
-@app.route("/pet")
-def pet_home():
-    redir = _require_login()
-    if redir:
-        return redir
-    uid = _session_user_id_int(session.get("user_id"))
-    if not uid:
-        return redirect(url_for("login", next="/pet"))
-    snap = _pet_snapshot_for_user(uid)
-    return render_template("pet.html", pet=snap, species_list=list(_digital_pet.PET_SPECIES))
-
-
-@app.route("/pet/leaderboard")
-def pet_leaderboard():
-    rows = []
-    try:
-        rows = _users_execute(
-            "SELECT u.username, u.display_name, p.species, p.xp_total, p.last_activity_at, u.id AS user_id, u.created_at "
-            "FROM user_pet p INNER JOIN users u ON u.id = p.user_id "
-            "WHERE p.xp_total > 0 "
-            "ORDER BY p.xp_total DESC, p.last_activity_at DESC, u.created_at ASC "
-            "LIMIT 100",
-            [],
-        )
-    except Exception:
-        logger.exception("pet_leaderboard_failed")
-    ranked = []
-    for i, r in enumerate(rows or [], start=1):
-        xp = int(r.get("xp_total") or 0)
-        uid = int(r["user_id"])
-        st = _digital_pet.stage_from_xp(xp)
-        ranked.append(
-            {
-                "rank": i,
-                "username": r.get("username") or "",
-                "display_name": r.get("display_name") or "",
-                "species": (r.get("species") or "hummingbird").lower(),
-                "xp_total": xp,
-                "level": _digital_pet.level_from_xp(xp),
-                "stage": st,
-                "is_you": uid == _session_user_id_int(session.get("user_id")),
-            }
-        )
-    return render_template("pet_leaderboard.html", leaderboard=ranked)
-
-
-@app.route("/api/pet/me", methods=["GET"])
-def api_pet_me():
-    uid, bearer_err = _api_auth_user()
-    if bearer_err:
-        return bearer_err
-    if not uid:
-        return jsonify({"error": "Not authenticated"}), 401
-    return jsonify({"pet": _pet_snapshot_for_user(uid)})
-
-
-@app.route("/api/pet/species", methods=["POST"])
-@limiter.limit("30/minute")
-def api_pet_species():
-    uid, bearer_err = _api_auth_user()
-    if bearer_err:
-        return bearer_err
-    if not uid:
-        return jsonify({"error": "Not authenticated"}), 401
-    data = request.get_json(silent=True) or {}
-    sp = (data.get("species") or "").strip().lower()
-    if sp not in _digital_pet.PET_SPECIES:
-        return jsonify({"error": "Invalid species"}), 400
-    try:
-        _pet_ensure_row(uid)
-        _users_execute("UPDATE user_pet SET species=? WHERE user_id=?", [sp, uid])
-    except Exception:
-        logger.exception("api_pet_species_failed")
-        return jsonify({"error": "Could not save"}), 503
-    return jsonify({"ok": True, "pet": _pet_snapshot_for_user(uid)})
-
-
-@app.route("/api/pet/activity", methods=["POST"])
-@limiter.limit("120/minute")
-def api_pet_activity():
-    """Client-reported actions (e.g. share). Server enforces cooldowns and caps."""
-    uid, bearer_err = _api_auth_user()
-    if bearer_err:
-        return bearer_err
-    if not uid:
-        return jsonify({"error": "Not authenticated"}), 401
-    data = request.get_json(silent=True) or {}
-    action = (data.get("action") or "").strip().lower()
-    if action != "share":
-        return jsonify({"error": "Unsupported action"}), 400
-    out = _pet_try_award(uid, "share")
-    out["pet"] = _pet_snapshot_for_user(uid)
-    return jsonify(out)
-
-
 @app.route("/profile")
 def profile():
     redir = _require_login()
@@ -11743,10 +11437,9 @@ def profile():
             session.pop("user_id", None)
             return redirect(url_for("login"))
 
-        bcap = _pet_bookmark_cap_for_uid(uid)
         bookmarks = _users_execute(
-            "SELECT * FROM user_bookmarks WHERE user_id=? ORDER BY saved_at DESC LIMIT ?",
-            [uid, int(bcap)],
+            "SELECT * FROM user_bookmarks WHERE user_id=? ORDER BY saved_at DESC LIMIT 100",
+            [uid],
         )
         history = _users_execute(
             "SELECT query, search_type, searched_at FROM user_search_history"
@@ -12212,11 +11905,7 @@ def api_user_bookmarks_save():
     except Exception:
         logger.exception("api_user_bookmarks_post_failed")
         return jsonify({"error": "Could not save bookmark. Try again later."}), 503
-    if bid:
-        try:
-            _pet_try_award(uid, "bookmark")
-        except Exception:
-            pass
+
     return jsonify({"ok": True, "id": bid}), 201
 
 
