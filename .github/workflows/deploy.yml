@@ -1,13 +1,13 @@
 name: Deploy to Vercel
 
-# Automatic: every push to master runs tests, then `vercel build` + `vercel deploy --prebuilt --prod`.
+# Automatic: every push to main runs tests, then `vercel build` + `vercel deploy --prebuilt --prod`.
 # Requires secret VERCEL_TOKEN. Manual re-run: Actions → this workflow → Run workflow.
-# Vercel Git builds on `main` are skipped (vercel.json ignoreCommand) so "sync main" + this workflow do not double-deploy.
+# Vercel Git builds on `main` are skipped (vercel.json ignoreCommand) so GitHub Actions remains the single production path.
 # See .github/PLATFORM_INTEGRATIONS.md
 on:
   push:
     branches:
-      - master
+      - main
   # GitHub → Actions → "Deploy to Vercel" → Run workflow (manual CLI deploy / rollback)
   workflow_dispatch:
 

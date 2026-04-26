@@ -18,7 +18,7 @@ import urllib.error
 import json
 
 LIVE_URL   = "https://www.abbieysearch.com"
-GITHUB_API = "https://api.github.com/repos/abbieymatthewslol/abbiey-search-engine-2/commits/master"
+GITHUB_API = "https://api.github.com/repos/abbieymatthewslol/abbiey-search-engine-2/commits/main"
 REPO_ROOT  = subprocess.check_output(
     ["git", "rev-parse", "--show-toplevel"]
 ).decode().strip()
@@ -101,7 +101,7 @@ def main():
     github_ok = bool(github_hash and github_hash.startswith(local_s))
 
     print(f"  Local HEAD    {local_s}")
-    print(f"  GitHub master {github_s}  {symbol(github_ok)}")
+    print(f"  GitHub main   {github_s}  {symbol(github_ok)}")
     print()
 
     # --- Template fingerprint checks ---
@@ -127,7 +127,7 @@ def main():
 
     if not github_ok:
         print(f"{RED}  ✗ Local commits NOT pushed to GitHub.{RESET}")
-        print(f"    Run: git push origin master")
+        print(f"    Run: git push origin main")
         drift = True
 
     if not all_templates_ok:

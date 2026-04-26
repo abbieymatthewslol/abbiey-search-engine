@@ -54,5 +54,5 @@ Last updated: 2026-04-07
 ## 📦 Infra / Ops
 
 - [x] Add `CHANGELOG.md` — version history established
-- [x] Set up GitHub Actions CI — `pytest` runs on push to master; deploy workflow gates on test pass
+- [x] Set up GitHub Actions CI — `pytest` runs on push to main; deploy workflow gates on test pass
 - [x] Update `docs/PROJECT-INDEX.md` entry with current status and last feature set

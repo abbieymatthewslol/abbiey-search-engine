@@ -39,7 +39,7 @@ Before considering work “done”, try to ensure:
   - Python runtime/build config issues
 
 # Branch/PR policy (important)
-- Canonical branch is **master** (unless explicitly changed).
+- Canonical branch is **main**.
 - Avoid creating lots of branches.
 - Prefer one PR per fix/feature.
 - If multiple “copilot/*” or “task-definition-needed/*” branches exist, do **not** merge blindly—summarize differences and recommend the safest merge/cherry-pick.

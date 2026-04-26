@@ -7364,7 +7364,7 @@ You are an expert in every aspect of this project. You are direct, insightful, a
 == DEPLOYMENT ==
 The old deploy hook (api.vercel.com/v1/integrations/deploy/...) NEVER worked — it redeploys an old snapshot.
 Correct deploy: cd /home/alex/abbiey-search-engine && /home/alex/node_modules/.bin/vercel deploy --prod --token <VERCEL_TOKEN>
-GitHub: github.com/abbieymatthewslol/abbiey-search-engine (master branch)
+GitHub: github.com/abbieymatthewslol/abbiey-search-engine-2 (main branch)
 GitHub Actions workflow: .github/workflows/deploy.yml — auto-deploys on push once VERCEL_TOKEN secret is added
 
 == KNOWN BUGS FIXED ==

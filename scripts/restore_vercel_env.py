@@ -361,4 +361,4 @@ else:
     print(f"\n{GREEN}All env vars pushed successfully!{RESET}")
     print(f"\nRedeploy Vercel to pick up changes:")
     print(f"  vercel deploy --prod")
-    print(f"  # or: git commit --allow-empty -m 'chore: redeploy' && git push origin master")
+    print(f"  # or: git commit --allow-empty -m 'chore: redeploy' && git push origin main")
