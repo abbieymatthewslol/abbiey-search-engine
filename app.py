@@ -2205,17 +2205,6 @@ def _log_search(
     _analytics_pool.submit(_log_search_worker, *args)
 
 
-def _log_error(route: str, message: str, level: str = "error"):
-    """Log an error event to analytics DB — never raises."""
-    try:
-        _analytics_execute(
-            "INSERT INTO error_logs (route, level, message) VALUES (?,?,?)",
-            [route[:200], level, str(message)[:1000]],
-        )
-    except Exception:
-        pass
-
-
 # ---------------------------------------------------------------------------
 # Query expansion — synonym dictionary
 # ---------------------------------------------------------------------------
@@ -9378,14 +9367,6 @@ _DISPOSABLE_EMAIL_DOMAINS = frozenset({
     "mail.tm", "tempail.com", "mytemp.email", "tempmailaddress.com",
     "20minutemail.com", "mintemail.com", "burnermail.io", "spamgourmet.com",
 })
-
-
-def _person_fetch_worker(query, max_results):
-    """Used by the retry ThreadPoolExecutor; never raises."""
-    try:
-        return _try_ddg(query, max_results, "text", safesearch="off")
-    except Exception:
-        return []
 
 
 _ABBIEY_UA = (
