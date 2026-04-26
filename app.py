@@ -3295,6 +3295,24 @@ def about():
     return render_template("about.html")
 
 
+@app.route("/pricing")
+def pricing():
+    """Plans, free tier, and API billing summary."""
+    return render_template("pricing.html")
+
+
+@app.route("/contact")
+def contact():
+    """Support email and community links."""
+    return render_template("contact.html")
+
+
+@app.route("/blog")
+def blog():
+    """Product updates index (see also /changelog)."""
+    return render_template("blog.html")
+
+
 @app.route("/bots")
 def bots():
     """Landing page explaining custom search bots and prompting sign-up."""

@@ -1,6 +1,40 @@
-"""Tests for community / refund / status / changelog / docs pages."""
+"""Tests for community / refund / status / changelog / docs pages, and public SEO pages."""
 
 from __future__ import annotations
+
+import re
+
+import pytest
+
+
+def _assert_core_seo_meta(body: str) -> None:
+    assert 'name="description"' in body
+    assert 'property="og:description"' in body
+
+
+def _assert_og_url_path(body: str, path: str) -> None:
+    m = re.search(r'<meta\s+property="og:url"\s+content="([^"]+)"', body)
+    assert m, "expected a meta property=og:url"
+    url = m.group(1).rstrip("/")
+    assert url.endswith(path) or url.endswith(path + "/"), (url, path)
+
+
+@pytest.mark.parametrize(
+    "path,og_path",
+    [
+        ("/search", "/search"),
+        ("/about", "/about"),
+        ("/pricing", "/pricing"),
+        ("/contact", "/contact"),
+        ("/blog", "/blog"),
+    ],
+)
+def test_public_landing_seo_meta(client, path, og_path):
+    resp = client.get(path)
+    assert resp.status_code == 200
+    body = resp.data.decode("utf-8", "replace")
+    _assert_core_seo_meta(body)
+    _assert_og_url_path(body, og_path)
 
 
 def test_community_page_renders(client):
