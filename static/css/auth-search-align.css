@@ -128,6 +128,53 @@ body.page-auth.page-signup .auth-layout {
   max-width: 600px;
 }
 
+/* Signup: Google is the main path; email block reads as optional alternative */
+body.page-auth.page-signup .auth-signup-google-primary {
+  width: 100%;
+  min-height: 52px;
+  padding: 0.85rem 1.5rem;
+  font-size: 1.0625rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  border-radius: 12px;
+  box-shadow: 0 6px 22px rgba(66, 133, 244, 0.45);
+}
+
+body.page-auth.page-signup .auth-signup-google-primary:hover {
+  box-shadow: 0 8px 26px rgba(66, 133, 244, 0.55);
+  transform: scale(1.02);
+}
+
+body.page-auth.page-signup .auth-signup-email-secondary {
+  margin-top: 0.5rem;
+}
+
+body.page-auth.page-signup .auth-signup-email-eyebrow {
+  text-align: center;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin: 0 0 0.5rem;
+}
+
+body.page-auth.page-signup .auth-btn-email {
+  background: var(--search-surface, var(--card-bg, #1c1c1c));
+  color: var(--text);
+  border: 1px solid var(--search-border, var(--border));
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+body.page-auth.page-signup .auth-btn-email:hover {
+  background: var(--search-surface-focus, var(--bg-hover));
+  color: var(--text);
+  border-color: var(--search-border-hover, var(--border));
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.16);
+  transform: translateY(-1px);
+  opacity: 1;
+}
+
 body.page-signup .auth-flash-hidden {
   display: none !important;
 }
