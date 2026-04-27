@@ -1,0 +1,42 @@
+static/style.css
+  69827a80fc7962cb 754-814,1922-1944
+tests/test_unfiltered_engagement.py
+  69827a80fc7962cb 1-49
+static/script.js
+  69827a80fc7962cb 6-7,2110-2214,2246-2255,2291-2295,2337-2338,2346-2354,3580-3581,3627-3687,3853,3862-3863
+vercel.json
+  69827a80fc7962cb 26
+templates/index.html
+  69827a80fc7962cb 1508-1515,1521-1528
+unfiltered_engagement.py
+  69827a80fc7962cb 1-152
+app.py
+  69827a80fc7962cb 71,12650,12661-12667
+AGENTS.md
+  h_c2f486820b99b6 4,14,18,24,28,32
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "fc110eacd84e1c13d886dd4360b3d5328e33b96a",
+  "prompts": {
+    "69827a80fc7962cb": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "7c960af2-87a7-4fc0-8521-23d04326a9cc",
+        "model": "composer-2"
+      },
+      "human_author": "abbiey",
+      "messages": [],
+      "total_additions": 516,
+      "total_deletions": 11,
+      "accepted_lines": 21158,
+      "overriden_lines": 0
+    }
+  },
+  "humans": {
+    "h_c2f486820b99b6": {
+      "author": "abbiey"
+    }
+  }
+}
