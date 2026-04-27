@@ -30,6 +30,23 @@ def test_escalation_after_generic_primer():
     assert "I still may not" in r or "unfiltered" in r.lower()
 
 
+def test_escalation_after_generic_ui_primer():
+    last_asst = {
+        "role": "assistant",
+        "content": "abbiey.search has several UIs: mic, grip, preview, and chat.",
+    }
+    r = product_chatbot_fallback_reply("still vague", [last_asst])
+    assert "I still may not" in r or "unfiltered" in r.lower()
+
+
+def test_deep_web_tor_word_boundary():
+    r = product_chatbot_fallback_reply("can you help me find a tutor", [])
+    assert "Deep Web tab" not in r
+
+    r = product_chatbot_fallback_reply("how do I use tor links", [])
+    assert "Deep Web tab" in r
+
+
 def test_api_chatbot_fallback_on_ollama_error(client, monkeypatch):
     def boom(*a, **k):
         raise RuntimeError("ollama down")

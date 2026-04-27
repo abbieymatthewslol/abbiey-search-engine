@@ -138,6 +138,7 @@ def product_chatbot_fallback_reply(message: str, history: list) -> str:
             "I am not sure which part of abbiey.search",
             "Did you mean:",
             "To give a precise answer:",
+            "abbiey.search has several UIs",
             "If something feels broken",
         )
     )
@@ -157,7 +158,7 @@ def product_chatbot_fallback_reply(message: str, history: list) -> str:
             "Drag up or down to **change the order**; preferences can persist depending on your settings. "
             "This is separate from the **preview** panel — the vertical bar between list and preview only **resizes** them."
         )
-    if any(k in m for k in DEEP_KEYWORDS) and not _voice_intent(m):
+    if _w(m, *DEEP_KEYWORDS) and not _voice_intent(m):
         return (
             "**Deep Web tab** searches .onion-related pages via **Ahmia** (and fallbacks if needed). "
             "Read the **warning banner** — open only links you understand; the site does not require Tor in "
