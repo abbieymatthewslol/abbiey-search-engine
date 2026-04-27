@@ -4928,21 +4928,7 @@ def search():
                 "onion_scope": onion_scope,
                 "onion_mode": onion_mode,
             },
-    # Server-side search limit for free-tier users
         )
-    if query and not current_user_has_paid_access:
-        client_ip = request.remote_addr or ""
-        ua = request.headers.get("User-Agent") or ""
-        if not _is_oauth_verification_crawler_ua(ua) and _server_search_limit_reached(client_ip):
-            return render_template(
-                "index.html",
-                **{
-                    **_TEMPLATE_DEFAULTS,
-                    "current_user_has_paid_access": False,
-                    "osint_enabled": _abbiey_osint_enabled(),
-                    "search_notice": "You\u2019ve reached your daily free search limit. Unlock unlimited searches or wait 24 hours.",
-                },
-            ), 429
 
     if search_type == "saved":
         return render_template(

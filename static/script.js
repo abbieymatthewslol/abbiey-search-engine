@@ -1,7 +1,7 @@
 /**
  * script.js — main client bundle (single file for simple deploy/caching).
  * Logical regions (grep for "// ====="):
- *   Paywall, loading bars, theme, settings modal, filters, infinite scroll,
+ *   Post-checkout search unlock sync, loading bars, theme, settings modal, filters, infinite scroll,
  *   lightbox, preview panel + layout gutter, "/" shortcut, chat, onion verify,
  *   bookmarks, related/trending, voice, result reorder prefs (drag), scroll indexing ring,
  *   unfiltered leaderboard, in-results filter, view mode, ripple, tabs.
@@ -152,24 +152,14 @@ document.addEventListener("DOMContentLoaded", () => {
     );
   }
 
-  // ===== Soft paywall: 7 free searches, Stripe $7, or 24h wait (client-side) =====
-  (async function initPaywall() {
-    const LS = {
-      count: "abbiey_search_count",
-      unlocked: "abbiey_unlocked",
-      resume: "abbiey_paywall_resume_at",
-      sessUrl: "abbiey_counted_search_url",
-    };
+  // Search paywall (quota / $7 / 24h) removed; keep Stripe return handling so post-checkout unlock still syncs.
+  (async function initSearchUnlockFromReturn() {
     const ACCESS_URLS = {
       status: "/api/search-access",
       claim: "/api/search-access/claim",
-      prepare: "/api/search-access/prepare-checkout",
     };
     const UNLOCK_COOKIE = "abbiey_search_unlocked";
-    /** ~10 years — paid search unlock is meant to persist (API key checkout uses /developer?billing= only, never paid=1). */
     const UNLOCK_COOKIE_MAX_AGE = 315360000;
-    const FREE_LIMIT = 7;
-    const DAY_MS = 24 * 60 * 60 * 1000;
     let hasServerUnlock = window.__currentUserHasPaidAccess === true;
 
     function hasUnlockCookie() {
@@ -189,7 +179,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function setPaidUnlockPersistence() {
       try {
-        localStorage.setItem(LS.unlocked, "1");
+        localStorage.setItem("abbiey_unlocked", "1");
       } catch (_) {}
       try {
         const secure = window.location.protocol === "https:";
@@ -204,9 +194,8 @@ document.addEventListener("DOMContentLoaded", () => {
     function applyLocalUnlock() {
       hasServerUnlock = true;
       setPaidUnlockPersistence();
-      clearQuotaState();
     }
-    async function refreshServerUnlock(silent = true) {
+    async function refreshServerUnlock() {
       try {
         const result = await fetchJson(ACCESS_URLS.status);
         if (result.ok && result.data && result.data.unlocked) {
@@ -214,15 +203,13 @@ document.addEventListener("DOMContentLoaded", () => {
           return true;
         }
       } catch (_) {}
-      if (!silent) {
-        showToast("We couldn't confirm your unlimited access right now.", "error");
-      }
       return false;
     }
     async function claimReturnedUnlock() {
-      // Retrieve the checkout token stored before redirect to Stripe
       var checkoutToken = "";
-      try { checkoutToken = localStorage.getItem("abbiey_checkout_token") || ""; } catch (_) {}
+      try {
+        checkoutToken = localStorage.getItem("abbiey_checkout_token") || "";
+      } catch (_) {}
       try {
         const result = await fetchJson(ACCESS_URLS.claim, {
           method: "POST",
@@ -230,66 +217,32 @@ document.addEventListener("DOMContentLoaded", () => {
           body: JSON.stringify({ checkout_token: checkoutToken }),
         });
         if (result.ok && result.data && result.data.unlocked) {
-          try { localStorage.removeItem("abbiey_checkout_token"); } catch (_) {}
+          try {
+            localStorage.removeItem("abbiey_checkout_token");
+          } catch (_) {}
           applyLocalUnlock();
           return true;
         }
         showToast(
-          userFacingApiError(result.data && result.data.message, "We couldn't sync your unlimited access yet."),
+          userFacingApiError(result.data && result.data.message, "We couldn't sync your unlock yet. Try again from your account or email recovery."),
           "error"
         );
       } catch (_) {
-        showToast("We couldn't sync your unlimited access yet.", "error");
+        showToast("We couldn't sync your unlock yet.", "error");
       }
       return false;
     }
-    async function markCheckoutPending() {
-      // Use fetch (not sendBeacon) so the response cookie gets stored
+    if (localStorage.getItem("abbiey_unlocked") === "1" || hasUnlockCookie()) {
       try {
-        const result = await fetchJson(ACCESS_URLS.prepare, { method: "POST" });
-        if (result.ok && result.data) {
-          return {
-            checkoutToken: result.data.checkout_token || "",
-            checkoutUrl: result.data.checkout_url || "",
-          };
-        }
+        localStorage.setItem("abbiey_unlocked", "1");
       } catch (_) {}
-      return null;
+      hasServerUnlock = true;
     }
-
-    function unlocked() {
-      if (hasServerUnlock || window.__currentUserHasPaidAccess === true) return true;
-      if (localStorage.getItem(LS.unlocked) === "1") return true;
-      if (hasUnlockCookie()) {
-        try {
-          localStorage.setItem(LS.unlocked, "1");
-        } catch (_) {}
-        return true;
-      }
-      return false;
-    }
-    function getCount() {
-      return parseInt(localStorage.getItem(LS.count) || "0", 10) || 0;
-    }
-    function setCount(n) {
-      localStorage.setItem(LS.count, String(Math.max(0, n)));
-    }
-    function getResume() {
-      return parseInt(localStorage.getItem(LS.resume) || "0", 10) || 0;
-    }
-    function setResume(ts) {
-      localStorage.setItem(LS.resume, String(ts));
-    }
-    function clearQuotaState() {
-      localStorage.removeItem(LS.count);
-      localStorage.removeItem(LS.resume);
-    }
-
     const params = new URLSearchParams(window.location.search);
     if (params.get("unlocked") === "1" || params.get("paid") === "1") {
-      let restored = await claimReturnedUnlock();
+      var restored = await claimReturnedUnlock();
       if (!restored) {
-        restored = await refreshServerUnlock(true);
+        restored = await refreshServerUnlock();
       }
       if (!restored) {
         applyLocalUnlock();
@@ -299,210 +252,11 @@ document.addEventListener("DOMContentLoaded", () => {
       const qs = params.toString();
       const nu = window.location.pathname + (qs ? "?" + qs : "") + window.location.hash;
       window.history.replaceState({}, "", nu);
+    } else {
+      await refreshServerUnlock();
     }
-
-    await refreshServerUnlock(true);
-    unlocked();
-
-    const resumeAt = getResume();
-    if (resumeAt && Date.now() >= resumeAt) {
-      clearQuotaState();
-    }
-
-    const overlay = document.getElementById("paywall-overlay");
-    const titleEl = document.getElementById("paywall-title");
-    const subEl = document.getElementById("paywall-subtitle");
-    const closeBtn = document.getElementById("paywall-close");
-    const waitBtn = document.getElementById("paywall-wait-24h");
-    let paywallReturnFocus = null;
-    if (!overlay || !titleEl || !subEl) return;
-
-    function formatWait() {
-      const r = getResume();
-      if (!r || Date.now() >= r) return "";
-      const h = Math.ceil((r - Date.now()) / 3600000);
-      return h < 1 ? "less than an hour" : `about ${h} hour${h === 1 ? "" : "s"}`;
-    }
-
-    function showPaywall(cooldownOnly, trigger = null) {
-      paywallReturnFocus = rememberFocus(trigger);
-      overlay.hidden = false;
-      overlay.setAttribute("aria-hidden", "false");
-      document.body.style.overflow = "hidden";
-      if (cooldownOnly) {
-        titleEl.textContent = "Free quota resets soon";
-        subEl.textContent = `Your free searches reset in ${formatWait()}. You can still unlock unlimited access anytime with a one-time $7 payment.`;
-      } else {
-        titleEl.textContent = "You've reached your free search limit.";
-        subEl.textContent = "You can unlock unlimited searches with a one-time payment, or wait 24 hours for your free quota to reset.";
-      }
-      afterMotion(0, () => restoreFocus(closeBtn));
-    }
-
-    function hidePaywall({ restore = true } = {}) {
-      overlay.hidden = true;
-      overlay.setAttribute("aria-hidden", "true");
-      document.body.style.overflow = "";
-      if (restore) restoreFocus(paywallReturnFocus);
-      paywallReturnFocus = null;
-    }
-
-    /** Same logical search across pagination should count once (infinite scroll uses ?page=). */
-    function hashSearchKey(value) {
-      let hash = 2166136261;
-      const input = String(value || "");
-      for (let i = 0; i < input.length; i++) {
-        hash ^= input.charCodeAt(i);
-        hash = Math.imul(hash, 16777619);
-      }
-      return (hash >>> 0).toString(16).padStart(8, "0");
-    }
-    function normalizeSearchUrlKey() {
-      try {
-        const u = new URL(window.location.href);
-        u.searchParams.delete("page");
-        const p = u.searchParams;
-        if (typeof p.sort === "function") p.sort();
-        const qs = p.toString();
-        return "search:" + hashSearchKey(u.pathname + (qs ? "?" + qs : ""));
-      } catch (_) {
-        return "search:" + hashSearchKey(window.location.pathname + window.location.search);
-      }
-    }
-    function buildPrivateCheckoutReturnPath() {
-      try {
-        const current = new URL(window.location.href);
-        const clean = new URL(current.pathname || "/search", window.location.origin);
-        [
-          "type",
-          "region",
-          "lang",
-          "df",
-          "cleanweb",
-          "safesearch",
-          "img_adv",
-          "img_license",
-          "img_license_type",
-          "img_aspect",
-          "img_size",
-          "img_ext",
-        ].forEach((key) => {
-          current.searchParams.getAll(key).forEach((value) => {
-            if (value) clean.searchParams.append(key, value);
-          });
-        });
-        current.searchParams.getAll("img_src").forEach((value) => {
-          if (value) clean.searchParams.append("img_src", value);
-        });
-        const qs = clean.searchParams.toString();
-        return clean.pathname + (qs ? "?" + qs : "") + (current.hash || "");
-      } catch (_) {
-        return "/search";
-      }
-    }
-
-    if (closeBtn) closeBtn.addEventListener("click", hidePaywall);
-    overlay.addEventListener("click", (e) => {
-      if (e.target === overlay) hidePaywall();
-    });
-    if (waitBtn) {
-      waitBtn.addEventListener("click", () => {
-        setResume(Date.now() + DAY_MS);
-        hidePaywall();
-      });
-    }
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && !overlay.hidden) hidePaywall();
-    });
-
-    const qFromPage =
-      typeof window.__searchQuery !== "undefined" && window.__searchQuery
-        ? String(window.__searchQuery).trim()
-        : "";
-    if (qFromPage && !unlocked()) {
-      const r = getResume();
-      if (!r || Date.now() >= r) {
-        const urlKey = normalizeSearchUrlKey();
-        if (sessionStorage.getItem(LS.sessUrl) !== urlKey) {
-          sessionStorage.setItem(LS.sessUrl, urlKey);
-          setCount(getCount() + 1);
-        }
-      }
-    }
-
-    function mustBlockNavigation() {
-      if (unlocked()) return false;
-      const r = getResume();
-      if (r && Date.now() < r) return true;
-      return getCount() >= FREE_LIMIT;
-    }
-
-    function isCooldownOnly() {
-      const r = getResume();
-      return !!(r && Date.now() < r);
-    }
-
-    const form = document.getElementById("search-form");
-    if (form) {
-      form.addEventListener(
-        "submit",
-        (e) => {
-          const input = document.getElementById("search-input");
-          const qq = input && input.value.trim();
-          if (!qq) return;
-          if (!mustBlockNavigation()) return;
-          e.preventDefault();
-          e.stopPropagation();
-          showPaywall(isCooldownOnly(), e.submitter || input || form);
-        },
-        true
-      );
-    }
-
-    const tabs = document.querySelector(".search-tabs");
-    if (tabs) {
-      tabs.addEventListener(
-        "click",
-        (e) => {
-          const a = e.target.closest("a[href]");
-          if (!a || !a.getAttribute("href") || !a.getAttribute("href").includes("/search")) return;
-          if (!mustBlockNavigation()) return;
-          e.preventDefault();
-          e.stopPropagation();
-          showPaywall(isCooldownOnly(), a);
-        },
-        true
-      );
-    }
-
-    const payStripe = document.getElementById("paywall-stripe-link");
-    if (payStripe) {
-      payStripe.addEventListener(
-        "click",
-        async (e) => {
-          e.preventDefault();
-          // Prepare checkout and get a reference token
-          const pending = await markCheckoutPending();
-          const baseUrl = (pending && pending.checkoutUrl) || payStripe.href;
-          let stripeUrl = baseUrl;
-          if (pending && pending.checkoutToken) {
-            try {
-              localStorage.setItem("abbiey_checkout_token", pending.checkoutToken);
-              const su = new URL(baseUrl);
-              su.searchParams.set("client_reference_id", pending.checkoutToken);
-              stripeUrl = su.toString();
-            } catch (_) {}
-          }
-          try {
-            localStorage.setItem(
-              "abbiey_checkout_return",
-              JSON.stringify({ kind: "search", path: buildPrivateCheckoutReturnPath() })
-            );
-          } catch (_) {}
-          window.open(stripeUrl, "_blank", "noopener,noreferrer");
-        },
-        true
-      );
+    if (hasServerUnlock && typeof window !== "undefined") {
+      window.__currentUserHasPaidAccess = true;
     }
   })();
 
