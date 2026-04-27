@@ -4393,13 +4393,8 @@ def search():
     _gate_name = _type_to_gate.get(search_type)
     if _gate_name:
         if not _feature_allowed(_gate_name, unlocked=True):
-            # "none" gate → 404 (feature disabled); "paid" gate for free user → 403
-            gate_val = _FEATURE_GATES.get(_gate_name, "all")
-            if gate_val == "none":
-                return render_template("error.html", code=404, title="Feature Unavailable",
-                                       message="This search type is not available.", extra_help=False), 404
-            return render_template("error.html", code=403, title="Paid Feature",
-                                   message="This search type requires a paid account.", extra_help=False), 403
+            return render_template("error.html", code=404, title="Feature Unavailable",
+                                   message="This search type is not available.", extra_help=False), 404
 
     user_feature_gates = _feature_gates_for_user(True)
 

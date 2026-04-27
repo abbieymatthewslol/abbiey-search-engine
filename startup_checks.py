@@ -112,6 +112,13 @@ def assert_production_env(*, strict: bool | None = None) -> None:
 
     enforce = strict if strict is not None else is_production()
     missing = _missing(_REQUIRED)
+    missing.extend(
+        _missing(
+            req
+            for req, gate_env in _CONDITIONAL
+            if (os.environ.get(gate_env) or "").strip()
+        )
+    )
 
     if not missing:
         logger.info("startup_checks: all %d required envs present", len(_REQUIRED))
