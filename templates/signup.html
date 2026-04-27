@@ -296,7 +296,7 @@
                 });
                 var cdata = await cb.json().catch(function () { return null; });
                 if (cb.ok && cdata && cdata.ok) {
-                    window.location.href = '/';
+                    window.location.href = '/search';
                     return;
                 }
                 var failMsg = (cdata && (cdata.message || cdata.error)) ? String(cdata.message || cdata.error) : '';
