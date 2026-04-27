@@ -23,6 +23,7 @@
           "search_bots.py",
           "search_protocol.py",
           "startup_checks.py",
+          "unfiltered_engagement.py",
           "app.py"
         ]
       }

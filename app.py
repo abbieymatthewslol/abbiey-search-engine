@@ -68,6 +68,7 @@ from search_bots import crawl_bot_pages, normalize_http_seed, parse_json_list
 import bot_crawler as _bot_crawler
 import billing as _billing
 from api_v1 import api_v1 as _api_v1_bp
+from unfiltered_engagement import unfiltered_bp as _unfiltered_bp
 import startup_checks as _startup_checks
 import digital_pet as _digital_pet
 from osint.service import enrich as _osint_enrich_run
@@ -12646,6 +12647,7 @@ except Exception:
 # ---------------------------------------------------------------------------
 _billing.configure(_users_execute)
 app.register_blueprint(_api_v1_bp)
+app.register_blueprint(_unfiltered_bp)
 
 # Attach per-API-key rate limits to the blueprint views. Must run after the
 # blueprint registration so ``current_app.view_functions`` has the endpoints.
@@ -12656,6 +12658,13 @@ try:
         _apiv1_register_limits(limiter)
 except Exception:
     logger.exception("api_v1_limit_registration_failed")
+try:
+    with app.app_context():
+        from unfiltered_engagement import register_unfiltered_limits
+
+        register_unfiltered_limits(limiter)
+except Exception:
+    logger.exception("unfiltered_limit_registration_failed")
 
 
 if __name__ == "__main__":

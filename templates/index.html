@@ -1505,13 +1505,27 @@
         {# ===== RELATED SEARCHES ===== #}
         <div id="related-searches" class="related-searches"></div>
 
+        {% if query and results and search_type in ('text', 'news', 'code', 'onion', 'videos') %}
+        <details class="unfiltered-leaderboard" id="unfiltered-leaderboard">
+            <summary>Most <span class="unfiltered-lb-phrase">unfiltered</span> explorers <span class="leaderboard-privacy">(anonymized)</span></summary>
+            <p class="leaderboard-lead">Opt-in community ranking based on full-access searches (safesearch off, clean web off). No raw queries stored for this list.</p>
+            <ol class="leaderboard-list" id="leaderboard-list" aria-live="polite"></ol>
+        </details>
+        {% endif %}
+
         {# ===== TRENDING SEARCHES ===== #}
         <div id="trending-searches" class="trending-searches" style="display:none"></div>
 
         {% if has_more %}
         <div id="scroll-sentinel" data-page="1" data-query="{{ query }}" data-type="{{ search_type }}" data-has-more="true" data-img-extra="{{ img_scroll_extras or '' }}" data-img-rev-key="{{ img_rev_key or '' }}" data-cleanweb="{% if cleanweb %}1{% endif %}" data-lat="{% if search_lat is not none %}{{ search_lat }}{% endif %}" data-lon="{% if search_lon is not none %}{{ search_lon }}{% endif %}"{% if search_type == 'onion' %} data-onion-mode="{{ onion_mode }}"{% endif %}{% if search_type == 'mybot' and mybot_id %} data-bot-id="{{ mybot_id }}"{% endif %}>
-            <div class="scroll-loader">
-                <div class="spinner"></div>
+            <div class="scroll-loader hidden" aria-hidden="true">
+                <div class="indexing-progress-wrap" style="--index-progress:0">
+                    <svg class="indexing-progress-ring" viewBox="0 0 60 60" width="40" height="40" aria-hidden="true">
+                        <circle class="indexing-progress-track" cx="30" cy="30" r="25" fill="none" stroke-width="5"/>
+                        <circle class="indexing-progress-bar" cx="30" cy="30" r="25" fill="none" stroke-width="5" stroke-linecap="round" transform="rotate(-90 30 30)"/>
+                    </svg>
+                    <div class="spinner" aria-hidden="true"></div>
+                </div>
             </div>
         </div>
         {% endif %}
