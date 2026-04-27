@@ -120,6 +120,9 @@
                 sessionStorage.removeItem('abbiey_onboarding_phone');
             }
         } catch (_ps) { /* ignore */ }
+        try {
+            sessionStorage.setItem('abbiey_oauth_next', '/search');
+        } catch (_nx) { /* ignore */ }
         googleBtn.disabled = true;
         googleBtn.innerHTML = 'Redirecting to Google\u2026';
         try {

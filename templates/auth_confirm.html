@@ -161,7 +161,8 @@
                 if (nextPath && nextPath.charAt(0) === '/' && nextPath.indexOf('//') !== 0) {
                     window.location.replace(nextPath);
                 } else {
-                    window.location.replace('/');
+                    /* / can send first-time visitors to onboarding; /search is the main logged-in home */
+                    window.location.replace('/search');
                 }
                 return;
             }
@@ -206,7 +207,7 @@
                 return;
             }
 
-            // PKCE / magic-link codes are exchanged automatically when detectSessionInUrl is true.
+            // Session may appear on SIGNED_IN after PKCE / magic-link exchange finishes.
             sb.auth.onAuthStateChange(function (_event, session) {
                 if (session && !finished) {
                     void syncAndRedirect(session);
