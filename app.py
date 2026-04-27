@@ -49,6 +49,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
+from abbiey_product_knowledge import PRODUCT_CHATBOT_SYSTEM_SUFFIX, product_chatbot_fallback_reply
 from entity_parser import detect_entities, build_search_queries, primary_entity
 from query_understanding import (
     preprocess_query,
@@ -3549,7 +3550,7 @@ def api_chatbot_chat():
         if not isinstance(h.get("content", ""), str):
             return jsonify({"error": "Invalid content in history"}), 400
 
-    messages = [{"role": "system", "content": bot["system"]}]
+    messages = [{"role": "system", "content": bot["system"] + PRODUCT_CHATBOT_SYSTEM_SUFFIX}]
     for h in history[-(_MAX_CHATBOT_HISTORY_TURNS * 2):]:
         role = h.get("role", "user")
         content = h.get("content", "")
@@ -3558,13 +3559,14 @@ def api_chatbot_chat():
     messages.append({"role": "user", "content": message})
 
     try:
-        response = _ollama_chat(messages)
+        response = _ollama_chat(messages, timeout=22.0)
         if not response:
             raise RuntimeError("Empty AI response")
-        return jsonify({"response": response})
+        return jsonify({"response": response, "source": "ollama"})
     except Exception:
         logger.warning("chatbot_chat_ollama_unavailable bot=%s", bot_id)
-        return jsonify({"error": "AI is currently unavailable. Please try again shortly."}), 503
+        fb = product_chatbot_fallback_reply(message, history)
+        return jsonify({"response": fb, "source": "product_fallback", "reason": "ollama_unavailable"}), 200
 
 
 @app.route("/landing")

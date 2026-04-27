@@ -13,6 +13,7 @@
           "osint/**",
           "retrieval/**",
           "api_v1.py",
+          "abbiey_product_knowledge.py",
           "billing.py",
           "bot_crawler.py",
           "digital_pet.py",
