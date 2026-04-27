@@ -5,6 +5,8 @@ and project tracking.
 
 ## Start here
 
+- [`GETTING-HELP.md`](./GETTING-HELP.md) - how to report issues and what to
+  include when asking for help
 - [`SELF-HOSTING.md`](./SELF-HOSTING.md) - deployment walkthroughs for Docker,
   Vercel, Render, Fly.io, and bare-metal setups
 - [`API.md`](./API.md) - public API behavior, auth, billing, and rate-limit docs
