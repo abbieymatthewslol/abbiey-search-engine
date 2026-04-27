@@ -10,7 +10,7 @@ def test_public_health_has_feature_probes(client):
     assert resp.status_code == 200
     body = resp.get_json()
     features = body.get("features") or {}
-    for key in ("search", "image_upload", "chatbots", "bots", "deep_web", "api_v1", "stripe_webhook"):
+    for key in ("search", "image_upload", "chatbots", "bots", "deep_web", "api_v1"):
         assert key in features, f"missing probe: {key}"
         entry = features[key]
         assert "state" in entry
@@ -18,7 +18,7 @@ def test_public_health_has_feature_probes(client):
 
 
 def test_health_aggregate_degrades_when_any_feature_down(client):
-    with patch("app._feature_probe_stripe_webhook", return_value={"state": "down", "reason": "test"}):
+    with patch("app._feature_probe_search", return_value={"state": "down", "reason": "test"}):
         resp = client.get("/health")
     body = resp.get_json()
     assert body["status"] == "degraded"

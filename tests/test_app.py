@@ -163,13 +163,6 @@ class TestRoutes:
         assert b'href="/privacy"' in resp.data
         assert b"Privacy Policy" in resp.data
 
-    def test_search_googlebot_not_blocked_by_free_tier_limit(self, client, mock_ddg):
-        """Crawlers must not get 429 from the IP search cap (reads as a walled app)."""
-        googlebot = "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
-        with patch("app._server_search_limit_reached", return_value=True):
-            resp = client.get("/search?q=oauth+check", headers={"User-Agent": googlebot})
-        assert resp.status_code == 200
-
     def test_access_resources_json(self, client):
         resp = client.get("/api/access-resources")
         assert resp.status_code == 200
@@ -1397,17 +1390,6 @@ class TestApiKeyAuth:
         assert r.status_code == 401
 
 
-class TestPaymentReturn:
-    """Stripe Payment Link redirect: client-side resume to search or developer."""
-
-    def test_payment_return_get_ok(self, client):
-        r = client.get("/payment-return")
-        assert r.status_code == 200
-        assert b"abbiey_checkout_return" in r.data
-        assert b"/search" in r.data
-        assert b"/developer" in r.data
-
-
 class TestDeveloperPage:
     """Developer hub: API keys UI + Stripe billing link."""
 
@@ -1480,45 +1462,6 @@ class TestBookmarkSyncHardening:
         get_resp = client.get("/api/user/bookmarks")
         assert get_resp.status_code == 200
         assert get_resp.get_json() == {"bookmarks": []}
-
-
-class TestSearchAccessPersistence:
-    def test_prepare_claim_and_status_round_trip(self, client):
-        prep = client.post("/api/search-access/prepare-checkout")
-        assert prep.status_code == 200
-        assert prep.get_json()["ok"] is True
-
-        claim = client.post("/api/search-access/claim")
-        assert claim.status_code == 200
-        claim_data = claim.get_json()
-        assert claim_data["ok"] is True
-        assert claim_data["unlocked"] is True
-        assert "abbiey_search_unlock=" in (claim.headers.get("Set-Cookie") or "")
-
-        status = client.get("/api/search-access")
-        assert status.status_code == 200
-        assert status.get_json()["unlocked"] is True
-
-    def test_claim_accepts_verified_checkout_token_without_pending_cookie(self, client):
-        def _users_execute_side_effect(sql, params=None):
-            s = (sql or "").strip().lower()
-            if s.startswith("select 1 as ok from payment_events"):
-                return [{"ok": 1}]
-            if s.startswith("update pending_checkouts"):
-                return []
-            return []
-
-        with patch("app._users_execute", side_effect=_users_execute_side_effect):
-            with patch("app._upsert_search_unlock", return_value="tok"):
-                resp = client.post(
-                    "/api/search-access/claim",
-                    json={"checkout_token": "tok_123"},
-                )
-        assert resp.status_code == 200
-        data = resp.get_json()
-        assert data["ok"] is True
-        assert data["unlocked"] is True
-        assert "abbiey_search_unlock=" in (resp.headers.get("Set-Cookie") or "")
 
 
 class TestHealthProbe:
@@ -1849,26 +1792,6 @@ class TestExaAdapter:
         fake_client.post.side_effect = RuntimeError("boom")
         with patch("app._get_http", return_value=fake_client):
             assert _try_exa("q", 5, "text") == []
-
-
-class TestCheckoutCookieNotForgeable:
-    """Checkout pending cookie requires SECRET_KEY to forge."""
-
-    def test_claim_rejects_forged_cookie(self, client):
-        import hashlib
-        import hmac
-        import time
-
-        ts = str(time.time())
-        # Forge with the old hardcoded key
-        forged_sig = hmac.new(
-            b"abbiey-checkout-pending", ts.encode(), hashlib.sha256
-        ).hexdigest()[:16]
-        client.set_cookie("abbiey_search_checkout_pending", f"{ts}.{forged_sig}")
-        resp = client.post("/api/search-access/claim")
-        assert resp.status_code == 409
-        data = resp.get_json()
-        assert data.get("error") == "checkout_not_pending"
 
 
 class TestOfficialSitePromotion:

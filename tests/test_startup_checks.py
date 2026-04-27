@@ -73,17 +73,6 @@ def test_pytest_env_is_auto_skipped(monkeypatch):
     startup_checks.assert_production_env()
 
 
-def test_conditional_stripe_webhook_required_when_checkout_set(monkeypatch):
-    _clear_prod_env(monkeypatch)
-    monkeypatch.setenv("VERCEL", "1")
-    for r in startup_checks._REQUIRED:
-        monkeypatch.setenv(r.name, "fake")
-    monkeypatch.setenv("STRIPE_SEARCH_CHECKOUT_URL", "https://buy.stripe.com/xxx")
-    monkeypatch.delenv("STRIPE_WEBHOOK_SECRET", raising=False)
-    with pytest.raises(SystemExit):
-        startup_checks.assert_production_env()
-
-
 def test_summarize_config_reports_presence(monkeypatch):
     _clear_prod_env(monkeypatch)
     for r in startup_checks._REQUIRED:
