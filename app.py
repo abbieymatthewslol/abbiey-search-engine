@@ -231,16 +231,10 @@ if os.environ.get("VERCEL"):
         )
 _ADMIN_TOKEN  = os.environ.get("ADMIN_TOKEN", "") or None  # None when unset → admin routes reject all requests
 
-# Developer / API keys — Stripe Payment Link for purchasing access (override in env).
+# Developer / API keys — Stripe Payment Link for purchasing API access (override in env).
 # These MUST be set via environment variables — no hardcoded defaults to avoid
 # leaking live payment links into the public repo or forks.
 STRIPE_API_KEYS_CHECKOUT_URL = os.environ.get("STRIPE_API_KEYS_CHECKOUT_URL", "")
-STRIPE_SEARCH_CHECKOUT_URL = os.environ.get("STRIPE_SEARCH_CHECKOUT_URL", "")
-STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
-try:
-    import stripe as _stripe_mod
-except ImportError:
-    _stripe_mod = None
 ABBIEY_API_KEY_PREFIX = "abb_sk_live_"
 _MAX_API_KEYS_PER_USER = 10
 
@@ -502,8 +496,6 @@ _ONION_STRICT_EMPTY_MSG = (
     "Strict onion mode only returns direct .onion listings. Try Broad mode if you also want clearnet references."
 )
 _ONION_MODES = {"balanced", "strict", "extended"}
-_SEARCH_UNLOCK_COOKIE = "abbiey_search_unlock"
-_SEARCH_UNLOCK_COOKIE_MAX_AGE = 315360000
 _WELCOME_COOKIE = "abbiey_welcome_seen"
 _WELCOME_COOKIE_MAX_AGE = 60 * 60 * 24 * 400  # ~13 months — first-visit onboarding
 # Opaque device secret (httpOnly cookie) paired with oauth_user_binding for Google OAuth accounts.
@@ -521,15 +513,6 @@ _AUTH_BINDING_SKIP_PATHS = frozenset(
         "/verify-email/resend",
     }
 )
-_SEARCH_CHECKOUT_PENDING_SESSION_KEY = "abbiey_search_checkout_started_at"
-_SEARCH_CHECKOUT_PENDING_WINDOW_SECONDS = 4 * 60 * 60
-_SEARCH_CHECKOUT_PENDING_COOKIE = "abbiey_search_checkout_pending"
-_SEARCH_CHECKOUT_PENDING_COOKIE_MAX_AGE = 4 * 60 * 60
-_SERVER_FREE_SEARCH_LIMIT = int(os.environ.get("ABBIEY_FREE_SEARCH_LIMIT", "15"))
-
-# In-memory daily search counter per IP (reset daily; supplements client-side limit)
-_search_counter_lock = threading.Lock()
-_search_counters: dict[str, dict] = {}  # ip -> {"count": int, "date": str}
 
 # ---------------------------------------------------------------------------
 # Turso / libSQL persistent DB (optional upgrade — survives Vercel cold starts)
@@ -832,39 +815,6 @@ def _init_pg_tables():
             revoked_at    TIMESTAMPTZ
         );
         CREATE INDEX IF NOT EXISTS idx_api_keys_user ON api_keys(user_id);
-
-        CREATE TABLE IF NOT EXISTS search_unlocks (
-            id           SERIAL PRIMARY KEY,
-            user_id      INTEGER REFERENCES users(id) ON DELETE CASCADE,
-            unlock_token TEXT UNIQUE NOT NULL,
-            source       TEXT NOT NULL DEFAULT 'payment_return',
-            created_at   TIMESTAMPTZ DEFAULT NOW(),
-            last_seen    TIMESTAMPTZ DEFAULT NOW()
-        );
-        CREATE INDEX IF NOT EXISTS idx_search_unlocks_user ON search_unlocks(user_id);
-
-        CREATE TABLE IF NOT EXISTS pending_checkouts (
-            id              SERIAL PRIMARY KEY,
-            checkout_token  TEXT UNIQUE NOT NULL,
-            user_id         INTEGER REFERENCES users(id) ON DELETE SET NULL,
-            client_ip       TEXT DEFAULT '',
-            status          TEXT NOT NULL DEFAULT 'pending',
-            created_at      TIMESTAMPTZ DEFAULT NOW()
-        );
-        CREATE INDEX IF NOT EXISTS idx_pc_token ON pending_checkouts(checkout_token);
-
-        CREATE TABLE IF NOT EXISTS payment_events (
-            id                  SERIAL PRIMARY KEY,
-            stripe_event_id     TEXT UNIQUE,
-            stripe_session_id   TEXT,
-            checkout_token      TEXT,
-            customer_email      TEXT DEFAULT '',
-            amount_cents        INTEGER DEFAULT 0,
-            currency            TEXT DEFAULT 'usd',
-            status              TEXT NOT NULL DEFAULT 'completed',
-            created_at          TIMESTAMPTZ DEFAULT NOW()
-        );
-        CREATE INDEX IF NOT EXISTS idx_pe_checkout ON payment_events(checkout_token);
 
         CREATE TABLE IF NOT EXISTS waitlist (
             id         SERIAL PRIMARY KEY,
@@ -1234,41 +1184,6 @@ def _init_users_db():
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
             );
             CREATE INDEX IF NOT EXISTS idx_api_keys_user ON api_keys(user_id);
-            CREATE TABLE IF NOT EXISTS search_unlocks (
-                id           INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id      INTEGER,
-                unlock_token TEXT UNIQUE NOT NULL,
-                source       TEXT NOT NULL DEFAULT 'payment_return',
-                created_at   TEXT DEFAULT (datetime('now')),
-                last_seen    TEXT DEFAULT (datetime('now')),
-                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-            );
-            CREATE INDEX IF NOT EXISTS idx_search_unlocks_user ON search_unlocks(user_id);
-
-            CREATE TABLE IF NOT EXISTS pending_checkouts (
-                id              INTEGER PRIMARY KEY AUTOINCREMENT,
-                checkout_token  TEXT UNIQUE NOT NULL,
-                user_id         INTEGER,
-                client_ip       TEXT DEFAULT '',
-                status          TEXT NOT NULL DEFAULT 'pending',
-                created_at      TEXT DEFAULT (datetime('now')),
-                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
-            );
-            CREATE INDEX IF NOT EXISTS idx_pc_token ON pending_checkouts(checkout_token);
-
-            CREATE TABLE IF NOT EXISTS payment_events (
-                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
-                stripe_event_id     TEXT UNIQUE,
-                stripe_session_id   TEXT,
-                checkout_token      TEXT,
-                customer_email      TEXT DEFAULT '',
-                amount_cents        INTEGER DEFAULT 0,
-                currency            TEXT DEFAULT 'usd',
-                status              TEXT NOT NULL DEFAULT 'completed',
-                created_at          TEXT DEFAULT (datetime('now'))
-            );
-            CREATE INDEX IF NOT EXISTS idx_pe_checkout ON payment_events(checkout_token);
-
             CREATE TABLE IF NOT EXISTS user_pet (
                 user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
                 species TEXT NOT NULL DEFAULT 'hummingbird',
@@ -1422,28 +1337,6 @@ def _row_returning_id(rows: list | None) -> int | None:
     return None
 
 
-def _search_unlock_cookie_token() -> str | None:
-    raw = (request.cookies.get(_SEARCH_UNLOCK_COOKIE) or "").strip()
-    if not raw:
-        return None
-    if re.fullmatch(r"[A-Za-z0-9_-]{20,120}", raw):
-        return raw
-    return None
-
-
-def _set_search_unlock_cookie(resp: Response, token: str) -> None:
-    secure = request.is_secure or _site_base_url().startswith("https://")
-    resp.set_cookie(
-        _SEARCH_UNLOCK_COOKIE,
-        token,
-        max_age=_SEARCH_UNLOCK_COOKIE_MAX_AGE,
-        secure=secure,
-        httponly=True,
-        samesite="Lax",
-        path="/",
-    )
-
-
 def _set_welcome_seen_cookie(resp: Response) -> None:
     """Mark browser as having completed or skipped first-visit onboarding."""
     secure = request.is_secure or _site_base_url().startswith("https://")
@@ -1591,130 +1484,6 @@ def _normalize_e164_phone(raw: str, default_region: str = "US") -> str | None:
         return phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164)
     except NumberParseException:
         return None
-
-
-def _checkout_hmac_key() -> bytes:
-    """Derive HMAC key for checkout-pending cookies from Flask SECRET_KEY."""
-    sk = (app.config.get("SECRET_KEY") or app.secret_key or "").strip()
-    return hmac.new(sk.encode("utf-8", errors="replace"), b"abbiey-checkout-pending", hashlib.sha256).digest()
-
-
-def _search_checkout_pending() -> bool:
-    # Check session first (original approach)
-    raw = session.get(_SEARCH_CHECKOUT_PENDING_SESSION_KEY)
-    try:
-        started = float(raw)
-    except (TypeError, ValueError):
-        started = None
-    if started and (time.time() - started) <= _SEARCH_CHECKOUT_PENDING_WINDOW_SECONDS:
-        return True
-    # Fallback: check signed cookie (survives session loss across redeploys)
-    cookie_val = request.cookies.get(_SEARCH_CHECKOUT_PENDING_COOKIE, "")
-    if cookie_val:
-        parts = cookie_val.split(".", 1)
-        if len(parts) == 2:
-            ts_str, sig = parts
-            try:
-                ts = float(ts_str)
-            except (TypeError, ValueError):
-                return False
-            expected = hmac.new(
-                _checkout_hmac_key(), ts_str.encode(), hashlib.sha256
-            ).hexdigest()[:16]
-            if hmac.compare_digest(sig, expected) and (time.time() - ts) <= _SEARCH_CHECKOUT_PENDING_WINDOW_SECONDS:
-                return True
-    return False
-
-
-def _search_access_token_for_user(uid: int | None) -> str | None:
-    if not uid:
-        return None
-    rows = _users_execute(
-        "SELECT unlock_token FROM search_unlocks WHERE user_id=? ORDER BY id DESC LIMIT 1",
-        [uid],
-    )
-    token = (rows[0].get("unlock_token") if rows else "") or ""
-    return token.strip() or None
-
-
-def _search_access_granted(uid: int | None = None, token: str | None = None) -> bool:
-    if uid:
-        rows = _users_execute("SELECT 1 AS ok FROM search_unlocks WHERE user_id=? LIMIT 1", [uid])
-        if rows:
-            return True
-    if token:
-        rows = _users_execute(
-            "SELECT 1 AS ok FROM search_unlocks WHERE unlock_token=? LIMIT 1",
-            [token],
-        )
-        if rows:
-            return True
-    return False
-
-
-def _server_search_limit_reached(client_ip: str) -> bool:
-    """Check if a free-tier IP has exceeded the daily server-side search limit."""
-    if not client_ip or _SERVER_FREE_SEARCH_LIMIT <= 0:
-        return False
-    today = time.strftime("%Y-%m-%d")
-    with _search_counter_lock:
-        entry = _search_counters.get(client_ip)
-        if not entry or entry["date"] != today:
-            _search_counters[client_ip] = {"count": 1, "date": today}
-            return False
-        entry["count"] += 1
-        return entry["count"] > _SERVER_FREE_SEARCH_LIMIT
-
-
-def _is_oauth_verification_crawler_ua(user_agent: str) -> bool:
-    """OAuth/policy crawlers must not hit the free-tier IP cap (429 can look like a login wall)."""
-    ua = (user_agent or "").lower()
-    if not ua:
-        return False
-    return any(
-        t in ua
-        for t in (
-            "googlebot",
-            "google-inspectiontool",
-            "adsbot-google",
-            "mediapartners-google",
-            "apis-google",
-            "bingbot",
-            "slurp",
-            "duckduckbot",
-            "facebookexternalhit",
-            "linkedinbot",
-        )
-    )
-
-
-def _upsert_search_unlock(uid: int | None, token: str, source: str = "payment_return") -> str:
-    token = (token or "").strip()
-    if not token:
-        raise ValueError("unlock token is required")
-    rows = _users_execute(
-        "SELECT id, user_id FROM search_unlocks WHERE unlock_token=? LIMIT 1",
-        [token],
-    )
-    if rows:
-        row_id = rows[0]["id"]
-        row_uid = _session_user_id_int(rows[0].get("user_id"))
-        if uid and row_uid != uid:
-            _users_execute(
-                "UPDATE search_unlocks SET user_id=?, source=?, last_seen=datetime('now') WHERE id=?",
-                [uid, source, row_id],
-            )
-        else:
-            _users_execute(
-                "UPDATE search_unlocks SET source=?, last_seen=datetime('now') WHERE id=?",
-                [source, row_id],
-            )
-        return token
-    _users_execute(
-        "INSERT INTO search_unlocks (user_id, unlock_token, source) VALUES (?,?,?)",
-        [uid, token, source],
-    )
-    return token
 
 
 def _get_user_by_id(uid: int) -> "dict | None":
@@ -3229,8 +2998,6 @@ _TEMPLATE_DEFAULTS = dict(
     onion_scope="balanced",
     onion_mode="balanced",
     onion_sources=[],
-    current_user_has_paid_access=False,
-    stripe_search_checkout_url=STRIPE_SEARCH_CHECKOUT_URL,
     cleanweb=False,
     safeguard={"show_crisis_strip": False, "show_inclusive_hint": False, "chaotic_query": False},
     osint_enabled=True,
@@ -3766,279 +3533,6 @@ def docs_page(slug: str):
         return render_template("error.html", code=404, title="Not found",
                                message="That document has not been published yet."), 404
     return render_template("docs_page.html", title=title, markdown=md, slug=slug, description=description)
-
-
-@app.route("/payment-return")
-def payment_return():
-    """Stripe Payment Link redirect target: sends users back to search (with unlock) or /developer."""
-    return render_template("payment_return.html")
-
-
-@app.route("/api/search-access", methods=["GET"])
-def api_search_access():
-    uid = _session_user_id_int(session.get("user_id"))
-    cookie_token = _search_unlock_cookie_token()
-    account_token = _search_access_token_for_user(uid)
-    unlocked = False
-    source = "none"
-    token_to_set = cookie_token or account_token
-
-    if uid and account_token:
-        unlocked = True
-        source = "account"
-        if cookie_token:
-            try:
-                _upsert_search_unlock(uid, cookie_token, source="session_link")
-                token_to_set = cookie_token
-            except Exception:
-                logger.exception("search_access_session_link_failed")
-        elif account_token:
-            token_to_set = account_token
-    elif cookie_token and _search_access_granted(token=cookie_token):
-        unlocked = True
-        source = "browser"
-        if uid:
-            try:
-                _upsert_search_unlock(uid, cookie_token, source="session_link")
-            except Exception:
-                logger.exception("search_access_cookie_link_failed")
-    elif uid and _search_access_granted(uid=uid):
-        unlocked = True
-        source = "account"
-        token_to_set = account_token
-
-    resp = jsonify({"unlocked": unlocked, "source": source})
-    if unlocked and token_to_set:
-        _set_search_unlock_cookie(resp, token_to_set)
-    return resp
-
-
-@app.route("/api/search-access/prepare-checkout", methods=["POST"])
-@limiter.limit("30/minute")
-def api_search_access_prepare_checkout():
-    ts_str = str(time.time())
-    session[_SEARCH_CHECKOUT_PENDING_SESSION_KEY] = ts_str
-    sig = hmac.new(
-        _checkout_hmac_key(), ts_str.encode(), hashlib.sha256
-    ).hexdigest()[:16]
-    # Generate a checkout reference token so Stripe webhook can link payment to user
-    checkout_token = secrets.token_urlsafe(24)
-    uid = _session_user_id_int(session.get("user_id"))
-    client_ip = request.remote_addr or ""
-    try:
-        _users_execute(
-            "INSERT INTO pending_checkouts (checkout_token, user_id, client_ip) VALUES (?,?,?)",
-            [checkout_token, uid, client_ip],
-        )
-    except Exception:
-        logger.exception("pending_checkout_insert_failed")
-    resp = jsonify({"ok": True, "checkout_token": checkout_token, "checkout_url": STRIPE_SEARCH_CHECKOUT_URL})
-    resp.set_cookie(
-        _SEARCH_CHECKOUT_PENDING_COOKIE,
-        f"{ts_str}.{sig}",
-        max_age=_SEARCH_CHECKOUT_PENDING_COOKIE_MAX_AGE,
-        httponly=True,
-        samesite="Lax",
-        secure=app.config.get("SESSION_COOKIE_SECURE", False),
-    )
-    return resp
-
-
-@app.route("/api/search-access/claim", methods=["POST"])
-@limiter.limit("30/minute")
-def api_search_access_claim():
-    checkout_token = (request.json or {}).get("checkout_token", "") if request.is_json else ""
-    # Check if this payment was already verified by Stripe webhook
-    webhook_verified = False
-    if checkout_token:
-        try:
-            rows = _users_execute(
-                "SELECT 1 AS ok FROM payment_events WHERE checkout_token=? LIMIT 1",
-                [checkout_token],
-            )
-            webhook_verified = bool(rows)
-        except Exception:
-            logger.exception("search_access_claim_webhook_lookup_failed")
-    if not webhook_verified and not _search_checkout_pending():
-        return jsonify({"error": "checkout_not_pending", "message": "Checkout could not be verified."}), 409
-    uid = _session_user_id_int(session.get("user_id"))
-    token = _search_unlock_cookie_token() or secrets.token_urlsafe(32)
-    try:
-        token = _upsert_search_unlock(uid, token, source="webhook_verified" if webhook_verified else "payment_return")
-    except Exception:
-        logger.exception("search_access_claim_failed")
-        return jsonify({"error": "unavailable", "message": "Unlimited access could not be restored right now."}), 503
-    # Mark the pending checkout as claimed
-    if checkout_token:
-        try:
-            _users_execute(
-                "UPDATE pending_checkouts SET status='claimed' WHERE checkout_token=?",
-                [checkout_token],
-            )
-        except Exception:
-            logger.exception("pending_checkout_claim_failed")
-    session.pop(_SEARCH_CHECKOUT_PENDING_SESSION_KEY, None)
-    resp = jsonify({"ok": True, "unlocked": True, "source": "account" if uid else "browser"})
-    _set_search_unlock_cookie(resp, token)
-    resp.delete_cookie(_SEARCH_CHECKOUT_PENDING_COOKIE)
-    return resp
-
-
-_RESTORE_BY_EMAIL_PUBLIC_MESSAGE = (
-    "If this email is associated with a purchase, unlimited search is enabled in this browser. "
-    "Otherwise, nothing has changed — you can keep using the site as usual."
-)
-def _email_acceptable_for_restore(raw: str) -> bool:
-    s = (raw or "").strip()
-    if len(s) < 3 or len(s) > 254 or s.count("@") != 1:
-        return False
-    local, domain = s.split("@", 1)
-    if not local or not domain or "." not in domain:
-        return False
-    if ".." in local or ".." in domain or local.startswith(".") or domain.startswith("."):
-        return False
-    return True
-
-
-@app.route("/api/search-access/restore-by-email", methods=["POST"])
-@limiter.limit("20/minute")
-def api_search_access_restore_by_email():
-    """Re-issue an unlock cookie when the email matches a recorded Stripe payment.
-
-    Returns HTTP 200 with the same JSON body whether or not a payment exists, so clients cannot
-    infer paid-vs-unknown from status codes (enumeration resistance). Only successful payment
-    lookups also set the HttpOnly unlock cookie.
-    """
-    if not request.is_json:
-        return jsonify({"ok": False, "error": "expected_json"}), 400
-    body = request.get_json(silent=True)
-    if not isinstance(body, dict):
-        return jsonify({"ok": False, "error": "invalid_body"}), 400
-    raw_email = (body.get("email") or "").strip()
-    if not raw_email:
-        return jsonify({"ok": False, "error": "email_required"}), 400
-    if not _email_acceptable_for_restore(raw_email):
-        return jsonify({"ok": False, "error": "invalid_email"}), 400
-
-    email_norm = raw_email.lower().strip()
-    paid_rows: list = []
-    try:
-        paid_rows = _users_execute(
-            "SELECT 1 AS ok FROM payment_events WHERE LOWER(TRIM(COALESCE(customer_email, ''))) = ? LIMIT 1",
-            [email_norm],
-        )
-    except Exception:
-        logger.exception("restore_by_email: payment_events lookup failed")
-        return jsonify({"ok": False, "error": "unavailable"}), 503
-
-    payload = {"ok": True, "message": _RESTORE_BY_EMAIL_PUBLIC_MESSAGE}
-    resp = jsonify(payload)
-
-    if not paid_rows:
-        return resp, 200
-
-    uid: int | None = None
-    try:
-        urows = _users_execute(
-            "SELECT id FROM users WHERE LOWER(email) = ? LIMIT 1",
-            [email_norm],
-        )
-        if urows:
-            uid = _session_user_id_int(urows[0].get("id"))
-    except Exception:
-        logger.exception("restore_by_email: users lookup failed")
-
-    try:
-        token = secrets.token_urlsafe(32)
-        token = _upsert_search_unlock(uid, token, source="restore_by_email")
-        _set_search_unlock_cookie(resp, token)
-    except Exception:
-        logger.exception("restore_by_email: grant failed")
-        return jsonify({"ok": False, "error": "unavailable"}), 503
-
-    return resp, 200
-
-
-# ---------------------------------------------------------------------------
-# Stripe Webhook — server-side payment verification
-# ---------------------------------------------------------------------------
-@app.route("/webhooks/stripe", methods=["POST"])
-@limiter.exempt
-def stripe_webhook():
-    """Verify Stripe webhook signature and auto-grant access on successful payment."""
-    payload = request.get_data(as_text=True)
-    sig_header = request.headers.get("Stripe-Signature", "")
-
-    if not STRIPE_WEBHOOK_SECRET:
-        logger.warning("stripe_webhook: STRIPE_WEBHOOK_SECRET not set — ignoring webhook")
-        return jsonify({"received": True}), 200
-
-    if not _stripe_mod:
-        logger.error("stripe_webhook: stripe package not installed")
-        return jsonify({"error": "stripe not available"}), 500
-
-    try:
-        event = _stripe_mod.Webhook.construct_event(payload, sig_header, STRIPE_WEBHOOK_SECRET)
-    except ValueError:
-        logger.warning("stripe_webhook: invalid payload")
-        return jsonify({"error": "invalid payload"}), 400
-    except _stripe_mod.error.SignatureVerificationError:
-        logger.warning("stripe_webhook: invalid signature")
-        return jsonify({"error": "invalid signature"}), 400
-
-    if event["type"] == "checkout.session.completed":
-        sess = event["data"]["object"]
-        checkout_token = sess.get("client_reference_id", "")
-        customer_email = sess.get("customer_details", {}).get("email", "") or sess.get("customer_email", "")
-        amount = sess.get("amount_total", 0)
-        currency = sess.get("currency", "usd")
-        stripe_session_id = sess.get("id", "")
-        stripe_event_id = event.get("id", "")
-
-        # Record the payment event (idempotent via UNIQUE stripe_event_id)
-        try:
-            _users_execute(
-                "INSERT INTO payment_events (stripe_event_id, stripe_session_id, checkout_token, customer_email, amount_cents, currency) "
-                "VALUES (?,?,?,?,?,?)",
-                [stripe_event_id, stripe_session_id, checkout_token, customer_email, amount, currency],
-            )
-        except Exception:
-            logger.info("stripe_webhook: payment_event already recorded (event_id=%s)", stripe_event_id)
-
-        # Auto-grant search unlock if checkout_token links to a pending checkout.
-        # Uses a single atomic UPDATE to avoid double-grant on Stripe webhook retries.
-        if checkout_token:
-            try:
-                rows = _users_execute(
-                    "UPDATE pending_checkouts SET status='webhook_verified' "
-                    "WHERE checkout_token=? AND status='pending' RETURNING user_id",
-                    [checkout_token],
-                )
-                if rows:
-                    uid = _session_user_id_int(rows[0].get("user_id"))
-                    token = secrets.token_urlsafe(32)
-                    _upsert_search_unlock(uid, token, source="stripe_webhook")
-                    logger.info("stripe_webhook: auto-granted access for checkout_token=%s", checkout_token[:8])
-            except Exception:
-                logger.exception("stripe_webhook: auto-grant failed for checkout_token=%s", checkout_token[:8] if checkout_token else "?")
-
-        # Email-based fallback: no checkout_token (direct Payment Link, no pre-created session).
-        # Look up the paying user by email and grant access.
-        elif customer_email:
-            try:
-                users = _users_execute(
-                    "SELECT id FROM users WHERE LOWER(email)=LOWER(?)",
-                    [customer_email],
-                )
-                if users:
-                    uid = _session_user_id_int(users[0].get("id"))
-                    token = secrets.token_urlsafe(32)
-                    _upsert_search_unlock(uid, token, source="stripe_webhook_email")
-                    logger.info("stripe_webhook: email-based auto-grant for email=%s", customer_email[:20])
-            except Exception:
-                logger.exception("stripe_webhook: email-based auto-grant failed")
-
-    return jsonify({"received": True}), 200
 
 
 ACCESS_RESOURCES_JSON = {
@@ -4839,9 +4333,6 @@ def search():
     img_rev_key = _raw_img_rev if re.fullmatch(r"[A-Za-z0-9_-]{16,128}", _raw_img_rev) else ""
 
     current_uid = _session_user_id_int(session.get("user_id"))
-    current_user_has_paid_access = _search_access_granted(
-        uid=current_uid, token=_search_unlock_cookie_token()
-    )
     if search_type not in ALLOWED_TYPES:
         search_type = "text"
 
@@ -4901,7 +4392,7 @@ def search():
     _type_to_gate = {"onion": "deep_web", "code": "code_search"}
     _gate_name = _type_to_gate.get(search_type)
     if _gate_name:
-        if not _feature_allowed(_gate_name, unlocked=current_user_has_paid_access):
+        if not _feature_allowed(_gate_name, unlocked=True):
             # "none" gate → 404 (feature disabled); "paid" gate for free user → 403
             gate_val = _FEATURE_GATES.get(_gate_name, "all")
             if gate_val == "none":
@@ -4910,7 +4401,7 @@ def search():
             return render_template("error.html", code=403, title="Paid Feature",
                                    message="This search type requires a paid account.", extra_help=False), 403
 
-    user_feature_gates = _feature_gates_for_user(current_user_has_paid_access)
+    user_feature_gates = _feature_gates_for_user(True)
 
     if not query and search_type != "mybot":
         return render_template(
@@ -4923,26 +4414,11 @@ def search():
                 "time_filter": time_filter or "",
                 "cleanweb": cleanweb,
                 "img_rev_key": img_rev_key,
-                "current_user_has_paid_access": current_user_has_paid_access,
                 "osint_enabled": _abbiey_osint_enabled(),
                 "onion_scope": onion_scope,
                 "onion_mode": onion_mode,
             },
-    # Server-side search limit for free-tier users
         )
-    if query and not current_user_has_paid_access:
-        client_ip = request.remote_addr or ""
-        ua = request.headers.get("User-Agent") or ""
-        if not _is_oauth_verification_crawler_ua(ua) and _server_search_limit_reached(client_ip):
-            return render_template(
-                "index.html",
-                **{
-                    **_TEMPLATE_DEFAULTS,
-                    "current_user_has_paid_access": False,
-                    "osint_enabled": _abbiey_osint_enabled(),
-                    "search_notice": "You\u2019ve reached your daily free search limit. Unlock unlimited searches or wait 24 hours.",
-                },
-            ), 429
 
     if search_type == "saved":
         return render_template(
@@ -4982,7 +4458,6 @@ def search():
             show_ai_summary_block=False,
             show_answer_layer_block=False,
             search_notice=None,
-            current_user_has_paid_access=current_user_has_paid_access,
             cleanweb=False,
             safeguard={"show_crisis_strip": False, "show_inclusive_hint": False, "chaotic_query": False},
             osint_enabled=_abbiey_osint_enabled(),
@@ -5215,7 +4690,7 @@ def search():
     show_ai_summary_block = search_type == "text" and _ai_summary_ok
     show_answer_layer_block = (
         show_ai_summary_block
-        and _feature_allowed("answer_layer", unlocked=current_user_has_paid_access)
+        and _feature_allowed("answer_layer", unlocked=True)
     )
     safeguard = (
         search_safeguard_meta(query)
@@ -5266,7 +4741,6 @@ def search():
         onion_scope=onion_scope,
         onion_mode=onion_mode,
         onion_sources=results.get("sources") or [],
-        current_user_has_paid_access=current_user_has_paid_access,
         cleanweb=cleanweb,
         safeguard=safeguard,
         osint_enabled=_abbiey_osint_enabled(),
@@ -6312,8 +5786,6 @@ def api_answer_layer():
     if not query or len(query) > MAX_QUERY_LENGTH:
         return jsonify({"error": "Invalid query"}), 400
 
-    current_uid = _session_user_id_int(session.get("user_id"))
-    unlocked = _search_access_granted(uid=current_uid, token=_search_unlock_cookie_token())
     prep = preprocess_query(query)
     if not should_enable_ai_summary(prep):
         return jsonify({"enabled": False, "layer": False, "clarify": detect_query_clarification(prep)}), 200
@@ -6324,7 +5796,7 @@ def api_answer_layer():
     if safeguard.get("show_crisis_strip"):
         return jsonify({"enabled": False, "message": "AI summary is not available for this query."}), 200
 
-    if not _feature_allowed("answer_layer", unlocked=unlocked):
+    if not _feature_allowed("answer_layer", unlocked=True):
         return jsonify({"enabled": True, "layer": False}), 200
 
     user_lat = _parse_request_coord("lat")
@@ -7174,17 +6646,6 @@ def _feature_probe_api_v1() -> dict:
     return {"state": "ok", "reason": "Blueprint + bearer auth online"}
 
 
-def _feature_probe_stripe_webhook() -> dict:
-    """Stripe webhook: ok if secret is set; degraded if Stripe is enabled but secret missing."""
-    checkout_set = bool((os.environ.get("STRIPE_SEARCH_CHECKOUT_URL") or "").strip())
-    secret_set = bool((os.environ.get("STRIPE_WEBHOOK_SECRET") or "").strip())
-    if not checkout_set:
-        return {"state": "ok", "reason": "Stripe not enabled"}
-    if not secret_set:
-        return {"state": "down", "reason": "Stripe enabled but STRIPE_WEBHOOK_SECRET missing"}
-    return {"state": "ok", "reason": "Stripe webhook signature verification armed"}
-
-
 def _feature_probe_search() -> dict:
     """Basic search probe: cache reachable."""
     try:
@@ -7201,7 +6662,6 @@ _FEATURE_PROBES = {
     "bots": _feature_probe_bots,
     "deep_web": _feature_probe_deep_web,
     "api_v1": _feature_probe_api_v1,
-    "stripe_webhook": _feature_probe_stripe_webhook,
 }
 
 
@@ -12458,7 +11918,6 @@ Disallow: /profile/update
 Disallow: /logout
 Disallow: /auth/
 Disallow: /verify-email
-Disallow: /payment-return
 Disallow: /webhooks/
 
 Sitemap: {base}/sitemap.xml

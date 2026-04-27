@@ -34,7 +34,7 @@ class Requirement:
     name: str
     reason: str
     # If set, the requirement is also skipped when *any* of these are truthy
-    # (e.g. skip Stripe checks when STRIPE_WEBHOOK_SECRET is intentionally blank).
+    # (placeholder for feature-gated env checks).
     skip_if_any_set: tuple[str, ...] = ()
 
 
@@ -42,7 +42,7 @@ class Requirement:
 _REQUIRED: tuple[Requirement, ...] = (
     Requirement("SECRET_KEY", "Flask session signing key"),
     Requirement("ADMIN_TOKEN", "Protects /admin/* and the bot-crawl worker"),
-    Requirement("SITE_URL", "Used by OAuth callbacks, OG tags, Stripe return URL"),
+    Requirement("SITE_URL", "Used by OAuth callbacks and canonical OG / share URLs"),
     Requirement("SUPABASE_URL", "Primary database for users / bookmarks / API keys"),
     Requirement("SUPABASE_ANON_KEY", "Browser-safe Supabase key for auth forms"),
     Requirement(
@@ -71,17 +71,8 @@ _RECOMMENDED: tuple[Requirement, ...] = (
     ),
 )
 
-# Envs that are required only when the corresponding feature is enabled.
-_CONDITIONAL: tuple[tuple[Requirement, str], ...] = (
-    (
-        Requirement(
-            "STRIPE_WEBHOOK_SECRET",
-            "Validates Stripe webhook signatures — missing = replay attacks possible",
-        ),
-        "STRIPE_SEARCH_CHECKOUT_URL",
-    ),
-)
-
+# Reserved for feature-gated requirements (e.g. optional integrations).
+_CONDITIONAL: tuple[tuple[Requirement, str], ...] = ()
 
 def is_production() -> bool:
     """True if we're booting in a prod-like serverless environment."""
@@ -121,10 +112,6 @@ def assert_production_env(*, strict: bool | None = None) -> None:
 
     enforce = strict if strict is not None else is_production()
     missing = _missing(_REQUIRED)
-    for req, gate_env in _CONDITIONAL:
-        if (os.environ.get(gate_env) or "").strip():
-            if not (os.environ.get(req.name) or "").strip():
-                missing.append(req)
 
     if not missing:
         logger.info("startup_checks: all %d required envs present", len(_REQUIRED))
