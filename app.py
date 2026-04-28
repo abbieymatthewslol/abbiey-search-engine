@@ -4392,7 +4392,7 @@ def search():
     _type_to_gate = {"onion": "deep_web", "code": "code_search"}
     _gate_name = _type_to_gate.get(search_type)
     if _gate_name:
-        if not _feature_allowed(_gate_name, unlocked=True):
+        if not _feature_allowed(_gate_name, unlocked=False):
             # "none" gate → 404 (feature disabled); "paid" gate for free user → 403
             gate_val = _FEATURE_GATES.get(_gate_name, "all")
             if gate_val == "none":
@@ -4401,7 +4401,7 @@ def search():
             return render_template("error.html", code=403, title="Paid Feature",
                                    message="This search type requires a paid account.", extra_help=False), 403
 
-    user_feature_gates = _feature_gates_for_user(True)
+    user_feature_gates = _feature_gates_for_user(False)
 
     if not query and search_type != "mybot":
         return render_template(
@@ -9553,9 +9553,21 @@ def _try_ahmia(query, max_results=30):
         ) as ahm:
             home_resp = ahm.get("https://ahmia.fi/")
             home_resp.raise_for_status()
-            token_match = re.search(
-                r'<input\s+type="hidden"\s+name="([^"]+)"\s+value="([^"]+)"',
-                home_resp.text,
+            home_html = home_resp.text
+            # Prefer the hidden field inside the main search form (not other hidden inputs on the page).
+            form_idx = home_html.find('id="searchForm"')
+            form_chunk = home_html[form_idx : form_idx + 12000] if form_idx != -1 else home_html
+            token_match = (
+                re.search(
+                    r'<input[^>]*type=["\']hidden["\'][^>]*name=["\']([^"\']+)["\'][^>]*value=["\']([^"\']+)["\']',
+                    form_chunk,
+                    re.IGNORECASE,
+                )
+                or re.search(
+                    r'<input[^>]*name=["\']([^"\']+)["\'][^>]*type=["\']hidden["\'][^>]*value=["\']([^"\']+)["\']',
+                    form_chunk,
+                    re.IGNORECASE,
+                )
             )
             params = {"q": query}
             if token_match:

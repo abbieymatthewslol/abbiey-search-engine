@@ -79,19 +79,14 @@ class TestFeatureGateSearchRoute:
         finally:
             _FEATURE_GATES["deep_web"] = original
 
-    def test_paid_gate_allows_onion_search(self, client):
-        """`paid` is still a valid gate value; search no longer ties unlock to payment."""
+    def test_paid_gate_blocks_onion_search_for_free_users(self, client):
+        """Deep web with FEATURE_DEEP_WEB=paid requires an unlocked account (403)."""
         from app import _FEATURE_GATES
         original = _FEATURE_GATES.get("deep_web")
         try:
             _FEATURE_GATES["deep_web"] = "paid"
-            onion_results = [
-                {"title": "Hidden site", "url": "http://abc.onion/", "body": "desc", "onion": True},
-            ]
-            with patch("app._try_ahmia", return_value=onion_results), \
-                 patch("app._try_onion_ddg", return_value=[]):
-                resp = client.get("/search?q=test&type=onion")
-            assert resp.status_code == 200
+            resp = client.get("/search?q=test&type=onion")
+            assert resp.status_code == 403
         finally:
             _FEATURE_GATES["deep_web"] = original
 

@@ -36,6 +36,17 @@ SAMPLE_AHMIA_HTML = textwrap.dedent("""\
 
 EMPTY_AHMIA_HTML = "<html><body><ul id='ahmiaResultsPage'></ul></body></html>"
 
+# Ahmia homepage may contain unrelated hidden inputs; the scraper must use the one inside #searchForm.
+AHMIA_HOME_WITH_DECOY_HIDDEN = textwrap.dedent("""\
+    <html><body>
+      <input type="hidden" name="decoy" value="wrong">
+      <form id="searchForm" action="/search/" method="get">
+        <input type="hidden" name="csrf_like" value="correct-token">
+        <input id="id_q" type="search" name="q" />
+      </form>
+    </body></html>
+""")
+
 
 class _FakeAhmiaHttpxClient:
     """Mimic httpx.Client used by _try_ahmia: first GET = homepage HTML, second = search HTML."""
@@ -111,6 +122,23 @@ class TestTryAhmia:
         forum = next((r for r in results if r["title"] == "Forum Title"), None)
         assert forum is not None
         assert forum["url"] == "http://xyz9999999.onion/forum"
+
+    def test_ignores_hidden_inputs_outside_search_form(self):
+        """Hidden anti-bot field must come from #searchForm, not earlier page junk."""
+        from app import _try_ahmia
+
+        class _CapturingFake(_FakeAhmiaHttpxClient):
+            def get(self, url, params=None):
+                r = super().get(url, params=params)
+                if self._calls == 2 and params is not None:
+                    assert params.get("csrf_like") == "correct-token"
+                    assert "decoy" not in params
+                return r
+
+        fake = _CapturingFake(AHMIA_HOME_WITH_DECOY_HIDDEN, SAMPLE_AHMIA_HTML)
+        with patch("app.httpx.Client", return_value=fake):
+            results = _try_ahmia("hidden wiki")
+        assert len(results) >= 1
 
     def test_returns_empty_list_when_http_raises(self):
         """If the HTTP request throws any exception, _try_ahmia returns [] without propagating."""
