@@ -509,6 +509,23 @@
                 <h1 class="home-logo">abbiey.<span>search</span></h1>
                 <p class="home-hero-headline">Unfiltered answers.</p>
             </div>
+            {% if search_type == 'people' and not query %}
+            <aside class="people-find-banner landing-pf-banner" role="note">
+                <p class="people-find-banner-lead"><a href="{{ url_for('people_find') }}">Open the People finder questionnaire</a> to add location, org, and intent — we use it to narrow public-web results (GET only; nothing stored server-side).</p>
+                {% if people_finder %}
+                <p class="people-find-banner-disc">{{ people_finder.disclaimer }}</p>
+                {% if people_finder.outbound %}
+                <p class="people-find-banner-out">
+                    {% for o in people_finder.outbound %}
+                    <a href="{{ o.url }}" target="_blank" rel="noopener noreferrer">{{ o.label }}</a>{% if not loop.last %} · {% endif %}
+                    {% endfor %}
+                </p>
+                {% endif %}
+                {% else %}
+                <p class="people-find-banner-disc">Public-web search only: someone may not appear if they have little online footprint, use a different spelling, or indexes are incomplete. Paid data brokers and offline directories are not queried here.</p>
+                {% endif %}
+            </aside>
+            {% endif %}
             {% endif %}
 
             <form action="/search" method="GET" id="search-form">
@@ -620,7 +637,7 @@
                         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
                     </button>
                     <div class="tab-more-menu" id="tab-more-menu" hidden>
-                        <a href="/search?q={{ query|urlencode }}&type=people{% if region %}&region={{ region }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab-more-item {% if search_type == 'people' %}active{% endif %}">People</a>
+                        <a href="/search?q={{ query|urlencode }}&type=people{% if region %}&region={{ region }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}{{ people_pf_url_extra|safe }}" class="tab-more-item {% if search_type == 'people' %}active{% endif %}">People</a>
                         <a href="/search?q={{ query|urlencode }}&type=email{% if region %}&region={{ region }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab-more-item {% if search_type == 'email' %}active{% endif %}">Email</a>
                         <a href="/search?q={{ query|urlencode }}&type=business{% if region %}&region={{ region }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab-more-item {% if search_type == 'business' %}active{% endif %}">Business</a>
                         <a href="/search?q={{ query|urlencode }}&type=onion{% if region %}&region={{ region }}{% endif %}{% if onion_mode %}&onion_mode={{ onion_mode }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab-more-item {% if search_type == 'onion' %}active{% endif %}" title="Clearnet-indexed .onion search">Onion / Tor</a>
@@ -655,6 +672,19 @@
             </div>
             {% endif %}
             {% if query %}
+            {% if query and search_type == 'people' and people_finder %}
+            <aside class="people-find-banner" role="note">
+                <p class="people-find-banner-lead">{{ people_finder.summary_line }}</p>
+                {% if people_finder.effective_hint %}<p class="people-find-banner-hint">Searching with context: <code>{{ people_finder.effective_hint }}</code></p>{% endif %}
+                <p class="people-find-banner-disc">{{ people_finder.disclaimer }}</p>
+                <p class="people-find-banner-actions">
+                    <a href="/people/find?q={{ query|urlencode }}{% if region %}&region={{ region|urlencode }}{% endif %}{% for k,v in people_finder_pf.items() %}&pf_{{ k }}={{ v|urlencode }}{% endfor %}" class="people-find-refine-link">Adjust questionnaire</a>
+                    {% if people_finder.outbound %}
+                    · {% for o in people_finder.outbound %}<a href="{{ o.url }}" target="_blank" rel="noopener noreferrer">{{ o.label }}</a>{% if not loop.last %} · {% endif %}{% endfor %}
+                    {% endif %}
+                </p>
+            </aside>
+            {% endif %}
             <button class="share-search-btn" id="share-search-btn" title="Share this search" aria-label="Share search">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
               Share

@@ -17,6 +17,7 @@
           "billing.py",
           "bot_crawler.py",
           "entity_parser.py",
+          "people_finder.py",
           "query_understanding.py",
           "reverse_image.py",
           "reverse_image_storage.py",

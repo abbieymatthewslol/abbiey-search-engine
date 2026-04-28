@@ -52,6 +52,16 @@ class TestRoutes:
         assert resp.status_code == 200
         assert b"Structured deep dives" not in resp.data
 
+    def test_people_find_questionnaire_page(self, client):
+        resp = client.get("/people/find")
+        assert resp.status_code == 200
+        assert b"Find someone" in resp.data or b"questionnaire" in resp.data.lower()
+
+    def test_home_people_mode_promotes_questionnaire(self, client):
+        resp = client.get("/search?type=people")
+        assert resp.status_code == 200
+        assert b"/people/find" in resp.data
+
     def test_landing_redirects_to_about(self, client):
         resp = client.get("/landing", follow_redirects=False)
         assert resp.status_code == 301

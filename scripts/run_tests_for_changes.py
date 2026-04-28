@@ -47,6 +47,7 @@ PATH_HINTS: list[tuple[str, tuple[str, ...]]] = [
     ("api/", ("tests/test_app.py",)),  # serverless entry; smoke
     ("billing.py", ("tests/test_api_v1.py", "tests/test_app.py")),
     ("entity_parser.py", ("tests/test_entity_parser.py",)),
+    ("people_finder.py", ("tests/test_people_finder.py",)),
     ("query_understanding.py", ("tests/test_query_understanding.py",)),
     ("retrieval/", ("tests/test_retrieval.py",)),
     ("osint/", ("tests/test_osint.py",)),

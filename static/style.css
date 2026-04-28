@@ -2140,6 +2140,107 @@ article.result.code-result { font-size: .9rem; }
   border-color: color-mix(in srgb, var(--accent) 55%, transparent);
 }
 
+/* People finder questionnaire + results disclaimer */
+.people-find-banner {
+  max-width: 44rem;
+  margin: 0.75rem auto 0;
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+  background: color-mix(in srgb, var(--accent) 6%, var(--bg-surface));
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+.people-find-banner.landing-pf-banner {
+  margin-top: 0.85rem;
+}
+.people-find-banner-lead {
+  margin: 0 0 0.5rem;
+  color: var(--text);
+  font-weight: 500;
+}
+.people-find-banner-lead a {
+  color: var(--accent);
+  text-decoration: none;
+}
+.people-find-banner-lead a:hover { text-decoration: underline; }
+.people-find-banner-hint code,
+.people-find-banner-hint {
+  margin: 0 0 0.4rem;
+}
+.people-find-banner-hint code {
+  font-family: ui-monospace, monospace;
+  font-size: 0.8125rem;
+  color: var(--text);
+  background: var(--bg-hover);
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+}
+.people-find-banner-disc {
+  margin: 0.5rem 0 0;
+}
+.people-find-banner-out,
+.people-find-banner-actions {
+  margin: 0.5rem 0 0;
+}
+.people-find-banner-out a,
+.people-find-banner-actions a {
+  color: var(--accent);
+  text-decoration: none;
+}
+.people-find-banner-out a:hover,
+.people-find-banner-actions a:hover {
+  text-decoration: underline;
+}
+.pf-heading .auth-subtitle { max-width: 36rem; margin-left: auto; margin-right: auto; }
+.pf-disclaimer {
+  font-size: 0.875rem;
+  line-height: 1.55;
+  color: var(--text-dim);
+  margin: 0 0 1.25rem;
+  padding: 0.75rem 1rem;
+  border-left: 3px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+  background: color-mix(in srgb, var(--accent) 5%, var(--bg-surface));
+  border-radius: var(--radius-sm);
+}
+.pf-row {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: 1fr;
+}
+@media (min-width: 520px) {
+  .pf-row { grid-template-columns: 1fr 1fr; }
+}
+.pf-select-wrap select {
+  width: 100%;
+  padding: 0.55rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  color: var(--text);
+  font-size: 0.9375rem;
+}
+.pf-hint-submit { margin-top: 0.5rem; }
+.pf-alternatives {
+  margin-top: 2rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border-subtle);
+}
+.pf-alt-title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0 0 0.5rem;
+  color: var(--text);
+}
+.pf-alt-list {
+  margin: 0;
+  padding-left: 1.2rem;
+  color: var(--text-dim);
+  line-height: 1.65;
+}
+.pf-alt-list a { color: var(--accent); }
+
 /* Onion / Tor mode chip — deliberately louder than the grey sibling buttons
  * so users notice the tab exists without having to read every label. Tinted
  * violet to signal "different source" (Ahmia/Tor) rather than normal web.

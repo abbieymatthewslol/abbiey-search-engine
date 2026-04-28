@@ -1,0 +1,94 @@
+{% extends "auth_base.html" %}
+{% block title %}People finder · abbieysearch{% endblock %}
+{% block meta_description %}Optional questionnaire to narrow a people-focused search — public-web sources only.{% endblock %}
+{% block canonical %}
+<link rel="canonical" href="{{ site_base_url }}{{ url_for('people_find') }}">
+{% endblock %}
+
+{% block auth_back_text %}Back to search{% endblock %}
+
+{% block auth_content %}
+        <header class="auth-heading pf-heading">
+            <h1 class="auth-title">Find someone</h1>
+            <p class="auth-subtitle">Answer a few optional details so we can focus the People tab on clearer public-web matches.</p>
+        </header>
+
+        <aside class="pf-disclaimer" role="note">
+            <strong>Disclaimer.</strong>
+            abbieysearch only searches public indexes and structured open data. Individuals may not appear because of private names,
+            minimal online presence, removed profiles, or incomplete indexes. Paid people-data brokers and non-public databases
+            are outside this engine. Alternative services below cast a wider clearnet net when you submit the form.
+        </aside>
+
+        <form method="get" action="{{ url_for('search') }}" class="pf-form auth-form">
+            <input type="hidden" name="type" value="people">
+            {% if region %}<input type="hidden" name="region" value="{{ region|e }}">{% endif %}
+
+            <div class="auth-field">
+                <label for="pf-q">Full name or best-known name</label>
+                <div class="auth-input-pill">
+                    <input type="search" id="pf-q" name="q"
+                           value="{{ prefilled_q|e }}"
+                           placeholder="Jane Doe"
+                           autocomplete="off" maxlength="8000" required>
+                </div>
+            </div>
+
+            <div class="pf-row">
+                <div class="auth-field">
+                    <label for="pf-city">City or town</label>
+                    <div class="auth-input-pill"><input id="pf-city" name="pf_city" type="text" value="{{ prefilled_pf.get('city', '')|e }}" maxlength="280" autocomplete="address-level2"></div>
+                </div>
+                <div class="auth-field">
+                    <label for="pf-region-hint">Region / state / province</label>
+                    <div class="auth-input-pill"><input id="pf-region-hint" name="pf_region" type="text" value="{{ prefilled_pf.get('region', '')|e }}" maxlength="280"></div>
+                </div>
+            </div>
+
+            <div class="auth-field">
+                <label for="pf-country">Country</label>
+                <div class="auth-input-pill"><input id="pf-country" name="pf_country" type="text" value="{{ prefilled_pf.get('country', '')|e }}" maxlength="280"></div>
+            </div>
+
+            <div class="auth-field">
+                <label for="pf-org">Company, university, or org (optional)</label>
+                <div class="auth-input-pill"><input id="pf-org" name="pf_org" type="text" value="{{ prefilled_pf.get('org', '')|e }}" maxlength="280"></div>
+            </div>
+
+            <div class="auth-field">
+                <label for="pf-aka">Other names / handles (optional)</label>
+                <div class="auth-input-pill"><input id="pf-aka" name="pf_aka" type="text" value="{{ prefilled_pf.get('aka', '')|e }}" maxlength="280" placeholder="@handle or maiden name"></div>
+            </div>
+
+            <div class="auth-field">
+                <label for="pf-era">Rough time frame (optional)</label>
+                <div class="auth-input-pill"><input id="pf-era" name="pf_era" type="text" value="{{ prefilled_pf.get('era', '')|e }}" maxlength="120" placeholder="e.g. 2015–2020, student years"></div>
+            </div>
+
+            <div class="auth-field">
+                <label for="pf-intent">What kind of footprints matter most?</label>
+                <div class="auth-input-pill pf-select-wrap">
+                    <select id="pf-intent" name="pf_intent">
+                        {% set intents = [('general','General web presence'), ('social','Social & creative profiles'), ('professional','Work / startups / press'), ('news','News mentions'), ('reunion','Directory / reunion style')] %}
+                        {% for val, lbl in intents %}
+                        <option value="{{ val }}" {% if prefilled_pf.get('intent', 'general') == val %}selected{% endif %}>{{ lbl }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <button type="submit" class="search-btn auth-submit" id="pf-submit">Search with these details</button>
+            <p class="form-hint pf-hint-submit">Opens the People tab with extra query context from your answers (GET request; nothing stored server-side).</p>
+        </form>
+
+        <section class="pf-alternatives" aria-labelledby="pf-alt-heading">
+            <h2 class="pf-alt-title" id="pf-alt-heading">Other places people sometimes try</h2>
+            <ul class="pf-alt-list">
+                <li><a href="https://duckduckgo.com/?q=directory+finder" target="_blank" rel="noopener noreferrer">Telephone / directory lookups (general)</a></li>
+                <li><a href="https://opencorporates.com/" target="_blank" rel="noopener noreferrer">OpenCorporates — company filings</a></li>
+                <li><a href="https://www.linkedin.com/pub/dir/" target="_blank" rel="noopener noreferrer">LinkedIn directory browsing</a> (logged-in)</li>
+                <li><a href="https://en.wikipedia.org/wiki/Special:Search" target="_blank" rel="noopener noreferrer">Wikipedia — notable biographies</a></li>
+            </ul>
+            <p class="form-hint">Links are illustrative; abbiey does not endorse any third-party data broker.</p>
+        </section>
+{% endblock %}

@@ -23,6 +23,7 @@ PY_SCAN_ROOTS = (
     "api_v1.py",
     "billing.py",
     "entity_parser.py",
+    "people_finder.py",
     "query_understanding.py",
     "search_bots.py",
     "search_protocol.py",

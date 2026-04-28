@@ -3823,6 +3823,11 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!btn || !row.contains(btn)) return;
       const mode = (btn.dataset.searchMode || "").trim();
       if (!mode) return;
+      if (mode === "people") {
+        e.preventDefault();
+        window.location.href = "/people/find";
+        return;
+      }
       typeInput.value = mode;
       syncPressed(btn);
     });

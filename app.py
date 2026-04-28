@@ -71,6 +71,14 @@ import billing as _billing
 from api_v1 import api_v1 as _api_v1_bp
 from unfiltered_engagement import unfiltered_bp as _unfiltered_bp
 import startup_checks as _startup_checks
+from people_finder import (
+    append_pf_query_string,
+    enrich_people_engine_query,
+    parse_people_finder_args,
+    people_finder_banner_context,
+    people_finder_cache_suffix,
+    people_pf_params_only_fragment,
+)
 from osint.service import enrich as _osint_enrich_run
 from osint.service import enrich_from_query as _osint_enrich_from_query
 from osint.service import is_osint_enabled as _abbiey_osint_enabled
@@ -2909,6 +2917,25 @@ def _try_weather(location):
 
 
 # ---------------------------------------------------------------------------
+# People finder (questionnaire before focused people search)
+# ---------------------------------------------------------------------------
+@app.route("/people/find")
+def people_find():
+    """Optional survey to narrow people search; submitted to /search with pf_* params."""
+    q = (request.args.get("q") or "").strip()[:MAX_QUERY_LENGTH]
+    pf_seed = {}
+    parsed = parse_people_finder_args(request.args)
+    if parsed:
+        pf_seed = parsed
+    return render_template(
+        "people_finder.html",
+        prefilled_q=q,
+        prefilled_pf=pf_seed,
+        region=(request.args.get("region") or "").strip() or "",
+)
+
+
+# ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
 _TEMPLATE_DEFAULTS = dict(
@@ -2949,6 +2976,9 @@ _TEMPLATE_DEFAULTS = dict(
     osint_enabled=True,
     mybot_id=None,
     mybot_name=None,
+    people_finder=None,
+    people_finder_pf={},
+    people_pf_url_extra="",
 )
 def should_show_ai_summary(query: str, intent: str) -> bool:
     """Gate AI summary card + /api/ai-summary: block obvious local/transactional queries."""
@@ -4349,7 +4379,14 @@ def search():
 
     user_feature_gates = _feature_gates_for_user(False)
 
+    people_finder_pf = parse_people_finder_args(request.args)
+
     if not query and search_type != "mybot":
+        _pf_banner = (
+            people_finder_banner_context("", people_finder_pf)
+            if (search_type == "people" and people_finder_pf)
+            else None
+        )
         return render_template(
             "index.html",
             **{
@@ -4363,6 +4400,8 @@ def search():
                 "osint_enabled": _abbiey_osint_enabled(),
                 "onion_scope": onion_scope,
                 "onion_mode": onion_mode,
+                "people_finder": _pf_banner,
+                "people_finder_pf": people_finder_pf or {},
             },
         )
 
@@ -4409,6 +4448,9 @@ def search():
             osint_enabled=_abbiey_osint_enabled(),
             mybot_id=None,
             mybot_name=None,
+            people_finder=None,
+            people_finder_pf={},
+            people_pf_url_extra="",
         )
     if len(query) > MAX_QUERY_LENGTH:
         return render_template(
@@ -4444,6 +4486,10 @@ def search():
 
     prep = preprocess_query(clean_query)
     query_ui = query_ui_hints(prep, refinement_notes=query_refinement_notes)
+
+    pf_ctx = (
+        people_finder_banner_context(query, people_finder_pf) if people_finder_pf else None
+    )
     anchor_geo = None
     if user_lat is not None and user_lon is not None and has_local_intent_signals(prep):
         anchor_geo = _reverse_geocode_label(user_lat, user_lon)
@@ -4500,6 +4546,7 @@ def search():
             mybot_user_id=_mb_uid,
             img_rev_key=img_rev_key or None,
             onion_mode=onion_mode,
+            people_finder_pf=people_finder_pf,
         )
         if results.get("results") and search_type not in ("images", "saved"):
             results["results"] = _rerank_results_with_feedback(query, results["results"])
@@ -4532,6 +4579,7 @@ def search():
         mybot_user_id=_mb_uid,
         img_rev_key=img_rev_key or None,
         onion_mode=onion_mode,
+        people_finder_pf=people_finder_pf,
     )
     if results.get("results") and search_type not in ("images", "saved"):
         results["results"] = _rerank_results_with_feedback(query, results["results"])
@@ -4637,6 +4685,8 @@ def search():
         show_ai_summary_block = False
         show_answer_layer_block = False
         query_ui = {**query_ui, "show_ai_summary": False}
+
+    _people_pf_qs = people_pf_params_only_fragment(people_finder_pf or {})
     return render_template(
         "index.html",
         query=query,
@@ -4683,6 +4733,9 @@ def search():
         mybot_id=mybot_id,
         mybot_name=mybot_name,
         img_rev_key=img_rev_key,
+        people_finder=pf_ctx,
+        people_finder_pf=people_finder_pf or {},
+        people_pf_url_extra=_people_pf_qs,
     )
 @app.route("/api/suggestions")
 @limiter.limit("200/minute")
@@ -9634,6 +9687,7 @@ def _fetch_results(
     mybot_user_id=None,
     img_rev_key=None,
     onion_mode="balanced",
+    people_finder_pf=None,
 ):
     """Fetch results with caching. Returns paginated slice."""
     if search_type == "images" and img_rev_key:
@@ -9669,7 +9723,8 @@ def _fetch_results(
     onion_seg = ""
     if search_type == "onion":
         onion_seg = f"|om={onion_mode}"
-    cache_key = f"{query}|{search_type}|{region or ''}|{lang or ''}|{ops_str}|{time_filter or ''}|{safesearch or 'off'}{img_seg}{cw_seg}{bot_seg}{onion_seg}"
+    pf_seg = people_finder_cache_suffix(people_finder_pf) if search_type == "people" else ""
+    cache_key = f"{query}|{search_type}|{region or ''}|{lang or ''}|{ops_str}|{time_filter or ''}|{safesearch or 'off'}{img_seg}{cw_seg}{bot_seg}{onion_seg}{pf_seg}"
 
     def _onion_notice(all_results):
         if search_type != "onion":
@@ -9756,6 +9811,8 @@ def _fetch_results(
 
     # Build effective query with operators
     effective_query = _build_engine_query(query, operators) if operators else query
+    if search_type == "people" and people_finder_pf:
+        effective_query = enrich_people_engine_query(effective_query, people_finder_pf)
     max_results = CACHE_FETCH_SIZE
     # Onion / Deep Web — dedicated path, skip normal engines
     results = []
