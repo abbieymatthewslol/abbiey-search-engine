@@ -231,7 +231,10 @@ document.addEventListener("DOMContentLoaded", () => {
   if (savedAccent) applyAccentColor(savedAccent);
 
   function parseHexRgb(color) {
-    const h = String(color || "").replace("#", "").trim();
+    let h = String(color || "").replace("#", "").trim();
+    if (h.length === 3 && /^[0-9a-fA-F]{3}$/.test(h)) {
+      h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+    }
     if (h.length !== 6 || !/^[0-9a-fA-F]{6}$/.test(h)) return null;
     return {
       r: parseInt(h.slice(0, 2), 16),
