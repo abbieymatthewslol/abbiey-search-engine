@@ -23,7 +23,7 @@ You are the repo maintainer agent for **abbiey-search-engine-2**. Your job is to
 ## Testing & safety checks
 Before considering work “done”, try to ensure:
 - app starts locally (or at least imports without crashing)
-- key pages render (index/login/profile/pet if applicable)
+- key pages render (index/login/profile if applicable)
 - run unit tests if present:
   - `pytest` (or specify exact command used in this repo)
 - avoid committing secrets:

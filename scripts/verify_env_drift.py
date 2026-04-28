@@ -27,7 +27,6 @@ PY_SCAN_ROOTS = (
     "search_bots.py",
     "search_protocol.py",
     "bot_crawler.py",
-    "digital_pet.py",
     "reverse_image.py",
     "reverse_image_storage.py",
     "startup_checks.py",

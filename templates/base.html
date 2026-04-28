@@ -118,7 +118,6 @@
             </button>
 
             {% if current_user %}
-            <a href="/pet" class="header-pet-link" title="Digital animal &amp; XP" aria-label="Digital animal">Pet</a>
             <a href="/profile" class="user-avatar-chip" title="Your profile" aria-label="Profile">
                 <span class="user-avatar-initials">{{ (current_user.display_name or current_user.username)[0] | upper }}</span>
                 <span class="user-avatar-name">{{ current_user.display_name or current_user.username }}</span>

@@ -53,8 +53,6 @@ PATH_HINTS: list[tuple[str, tuple[str, ...]]] = [
     ("search_bots.py", ("tests/test_search_bots_api.py",)),
     ("bot_crawler.py", ("tests/test_search_bots_api.py",)),
     ("reverse_image", ("tests/test_reverse_image.py",)),
-    ("digital_pet.py", ("tests/test_digital_pet.py",)),
-    ("search_protocol.py", ("tests/test_search_protocol.py",)),
     ("startup_checks.py", ("tests/test_startup_checks.py",)),
     ("vercel.json", ("tests/test_vercel_env_normalize.py",)),
     ("scripts/verify_", ("tests/test_vercel_env_normalize.py", "tests/test_startup_checks.py")),

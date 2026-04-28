@@ -16,7 +16,6 @@
           "abbiey_product_knowledge.py",
           "billing.py",
           "bot_crawler.py",
-          "digital_pet.py",
           "entity_parser.py",
           "query_understanding.py",
           "reverse_image.py",
