@@ -36,6 +36,8 @@
   --search-button-bg: #4ade80;
   --search-button-bg-hover: #22c55e;
   --search-button-text: #052e16;
+  --search-button-shadow: 0 6px 18px rgba(74, 222, 128, 0.22);
+  --search-button-shadow-hover: 0 10px 24px rgba(34, 197, 94, 0.28);
   --radius-sm:     4px;
   --radius:        6px;
   --radius-lg:     8px;
@@ -75,6 +77,8 @@
   --search-button-bg: #4ade80;
   --search-button-bg-hover: #22c55e;
   --search-button-text: #052e16;
+  --search-button-shadow: 0 6px 18px rgba(74, 222, 128, 0.22);
+  --search-button-shadow-hover: 0 10px 24px rgba(34, 197, 94, 0.28);
   --radius-sm:     4px;
   --radius:        6px;
   --radius-lg:     8px;
@@ -828,7 +832,7 @@ body.has-results .voice-btn {
   min-height: 42px;
   font-size: .8125rem;
   font-weight: 600;
-  box-shadow: 0 6px 18px rgba(74, 222, 128, 0.22);
+  box-shadow: var(--search-button-shadow);
   transition:
     background var(--dur-fast) var(--ease-out),
     color var(--dur-fast) var(--ease-out),
@@ -839,7 +843,7 @@ body.has-results .voice-btn {
 .search-btn:hover {
   background: var(--search-button-bg-hover);
   transform: scale(1.04);
-  box-shadow: 0 10px 24px rgba(34, 197, 94, 0.28);
+  box-shadow: var(--search-button-shadow-hover);
 }
 .search-btn:active {
   opacity: 0.96;

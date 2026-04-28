@@ -226,8 +226,62 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // ===== Custom accent color =====
+  const SEARCH_ACCENT_KEY = "abbiey_search_accent";
   const savedAccent = localStorage.getItem("accent-color");
   if (savedAccent) applyAccentColor(savedAccent);
+
+  function parseHexRgb(color) {
+    const h = String(color || "").replace("#", "").trim();
+    if (h.length !== 6 || !/^[0-9a-fA-F]{6}$/.test(h)) return null;
+    return {
+      r: parseInt(h.slice(0, 2), 16),
+      g: parseInt(h.slice(2, 4), 16),
+      b: parseInt(h.slice(4, 6), 16),
+      hex: "#" + h.toLowerCase(),
+    };
+  }
+
+  /** WCAG relative luminance for sRGB hex #rrggbb — for button label contrast */
+  function contrastTextOn(hex) {
+    const p = parseHexRgb(hex);
+    if (!p) return "#1c1917";
+    const lin = (x) => {
+      const c = x / 255;
+      return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    };
+    const L = 0.2126 * lin(p.r) + 0.7152 * lin(p.g) + 0.0722 * lin(p.b);
+    return L > 0.55 ? "#1c1917" : "#fafaf9";
+  }
+
+  /** Main search submit button: follows search-bar colour when set, else accent from settings */
+  function applySearchSubmitButtonColors() {
+    const searchPick = localStorage.getItem(SEARCH_ACCENT_KEY) || "";
+    let baseHex = parseHexRgb(searchPick);
+    if (!baseHex) baseHex = parseHexRgb(localStorage.getItem("accent-color") || "");
+    if (!baseHex) {
+      [
+        "--search-button-bg",
+        "--search-button-bg-hover",
+        "--search-button-text",
+        "--search-button-shadow",
+        "--search-button-shadow-hover",
+      ].forEach((v) => html.style.removeProperty(v));
+      return;
+    }
+    const bg = baseHex.hex;
+    const hover = adjustBrightness(bg.replace("#", ""), -26);
+    html.style.setProperty("--search-button-bg", bg);
+    html.style.setProperty("--search-button-bg-hover", hover);
+    html.style.setProperty("--search-button-text", contrastTextOn(bg));
+    html.style.setProperty(
+      "--search-button-shadow",
+      `0 6px 18px color-mix(in srgb, ${bg} 42%, transparent)`
+    );
+    html.style.setProperty(
+      "--search-button-shadow-hover",
+      `0 10px 24px color-mix(in srgb, ${hover} 45%, transparent)`
+    );
+  }
 
   function applyAccentColor(color) {
     html.style.setProperty("--accent", color);
@@ -236,15 +290,15 @@ document.addEventListener("DOMContentLoaded", () => {
     html.style.setProperty("--accent-dim", dim);
     localStorage.setItem("accent-color", color);
     // Mark active swatch
-    document.querySelectorAll(".color-swatch").forEach(s => {
+    document.querySelectorAll(".color-swatch").forEach((s) => {
       s.classList.toggle("active", s.dataset.color === color);
     });
+    applySearchSubmitButtonColors();
   }
 
   // ===== Custom search-bar colour =====
   // Independent from --accent so users can theme the search pill without
   // dragging every other accent-tinted element along. Empty string = reset.
-  const SEARCH_ACCENT_KEY = "abbiey_search_accent";
   const savedSearchAccent = localStorage.getItem(SEARCH_ACCENT_KEY) || "";
   applySearchAccent(savedSearchAccent);
 
@@ -271,6 +325,7 @@ document.addEventListener("DOMContentLoaded", () => {
     document.querySelectorAll(".search-color-swatch").forEach(s => {
       s.classList.toggle("active", s.dataset.color === color);
     });
+    applySearchSubmitButtonColors();
   }
 
   function _mix(hex, alpha, brighten) {
