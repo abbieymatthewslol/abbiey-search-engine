@@ -1160,6 +1160,15 @@ document.addEventListener("DOMContentLoaded", () => {
         hidePrivacyPopover();
       }
     });
+    const resultsHowLink = document.getElementById("results-how-link");
+    if (resultsHowLink) {
+      resultsHowLink.addEventListener("click", (e) => {
+        e.preventDefault();
+        if (!privacyPopover.classList.contains("open")) {
+          privacyBadge.click();
+        }
+      });
+    }
   }
 
   // ===== Answer layer + AI Summary async fetch (text tab, page 1 only) =====

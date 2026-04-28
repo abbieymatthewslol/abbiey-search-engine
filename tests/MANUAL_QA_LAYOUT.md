@@ -2,6 +2,11 @@
 
 Run through on a **search results** page (query with text results). Use a wide window (>1100px) unless noted.
 
+## Search tabs (results page)
+
+1. Primary tabs shown: **All**, **Images**, **News**, **Videos**, **Code**.
+2. **More** opens a menu with **People**, **Email**, **Business**, **Onion / Tor**, **Saved**, **Your bots** (and per-bot links when logged in). The More button label reflects the active mode when it is one of these.
+
 ## Preview column
 
 1. **Resize**: Drag the slim vertical bar between main results and the preview; width should change smoothly and persist after reload.

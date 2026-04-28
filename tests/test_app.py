@@ -34,7 +34,7 @@ class TestRoutes:
         assert resp.status_code == 200
         assert b'id="search-input"' in resp.data
         assert b'aria-label="Search query"' in resp.data
-        assert b"abbiey.search" in resp.data
+        assert b'abbiey.<span>search</span>' in resp.data
 
     def test_root_is_search_ui_not_marketing_about_page(self, client):
         """Root redirects to search UI; long-form product copy lives on /about."""
@@ -141,7 +141,7 @@ class TestRoutes:
     def test_search_empty_query_shows_index(self, client):
         resp = client.get("/search?q=")
         assert resp.status_code == 200
-        assert b"abbiey.search" in resp.data
+        assert b'abbiey.<span>search</span>' in resp.data
 
     def test_search_home_preserves_image_mode_from_url(self, client):
         """Deep-link / empty home: ?type=images should set hidden type + show Images mode."""
@@ -1178,16 +1178,16 @@ class TestPrivacyBadge:
         assert b"Unfiltered answers" in resp.data
         assert b"Depth by default" in resp.data
         assert b"Receipts and traceability" in resp.data
-        assert b"Power-user controls" in resp.data
+        assert b"Settings you control" in resp.data
 
     def test_privacy_badge_on_search_page(self, client, mock_ddg):
         resp = client.get("/search?q=test")
         assert b"privacy-badge" in resp.data
 
-    def test_privacy_google_comparison(self, client):
-        resp = client.get("/search?q=")
-        assert b"Links only" in resp.data
-        assert b"Full excerpts" in resp.data
+    def test_privacy_google_comparison(self, client, mock_ddg):
+        resp = client.get("/search?q=test")
+        assert b"How we answer" in resp.data
+        assert b"results-how-link" in resp.data
 
     def test_privacy_tagline(self, client):
         resp = client.get("/search?q=")

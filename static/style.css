@@ -96,8 +96,9 @@
   --sidebar-width:  340px;
   --preview-panel-width: var(--sidebar-width);
   --chat-panel-width: 360px;
-  --font-sans:      Georgia, "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", serif;
-  --font-display:   Georgia, "Times New Roman", Times, serif;
+  /* UI chrome: neutral sans (readable at small sizes); display titles stay serif via --font-display */
+  --font-sans:      system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-display:   Georgia, "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", serif;
 }
 
 /* ===== Corner Radius Modes ===== */
@@ -1321,31 +1322,25 @@ body.has-results .search-btn.search-btn-icon {
 }
 .results-filter-clear:hover { color: var(--text); }
 .results-positioning-strip {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-  margin: 0.95rem 0 1.2rem;
-  padding: 0.9rem 1rem;
+  margin: 0.65rem 0 1rem;
+  padding: 0.55rem 0.85rem;
 }
-.results-positioning-copy {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-.results-positioning-title {
-  font-size: 0.86rem;
-  font-weight: 600;
-  color: var(--text);
-}
-.results-positioning-subtitle {
+.results-positioning-line {
   margin: 0;
   font-size: 0.8rem;
-  line-height: 1.5;
+  line-height: 1.45;
   color: var(--text-dim);
 }
-.results-mode-chips {
-  justify-content: flex-end;
+.results-positioning-text {
+  display: block;
+}
+.results-how-link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.results-how-link:hover {
+  color: var(--text);
 }
 
 /* ===== 9. RESULTS ===== */
@@ -2238,42 +2233,6 @@ html[data-theme="light"] .home-mode-btn[data-search-mode="onion"]:hover {
   font-size: 0.8rem;
   line-height: 1.55;
   color: var(--text-dim);
-}
-.positioning-mode-groups {
-  display: flex;
-  flex-direction: column;
-  gap: 0.65rem;
-}
-.positioning-mode-group {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-}
-.positioning-mode-label {
-  font-size: 0.68rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-muted);
-}
-.positioning-mode-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-}
-.positioning-mode-chip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.28rem 0.55rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  background: var(--bg-surface-2);
-  color: var(--text-dim);
-  font-size: 0.74rem;
-  line-height: 1.2;
 }
 .home-safety-note {
   width: 100%;
@@ -5292,12 +5251,6 @@ footer {
     display: none;
   }
   .home-hero { margin-bottom: 1.1rem; }
-  .results-positioning-strip {
-    flex-direction: column;
-  }
-  .results-mode-chips {
-    justify-content: flex-start;
-  }
   .about-principles {
     grid-template-columns: 1fr;
   }
@@ -5349,10 +5302,6 @@ footer {
     flex-wrap: wrap;
     justify-content: flex-end;
     max-width: 100%;
-  }
-  .positioning-mode-group {
-    flex-direction: column;
-    align-items: stretch;
   }
 }
 
@@ -6067,37 +6016,3 @@ footer {
   .profile-name { font-size: 1rem; }
 }
 
-/* ============================================================
-   Chatbots hub — homepage entry point
-   ============================================================ */
-.home-chatbots-row {
-  display: flex;
-  justify-content: center;
-  margin: 1.1rem 0 .25rem;
-}
-
-.home-chatbots-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: .45rem;
-  padding: .45rem 1.1rem;
-  border-radius: 999px;
-  border: 1px solid var(--border, rgba(255,255,255,.14));
-  background: transparent;
-  color: inherit;
-  font-size: .9rem;
-  font-weight: 500;
-  text-decoration: none;
-  opacity: .75;
-  transition: opacity .15s, border-color .15s, background .15s;
-}
-
-.home-chatbots-btn:hover {
-  opacity: 1;
-  border-color: var(--accent, #7c6cfc);
-  background: color-mix(in srgb, var(--accent, #7c6cfc) 8%, transparent);
-}
-
-.home-chatbots-btn svg {
-  flex-shrink: 0;
-}

@@ -109,7 +109,7 @@
     <header>
             <div class="header-brand">
             <div class="header-brand-top">
-                <a href="/" class="logo">abbiey<span>search</span></a>
+                <a href="/" class="logo">abbiey.<span>search</span></a>
                 <span class="incognito-badge" id="incognito-badge" hidden>Incognito</span>
             </div>
         </div>
@@ -494,35 +494,8 @@
                 <p class="positioning-point-copy">Call out what is evidence, what is interpretation, and link you back to the source material.</p>
             </div>
             <div class="positioning-point">
-                <span class="positioning-point-title">Power-user controls</span>
-                <p class="positioning-point-copy">Depth, evidence, and answer style controls are being surfaced so you can tune how much raw material you want.</p>
-            </div>
-        </div>
-        <div class="positioning-mode-groups" aria-label="Communicated answer controls">
-            <div class="positioning-mode-group">
-                <span class="positioning-mode-label">Depth</span>
-                <div class="positioning-mode-chips">
-                    <span class="positioning-mode-chip">Quick</span>
-                    <span class="positioning-mode-chip">Standard</span>
-                    <span class="positioning-mode-chip">Deep</span>
-                    <span class="positioning-mode-chip">Research</span>
-                </div>
-            </div>
-            <div class="positioning-mode-group">
-                <span class="positioning-mode-label">Evidence</span>
-                <div class="positioning-mode-chips">
-                    <span class="positioning-mode-chip">Links only</span>
-                    <span class="positioning-mode-chip">Key quotes</span>
-                    <span class="positioning-mode-chip">Full excerpts</span>
-                </div>
-            </div>
-            <div class="positioning-mode-group">
-                <span class="positioning-mode-label">Answer style</span>
-                <div class="positioning-mode-chips">
-                    <span class="positioning-mode-chip">Direct</span>
-                    <span class="positioning-mode-chip">Balanced</span>
-                    <span class="positioning-mode-chip">Adversarial</span>
-                </div>
+                <span class="positioning-point-title">Settings you control</span>
+                <p class="positioning-point-copy">Tune appearance, AI summary, filters, and region from the gear menu &mdash; without losing the habit of one search bar.</p>
             </div>
         </div>
         <p class="positioning-popover-note">Built for people who want the <em>why</em> &mdash; not just a link list.</p>
@@ -534,7 +507,7 @@
             {% if not query %}
             {# ===== HOME: logo → headline → search → one supporting line ===== #}
             <div class="home-hero">
-                <h1 class="home-logo">abbiey<span>search</span></h1>
+                <h1 class="home-logo">abbiey.<span>search</span></h1>
                 <p class="home-hero-headline">Unfiltered answers.</p>
             </div>
             {% endif %}
@@ -614,12 +587,6 @@
             <div class="home-recent-wrap">
                 <div id="recent-searches-home" class="recent-searches-home"></div>
             </div>
-            <div class="home-chatbots-row">
-                <a href="/chatbots" class="home-chatbots-btn" aria-label="Open AI chatbots">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
-                    Chatbots
-                </a>
-            </div>
             {% with adsense_slot=google_adsense_slot_home %}
             {% include 'includes/google_adsense_unit.html' %}
             {% endwith %}
@@ -647,17 +614,17 @@
                 <a href="/search?q={{ query|urlencode }}&type=news{% if region %}&region={{ region }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab {% if search_type == 'news' %}active{% endif %}">News</a>
                 <a href="/search?q={{ query|urlencode }}&type=videos{% if region %}&region={{ region }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab {% if search_type == 'videos' %}active{% endif %}">Videos</a>
                 <a href="/search?q={{ query|urlencode }}&type=code{% if region %}&region={{ region }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab {% if search_type == 'code' %}active{% endif %}">Code</a>
-                <a href="/search?q={{ query|urlencode }}&type=people{% if region %}&region={{ region }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab {% if search_type == 'people' %}active{% endif %}">People</a>
-                <a href="/search?q={{ query|urlencode }}&type=email{% if region %}&region={{ region }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab {% if search_type == 'email' %}active{% endif %}">Email</a>
-                <a href="/search?q={{ query|urlencode }}&type=business{% if region %}&region={{ region }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab {% if search_type == 'business' %}active{% endif %}">Business</a>
-                <a href="/search?q={{ query|urlencode }}&type=onion{% if region %}&region={{ region }}{% endif %}{% if onion_mode %}&onion_mode={{ onion_mode }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab {% if search_type == 'onion' %}active{% endif %}" title="Clearnet-indexed .onion search">Onion / Tor</a>
                 </div>
-                <div class="tab-more-wrap {% if search_type in ('saved', 'mybot') %}has-active{% endif %}" id="tab-more-wrap">
-                    <button type="button" class="tab tab-more-btn {% if search_type in ('saved', 'mybot') %}active{% endif %}" id="tab-more-btn" aria-haspopup="true" aria-expanded="false" aria-controls="tab-more-menu">
-                        {% if search_type == 'saved' %}Saved{% elif search_type == 'mybot' %}Custom bot{% else %}More{% endif %}
+                <div class="tab-more-wrap {% if search_type in ('people', 'email', 'business', 'onion', 'saved', 'mybot') %}has-active{% endif %}" id="tab-more-wrap">
+                    <button type="button" class="tab tab-more-btn {% if search_type in ('people', 'email', 'business', 'onion', 'saved', 'mybot') %}active{% endif %}" id="tab-more-btn" aria-haspopup="true" aria-expanded="false" aria-controls="tab-more-menu">
+                        {% if search_type == 'saved' %}Saved{% elif search_type == 'mybot' %}Custom bot{% elif search_type == 'people' %}People{% elif search_type == 'email' %}Email{% elif search_type == 'business' %}Business{% elif search_type == 'onion' %}Onion / Tor{% else %}More{% endif %}
                         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
                     </button>
                     <div class="tab-more-menu" id="tab-more-menu" hidden>
+                        <a href="/search?q={{ query|urlencode }}&type=people{% if region %}&region={{ region }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab-more-item {% if search_type == 'people' %}active{% endif %}">People</a>
+                        <a href="/search?q={{ query|urlencode }}&type=email{% if region %}&region={{ region }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab-more-item {% if search_type == 'email' %}active{% endif %}">Email</a>
+                        <a href="/search?q={{ query|urlencode }}&type=business{% if region %}&region={{ region }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab-more-item {% if search_type == 'business' %}active{% endif %}">Business</a>
+                        <a href="/search?q={{ query|urlencode }}&type=onion{% if region %}&region={{ region }}{% endif %}{% if onion_mode %}&onion_mode={{ onion_mode }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab-more-item {% if search_type == 'onion' %}active{% endif %}" title="Clearnet-indexed .onion search">Onion / Tor</a>
                         <a href="/search?q={{ query|urlencode }}&type=saved{% if cleanweb %}&cleanweb=1{% endif %}" class="tab-more-item {% if search_type == 'saved' %}active{% endif %}">Saved <span class="bookmark-count-badge" id="bookmark-count-badge"></span></a>
                         <a href="/profile#search-bots" class="tab-more-item">Your bots</a>
                     </div>
@@ -756,17 +723,9 @@
             </div>
             {% if query and search_type == 'text' %}
             <section class="results-positioning-strip" aria-label="Answering approach">
-                <div class="results-positioning-copy">
-                    <span class="results-positioning-title">Real answers. Full context. No fluff.</span>
-                    <p class="results-positioning-subtitle">Direct takes, source-backed evidence, and the strongest counterpoint when the answer is messy.</p>
-                </div>
-                <div class="positioning-mode-chips results-mode-chips" aria-hidden="true">
-                    <span class="positioning-mode-chip">Quick</span>
-                    <span class="positioning-mode-chip">Deep</span>
-                    <span class="positioning-mode-chip">Research</span>
-                    <span class="positioning-mode-chip">Key quotes</span>
-                    <span class="positioning-mode-chip">Balanced</span>
-                </div>
+                <p class="results-positioning-line">
+                    <span class="results-positioning-text">Straight answers with sources. <a href="#" class="results-how-link" id="results-how-link">How we answer</a></span>
+                </p>
             </section>
             {% endif %}
 
@@ -1653,8 +1612,10 @@
     </div>
 
     <footer>
-        <p><strong>abbieysearch</strong> (abbiey.search) &mdash; Real answers. Full context. No fluff. <span class="footer-credit">by abbiey matthews</span></p>
+        <p><strong>abbiey<span>.</span>search</strong> &mdash; Real answers. Full context. No fluff. <span class="footer-credit">by abbiey matthews</span></p>
         <p class="footer-links">
+            <a href="/chatbots">Chatbots</a>
+            &nbsp;&middot;&nbsp;
             <a href="/privacy">Privacy Policy</a>
             &nbsp;&middot;&nbsp;
             <a href="/terms">Terms of Service</a>
