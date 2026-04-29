@@ -642,7 +642,7 @@
                         <a href="/search?q={{ query|urlencode }}&type=business{% if region %}&region={{ region }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab-more-item {% if search_type == 'business' %}active{% endif %}">Business</a>
                         <a href="/search?q={{ query|urlencode }}&type=onion{% if region %}&region={{ region }}{% endif %}{% if onion_mode %}&onion_mode={{ onion_mode }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab-more-item {% if search_type == 'onion' %}active{% endif %}" title="Clearnet-indexed .onion search">Onion / Tor</a>
                         <a href="/search?q={{ query|urlencode }}&type=saved{% if cleanweb %}&cleanweb=1{% endif %}" class="tab-more-item {% if search_type == 'saved' %}active{% endif %}">Saved <span class="bookmark-count-badge" id="bookmark-count-badge"></span></a>
-                        <a href="/profile#search-bots" class="tab-more-item">Your bots</a>
+                        <a href="{% if current_user %}/profile#search-bots{% else %}{{ url_for('agents') }}{% endif %}" class="tab-more-item">Your bots</a>
                     </div>
                 </div>
             </nav>

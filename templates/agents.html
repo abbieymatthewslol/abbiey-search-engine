@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}AI agents · abbieysearch{% endblock %}
+{% block meta_description %}Set up search agents: custom crawls on your sites and specialist AI chat — plus what is coming for alerts and automation.{% endblock %}
+{% block og_title %}AI agents · abbieysearch{% endblock %}
+{% block og_description %}Build agents for focused search, AI tasks, and future notify-when automations. Free account to save your bots.{% endblock %}
+{% block tw_title %}AI agents · abbieysearch{% endblock %}
+{% block tw_description %}Build agents for focused search and AI workflows. Signed-in users configure custom bots and chat agents here.{% endblock %}
+
+{% block content %}
+<main class="agents-hub" style="max-width:42rem;margin:0 auto;padding:1.5rem 1rem 3rem">
+    <h1 class="agents-hub-title" style="font-size:1.75rem;font-weight:800;margin:0 0 .35rem">AI agents &amp; automation</h1>
+    <p class="agents-hub-lead" style="opacity:.85;line-height:1.55;margin:0 0 1.75rem">
+        Create agents that work with abbieysearch: scoped crawls for your own sites, specialist AI chats for research and OSINT,
+        and (soon) alerts when conditions you care about change.
+    </p>
+
+    <section class="agents-card" style="border:1px solid var(--border, rgba(255,255,255,.12));border-radius:12px;padding:1.25rem 1.35rem;margin-bottom:1rem;background:var(--bg-surface, rgba(255,255,255,.03))">
+        <h2 style="font-size:1.1rem;font-weight:700;margin:0 0 .5rem;display:flex;align-items:center;gap:.45rem">
+            <span aria-hidden="true">🤖</span> Custom search bots
+        </h2>
+        <p style="margin:0 0 1rem;opacity:.88;line-height:1.55;font-size:.95rem">
+            Point the engine at pages you choose, update the index, then search only that corpus from <strong>More → Your bots</strong>.
+            {% if current_user %}
+            Open your builder below.
+            {% else %}
+            Sign in (free) to create and manage bots.
+            {% endif %}
+        </p>
+        {% if current_user %}
+        <a href="{{ url_for('profile') }}#search-bots" class="search-btn" style="display:inline-block;text-decoration:none;padding:.55rem 1.15rem;border-radius:8px;font-weight:600">Create or manage search bots</a>
+        {% else %}
+        <a href="{{ url_for('signup', next='/profile#search-bots') }}" class="search-btn" style="display:inline-block;text-decoration:none;padding:.55rem 1.15rem;border-radius:8px;font-weight:600">Sign up to build search bots</a>
+        <p style="margin:.85rem 0 0;font-size:.88rem;opacity:.7">Already have an account? <a href="{{ url_for('login', next='/profile#search-bots') }}">Sign in</a></p>
+        {% endif %}
+    </section>
+
+    <section class="agents-card" style="border:1px solid var(--border, rgba(255,255,255,.12));border-radius:12px;padding:1.25rem 1.35rem;margin-bottom:1rem;background:var(--bg-surface, rgba(255,255,255,.03))">
+        <h2 style="font-size:1.1rem;font-weight:700;margin:0 0 .5rem;display:flex;align-items:center;gap:.45rem">
+            <span aria-hidden="true">💬</span> Specialist AI chat agents
+        </h2>
+        <p style="margin:0 0 1rem;opacity:.88;line-height:1.55;font-size:.95rem">
+            Talk to purpose-tuned agents for research, code, OSINT, and more — same privacy stance as the rest of the product.
+        </p>
+        <a href="{{ url_for('chatbots_page') }}" class="search-btn auth-btn-secondary" style="display:inline-block;text-decoration:none;padding:.55rem 1.15rem;border-radius:8px;font-weight:600;border:1px solid var(--border)">Open chat agents</a>
+    </section>
+
+    <section class="agents-card agents-card-muted" style="border:1px dashed var(--border, rgba(255,255,255,.14));border-radius:12px;padding:1.25rem 1.35rem;background:transparent">
+        <h2 style="font-size:1.05rem;font-weight:700;margin:0 0 .5rem">Alerts &amp; “when X happens…”</h2>
+        <p style="margin:0;opacity:.75;line-height:1.55;font-size:.92rem">
+            Notify-when automations (e.g. watch a query or source and ping you when something new appears) are on the roadmap.
+            A free account saves your bots and settings so we can attach alerts to your agents when this ships.
+        </p>
+    </section>
+
+    <p style="margin-top:2rem;font-size:.88rem;opacity:.65">
+        <a href="{{ url_for('search') }}">← Back to search</a>
+    </p>
+</main>
+{% endblock %}

@@ -22,6 +22,7 @@
 
         <div class="auth-errors auth-flash-hidden" id="sb-error" role="alert" aria-live="polite"></div>
         <div class="auth-success auth-flash-hidden" id="sb-success" role="status" aria-live="polite"></div>
+        <input type="hidden" id="signup-oauth-next" value="{{ signup_next or '' }}">
 
         {% if supabase_auth %}
         {# ── Supabase: Google is the primary sign-up path; email/password is secondary ── #}
@@ -39,6 +40,7 @@
         <div class="auth-signup-email-secondary">
             <p class="auth-signup-email-eyebrow" id="auth-signup-email-label">Create account with email</p>
             <form class="auth-form" id="sb-signup-form" autocomplete="on" aria-labelledby="auth-form-title auth-signup-email-label">
+            <input type="hidden" name="next" value="{{ signup_next or '' }}">
             <div class="auth-field">
                 <label for="email">Email</label>
                 <div class="auth-input-pill">
@@ -68,6 +70,7 @@
         {% else %}
         {# ── Legacy form-based signup ── #}
         <form class="auth-form" method="POST" action="/signup" id="signup-form" autocomplete="on" aria-labelledby="auth-form-title">
+            <input type="hidden" name="next" value="{{ signup_next or '' }}">
 
             <div class="auth-field">
                 <label for="username">Username</label>
@@ -119,7 +122,10 @@
         </form>
         {% endif %}
 
-        <p class="auth-switch">Already have an account? <a href="/login">Sign in</a></p>
+        <p class="auth-switch">Already have an account?
+            {% if signup_next %}<a href="{{ url_for('login', next=signup_next) }}">Sign in</a>
+            {% else %}<a href="/login">Sign in</a>{% endif %}
+        </p>
 {% endblock %}
 
 {% block extra_scripts %}
@@ -141,6 +147,8 @@
     var form = document.getElementById('sb-signup-form');
     var submitBtn = document.getElementById('signup-submit-sb');
     var googleBtn = document.getElementById('sb-google-btn');
+    var oauthNextEl = document.getElementById('signup-oauth-next');
+    var oauthNextStored = (oauthNextEl && oauthNextEl.value) ? String(oauthNextEl.value).trim() : '';
 
     function escapeHtml(s) {
         return String(s || '')
@@ -204,7 +212,7 @@
                 errEl.classList.add('auth-flash-hidden');
             }
             try {
-                sessionStorage.setItem('abbiey_oauth_next', '/search');
+                sessionStorage.setItem('abbiey_oauth_next', oauthNextStored || '/search');
             } catch (_nx) { /* ignore */ }
             googleBtn.disabled = true;
             googleBtn.innerHTML = 'Redirecting to Google\u2026';
@@ -296,7 +304,8 @@
                 });
                 var cdata = await cb.json().catch(function () { return null; });
                 if (cb.ok && cdata && cdata.ok) {
-                    window.location.href = '/';
+                    var dest = oauthNextStored || '/';
+                    window.location.href = (dest.charAt(0) === '/' && dest.indexOf('//') !== 0) ? dest : '/';
                     return;
                 }
                 var failMsg = (cdata && (cdata.message || cdata.error)) ? String(cdata.message || cdata.error) : '';

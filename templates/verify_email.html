@@ -29,6 +29,7 @@
         {% else %}
 
         <form class="auth-form" method="POST" action="/verify-email" autocomplete="on" aria-labelledby="auth-form-title">
+            {% if verify_next %}<input type="hidden" name="next" value="{{ verify_next }}">{% endif %}
             <div class="auth-field">
                 <label for="email">Email</label>
                 <div class="auth-input-pill">
@@ -52,11 +53,15 @@
         </form>
 
         <form class="auth-form" method="POST" action="/verify-email/resend" id="verify-resend-form" style="margin-top:1rem">
+            {% if verify_next %}<input type="hidden" name="next" value="{{ verify_next }}">{% endif %}
             <input type="hidden" name="email" id="resend-email-hidden" value="{{ email or '' }}">
             <button type="submit" class="search-btn auth-submit" style="opacity:.9">Send new code</button>
         </form>
 
-        <p class="auth-switch">Wrong address? <a href="/signup">Sign up again</a> · <a href="/login">Sign in</a></p>
+        <p class="auth-switch">Wrong address?
+            {% if verify_next %}<a href="{{ url_for('signup', next=verify_next) }}">Sign up again</a> · <a href="{{ url_for('login', next=verify_next) }}">Sign in</a>
+            {% else %}<a href="/signup">Sign up again</a> · <a href="/login">Sign in</a>{% endif %}
+        </p>
         {% endif %}
 {% endblock %}
 

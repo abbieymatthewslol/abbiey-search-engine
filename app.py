@@ -3060,8 +3060,14 @@ def blog():
 
 @app.route("/bots")
 def bots():
-    """Landing page explaining custom search bots and prompting sign-up."""
-    return render_template("bots.html")
+    """Legacy URL: send users to the agents hub (no signup-only landing)."""
+    return redirect(url_for("agents"), code=301)
+
+
+@app.route("/agents")
+def agents():
+    """AI agents hub — custom search bots, chat agents, future alerts."""
+    return render_template("agents.html")
 
 
 # ---------------------------------------------------------------------------
@@ -10252,6 +10258,14 @@ def _safe_redirect_url(next_url: str) -> str:
     return next_url
 
 
+def _validated_relative_next(next_url: str | None) -> str:
+    """Return ``next_url`` only if it is a safe relative path; else ``\"\"``."""
+    n = (next_url or "").strip()
+    if not n:
+        return ""
+    return n if _safe_redirect_url(n) == n else ""
+
+
 def _sync_supabase_auth_user(email: str, display_name: str = "", phone: str | None = None) -> int | None:
     """Ensure a Supabase-authenticated user exists in our local users table. Returns user id."""
     email = (email or "").strip().lower()
@@ -10318,6 +10332,12 @@ def _signup_process_post():
     password = request.form.get("password", "")
     confirm = request.form.get("confirm_password", "")
     phone_raw = (request.form.get("phone") or "").strip()
+    _sb = {
+        "supabase_url": _SUPABASE_URL,
+        "supabase_anon_key": _SUPABASE_ANON_KEY,
+        "supabase_auth": _SUPABASE_AUTH_ENABLED,
+        "signup_next": _validated_relative_next(request.form.get("next")),
+    }
 
     errors = []
     if not _USERNAME_RE.match(username_raw):
@@ -10341,6 +10361,7 @@ def _signup_process_post():
             username=username_raw,
             email=email,
             phone=phone_raw,
+            **_sb,
         )
 
     username_key = username_raw.lower()
@@ -10373,6 +10394,7 @@ def _signup_process_post():
                 username=username_raw,
                 email=email,
                 phone=phone_raw,
+                **_sb,
             )
 
         try:
@@ -10402,6 +10424,7 @@ def _signup_process_post():
                 username=username_raw,
                 email=email,
                 phone=phone_raw,
+                **_sb,
             )
 
     if not uid:
@@ -10414,6 +10437,7 @@ def _signup_process_post():
             username=username_raw,
             email=email,
             phone=phone_raw,
+            **_sb,
         )
     try:
         otp, vtok = _set_verification_challenge(int(uid))
@@ -10425,9 +10449,13 @@ def _signup_process_post():
             username=username_raw,
             email=email,
             phone=phone_raw,
+            **_sb,
         )
     sent = _send_signup_verification_email(email, display_name, otp, vtok)
     vq = {"email": email, "new": "1"}
+    vn = _validated_relative_next(request.form.get("next"))
+    if vn:
+        vq["next"] = vn
     if not sent:
         vq["email_failed"] = "1"
     return redirect(url_for("verify_email", **vq))
@@ -10440,10 +10468,16 @@ def signup():
     if uid:
         u = _get_user_by_id(uid)
         if u and _user_is_email_verified(u):
-            return redirect(url_for("profile"))
+            dest = _validated_relative_next(request.args.get("next")) or url_for("profile")
+            return redirect(dest)
         session.pop("user_id", None)
 
-    sb_ctx = {"supabase_url": _SUPABASE_URL, "supabase_anon_key": _SUPABASE_ANON_KEY, "supabase_auth": _SUPABASE_AUTH_ENABLED}
+    sb_ctx = {
+        "supabase_url": _SUPABASE_URL,
+        "supabase_anon_key": _SUPABASE_ANON_KEY,
+        "supabase_auth": _SUPABASE_AUTH_ENABLED,
+        "signup_next": _validated_relative_next(request.args.get("next")),
+    }
 
     if request.method == "GET":
         return render_template("signup.html", **sb_ctx)
@@ -10496,7 +10530,8 @@ def verify_email():
         session.permanent = True
         session["user_id"] = uid_ok
         flash("welcome", "welcome")
-        r = redirect(url_for("index") + "?welcome=1")
+        dest = _validated_relative_next(request.args.get("next")) or (url_for("index") + "?welcome=1")
+        r = redirect(dest)
         _set_welcome_seen_cookie(r)
         return r
 
@@ -10508,14 +10543,21 @@ def verify_email():
             errors.append("Enter the email you used to sign up.")
         if not code or not code.isdigit() or len(code) != 6:
             errors.append("Enter the 6-digit code from your email.")
+        vn = _validated_relative_next(request.form.get("next"))
         if errors:
-            return render_template("verify_email.html", errors=errors, email=email_in)
+            return render_template(
+                "verify_email.html",
+                errors=errors,
+                email=email_in,
+                verify_next=vn,
+            )
         rows = _users_execute("SELECT * FROM users WHERE LOWER(email)=LOWER(?) LIMIT 1", [email_in])
         if not rows:
             return render_template(
                 "verify_email.html",
                 errors=["No account found for that email. Check the address or sign up again."],
                 email=email_in,
+                verify_next=vn,
             )
         u = rows[0]
         if _user_is_email_verified(u):
@@ -10530,33 +10572,43 @@ def verify_email():
                 "verify_email.html",
                 errors=["That code has expired. Request a new code below."],
                 email=email_in,
+                verify_next=vn,
             )
         try:
             uid_ok = int(u["id"])
         except (TypeError, ValueError):
-            return render_template("verify_email.html", errors=["Something went wrong. Try again."], email=email_in)
+            return render_template(
+                "verify_email.html",
+                errors=["Something went wrong. Try again."],
+                email=email_in,
+                verify_next=vn,
+            )
         expect = (u.get("otp_code_hash") or "").strip()
         if not expect or not hmac.compare_digest(expect, _otp_digest(uid_ok, code)):
             return render_template(
                 "verify_email.html",
                 errors=["That code is not correct."],
                 email=email_in,
+                verify_next=vn,
             )
         _mark_email_verified(uid_ok)
         session.permanent = True
         session["user_id"] = uid_ok
         flash("welcome", "welcome")
-        r = redirect(url_for("index") + "?welcome=1")
+        dest = vn or (url_for("index") + "?welcome=1")
+        r = redirect(dest)
         _set_welcome_seen_cookie(r)
         return r
 
     email_q = (request.args.get("email") or "").strip().lower()
+    vn_q = _validated_relative_next(request.args.get("next"))
     return render_template(
         "verify_email.html",
         email=email_q,
         from_signup=(request.args.get("new") == "1"),
         resent=(request.args.get("resent") == "1"),
         email_failed=(request.args.get("email_failed") == "1"),
+        verify_next=vn_q,
     )
 @app.route("/verify-email/resend", methods=["POST"])
 @limiter.limit("8/hour")
@@ -10569,13 +10621,20 @@ def verify_email_resend():
             email=email_in,
         )
     rows = _users_execute("SELECT * FROM users WHERE LOWER(email)=LOWER(?) LIMIT 1", [email_in])
+    vn_resend = _validated_relative_next(request.form.get("next"))
     if not rows or _user_is_email_verified(rows[0]):
-        return redirect(url_for("verify_email", email=email_in, resent="1"))
+        rq = {"email": email_in, "resent": "1"}
+        if vn_resend:
+            rq["next"] = vn_resend
+        return redirect(url_for("verify_email", **rq))
     u = rows[0]
     try:
         uid_ok = int(u["id"])
     except (TypeError, ValueError):
-        return redirect(url_for("verify_email", email=email_in, resent="1"))
+        rq = {"email": email_in, "resent": "1"}
+        if vn_resend:
+            rq["next"] = vn_resend
+        return redirect(url_for("verify_email", **rq))
     try:
         otp, vtok = _set_verification_challenge(uid_ok)
     except Exception:
@@ -10588,6 +10647,8 @@ def verify_email_resend():
     disp = u.get("display_name") or u.get("username") or "there"
     sent = _send_signup_verification_email(email_in, disp, otp, vtok)
     rq = {"email": email_in, "resent": "1"}
+    if vn_resend:
+        rq["next"] = vn_resend
     if not sent:
         rq["email_failed"] = "1"
     return redirect(url_for("verify_email", **rq))
@@ -10600,7 +10661,8 @@ def login():
     if uid:
         u = _get_user_by_id(uid)
         if u and _user_is_email_verified(u):
-            return redirect(url_for("profile"))
+            dest = _validated_relative_next(request.args.get("next")) or url_for("profile")
+            return redirect(dest)
         session.pop("user_id", None)
 
     sb_ctx = {"supabase_url": _SUPABASE_URL, "supabase_anon_key": _SUPABASE_ANON_KEY, "supabase_auth": _SUPABASE_AUTH_ENABLED}
