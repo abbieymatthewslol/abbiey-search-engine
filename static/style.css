@@ -1551,51 +1551,103 @@ article.result.code-result { font-size: .9rem; }
 .onion-warning {
   display: flex;
   align-items: flex-start;
-  gap: .625rem;
-  padding: .875rem 1rem;
-  background: color-mix(in srgb, #f59e0b 10%, transparent);
-  border: 1px solid color-mix(in srgb, #f59e0b 30%, transparent);
+  gap: .75rem;
+  padding: .72rem .95rem;
+  background: color-mix(in srgb, var(--bg-elevated) 94%, var(--accent) 6%);
+  border: 1px solid var(--border);
   border-radius: var(--radius);
-  font-size: .875rem;
-  color: var(--text);
+  font-size: .8125rem;
+  line-height: 1.45;
+  color: var(--text-dim);
   margin-bottom: 1rem;
+  box-shadow: var(--shadow-sm);
 }
-.onion-warning-icon { font-size: 1.1rem; flex-shrink: 0; }
-.onion-warning a { color: var(--accent); text-decoration: underline; }
+.onion-warning-icon {
+  flex-shrink: 0;
+  margin-top: 0.08rem;
+  color: color-mix(in srgb, var(--text-muted) 55%, var(--accent) 45%);
+  opacity: 0.92;
+}
+.onion-warning-icon svg { display: block; vertical-align: top; }
+.onion-warning-text { flex: 1; min-width: 0; }
+.onion-warning-lead { margin: 0; }
+.onion-warning-more { margin: 0.35rem 0 0; font-size: .76rem; }
+.onion-warning-more a { font-weight: 500; }
+.onion-warning strong { color: var(--text); font-weight: 600; }
+.onion-warning a {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  transition: border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.onion-warning a:hover {
+  color: color-mix(in srgb, var(--accent) 85%, var(--text));
+  border-bottom-color: color-mix(in srgb, var(--accent) 65%, transparent);
+}
+.onion-warning .onion-mode-wrapper {
+  flex-shrink: 0;
+  margin-left: auto;
+  align-self: center;
+}
 .onion-scope-bar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: .5rem;
+  gap: .45rem;
   margin: 0 0 .85rem;
+  padding: .55rem .65rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
 }
 .onion-scope-label {
-  font-size: .74rem;
+  font-size: .72rem;
   color: var(--text-muted);
-  letter-spacing: .04em;
-  text-transform: uppercase;
-  font-weight: 600;
+  letter-spacing: .02em;
+  font-weight: 500;
 }
 .onion-scope-btn {
   border: none;
   background: transparent;
   color: var(--text-dim);
-  font-size: .76rem;
+  font-size: .74rem;
   font-weight: 500;
   border-radius: 999px;
-  padding: .3rem .62rem;
+  padding: .28rem .58rem;
   cursor: pointer;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-subtle);
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
 }
-.onion-scope-btn.active {
+.onion-scope-btn:hover {
   background: var(--bg-hover);
   color: var(--text);
-  border-color: var(--border-strong);
+  border-color: var(--border);
+}
+.onion-scope-btn.active {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
 }
 .onion-scope-sources {
-  margin-left: .25rem;
+  margin-left: auto;
+  width: 100%;
+  padding-top: 0.35rem;
+  border-top: 1px solid var(--border-subtle);
+  margin-top: 0.15rem;
   color: var(--text-muted);
-  font-size: .74rem;
+  font-size: .68rem;
+}
+@media (min-width: 720px) {
+  .onion-scope-sources {
+    width: auto;
+    padding-top: 0;
+    margin-top: 0;
+    margin-left: .35rem;
+    border-top: none;
+  }
 }
 .onion-meta-row {
   display: flex;
@@ -1640,6 +1692,101 @@ article.result.code-result { font-size: .9rem; }
   text-transform: uppercase;
   letter-spacing: .03em;
 }
+
+/* Link-open mode (select injected by onion-rewriter.js) */
+.onion-mode-wrapper {
+  display: inline-flex;
+  align-items: center;
+}
+.onion-mode-select {
+  max-width: min(100%, 11.5rem);
+  padding: 0.28rem 1.85rem 0.28rem 0.55rem;
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--text-dim);
+  background-color: var(--bg-surface);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.45rem center;
+  background-size: 0.65rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  appearance: none;
+  transition: border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.onion-mode-select:hover {
+  border-color: var(--border);
+  color: var(--text);
+}
+.onion-mode-select:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  outline-offset: 2px;
+}
+
+.onion-mode-tag {
+  margin-left: auto;
+  flex-shrink: 0;
+  padding: 0.12rem 0.42rem;
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: lowercase;
+  color: var(--text-muted);
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+}
+
+/* Tor reachability badges (script.js) */
+.onion-status {
+  margin-left: auto;
+  flex-shrink: 0;
+  padding: 0.12rem 0.42rem;
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border-radius: 999px;
+  border: 1px solid var(--border-subtle);
+}
+.onion-status.checking {
+  color: var(--text-muted);
+  background: var(--bg-surface-2);
+}
+.onion-status.live {
+  color: color-mix(in srgb, #22c55e 88%, var(--text-muted));
+  border-color: color-mix(in srgb, #22c55e 28%, var(--border-subtle));
+  background: color-mix(in srgb, #22c55e 10%, transparent);
+}
+.onion-status.down {
+  color: color-mix(in srgb, var(--text-muted) 90%, #f87171 10%);
+  border-color: color-mix(in srgb, #f87171 22%, var(--border-subtle));
+  background: color-mix(in srgb, #f87171 8%, transparent);
+}
+
+.result.onion-result.onion-live {
+  border-left: 2px solid color-mix(in srgb, #22c55e 55%, var(--border-subtle));
+}
+.result.onion-result.onion-down {
+  opacity: 0.82;
+}
+
+@media (max-width: 640px) {
+  .onion-warning {
+    flex-wrap: wrap;
+  }
+  .onion-warning .onion-mode-wrapper {
+    width: 100%;
+    margin-left: 0;
+    margin-top: 0.35rem;
+    align-self: stretch;
+  }
+  .onion-warning .onion-mode-select {
+    width: 100%;
+    max-width: none;
+  }
+}
+
 .search-status-banner {
   margin: 0 0 1rem;
   padding: .85rem 1rem;
@@ -2253,61 +2400,29 @@ article.result.code-result { font-size: .9rem; }
 }
 .pf-alt-list a { color: var(--accent); }
 
-/* Onion / Tor mode chip — deliberately louder than the grey sibling buttons
- * so users notice the tab exists without having to read every label. Tinted
- * violet to signal "different source" (Ahmia/Tor) rather than normal web.
- */
+/* Onion / Tor — subtle tint so it reads as “different” without glowing like CTA */
 .home-mode-btn[data-search-mode="onion"] {
-  color: #c4b5fd;
-  background: color-mix(in srgb, #7c3aed 10%, transparent);
-  border-color: color-mix(in srgb, #7c3aed 55%, transparent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, #7c3aed 15%, transparent),
-              0 2px 10px -4px color-mix(in srgb, #7c3aed 50%, transparent);
-  padding-left: 0.7rem;
-  position: relative;
-}
-.home-mode-btn[data-search-mode="onion"]::before {
-  content: "";
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  margin-right: 0.45rem;
-  border-radius: 50%;
-  background: #a78bfa;
-  box-shadow: 0 0 8px #7c3aed;
-  vertical-align: middle;
-  animation: onionPulse 2.4s ease-in-out infinite;
-}
-@keyframes onionPulse {
-  0%, 100% { opacity: 0.55; transform: scale(1); }
-  50%      { opacity: 1.0;  transform: scale(1.15); }
+  color: color-mix(in srgb, var(--text-dim) 78%, #a78bfa 22%);
+  border-color: color-mix(in srgb, var(--border) 82%, #8b5cf6 18%);
+  background: color-mix(in srgb, var(--bg-surface) 92%, #7c3aed 8%);
 }
 .home-mode-btn[data-search-mode="onion"]:hover {
-  background: color-mix(in srgb, #7c3aed 22%, transparent);
-  border-color: color-mix(in srgb, #7c3aed 75%, transparent);
-  color: #ddd6fe;
-  box-shadow: 0 0 0 1px color-mix(in srgb, #7c3aed 35%, transparent),
-              0 4px 16px -4px color-mix(in srgb, #7c3aed 70%, transparent);
-  transform: translateY(-1px);
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 .home-mode-btn[data-search-mode="onion"].active {
-  color: #fff;
-  background: color-mix(in srgb, #7c3aed 35%, transparent);
-  border-color: #a78bfa;
-  box-shadow: 0 0 0 2px color-mix(in srgb, #7c3aed 30%, transparent),
-              0 4px 20px -4px color-mix(in srgb, #7c3aed 80%, transparent);
+  color: var(--text);
+  border-color: color-mix(in srgb, #8b5cf6 40%, var(--accent));
+  background: color-mix(in srgb, #7c3aed 14%, transparent);
 }
 html[data-theme="light"] .home-mode-btn[data-search-mode="onion"] {
-  color: #5b21b6;
-  background: color-mix(in srgb, #7c3aed 8%, #fff);
-  border-color: color-mix(in srgb, #7c3aed 45%, transparent);
+  color: color-mix(in srgb, #4c1d95 78%, var(--text-dim) 22%);
+  border-color: color-mix(in srgb, var(--border) 75%, #8b5cf6 25%);
+  background: color-mix(in srgb, #fff 94%, #ede9fe 6%);
 }
 html[data-theme="light"] .home-mode-btn[data-search-mode="onion"]:hover {
-  background: color-mix(in srgb, #7c3aed 15%, #fff);
-  color: #4c1d95;
-}
-@media (prefers-reduced-motion: reduce) {
-  .home-mode-btn[data-search-mode="onion"]::before { animation: none; }
+  background: color-mix(in srgb, #fff 88%, #ddd6fe 12%);
 }
 
 .home-message {

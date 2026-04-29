@@ -95,7 +95,7 @@
     const wrapper = document.createElement("span");
     wrapper.className = "onion-mode-wrapper";
     wrapper.innerHTML = `
-      <select class="onion-mode-select" aria-label="Link open mode">
+      <select class="onion-mode-select" aria-label="How to open .onion links">
         ${Object.entries(MODES).map(([k, v]) =>
           `<option value="${k}" ${k === activeMode ? "selected" : ""}>${v.label}</option>`
         ).join("")}
