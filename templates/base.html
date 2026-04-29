@@ -15,13 +15,7 @@
     {% block canonical %}
     <link rel="canonical" href="{{ site_base_url }}{{ request.path }}">
     {% endblock %}
-    <!-- Vercel Speed Insights -->
-    <script nonce="{{ csp_nonce }}">
-        window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
-    </script>
-    <script defer src="/_vercel/speed-insights/script.js"></script>
-    <!-- Vercel Web Analytics -->
-    <script defer src="https://cdn.vercel-insights.com/v1/script.js"></script>
+    {% include 'includes/vercel_observability_head.html' %}
     <!-- SEO & PWA -->
     <meta name="description" content="{% block meta_description %}abbieysearch — Privacy-first web search. No account required.{% endblock %}">
     <meta property="og:type" content="website">
@@ -41,6 +35,7 @@
     <meta name="apple-mobile-web-app-title" content="abbieysearch">
     <link rel="apple-touch-icon" href="/static/icon-192.png">
     <link rel="search" type="application/opensearchdescription+xml" title="abbieysearch" href="/opensearch.xml">
+    <link rel="preload" href="{{ url_for('static', filename='script.js', v=deploy_hash) }}" as="script">
     {# Apply saved theme + accent immediately to avoid flash #}
     <script nonce="{{ csp_nonce }}">
         (function() {
@@ -390,7 +385,7 @@
         {% endif %}
     </footer>
 
-    <script src="{{ url_for('static', filename='script.js', v=deploy_hash) }}"></script>
+    <script defer src="{{ url_for('static', filename='script.js', v=deploy_hash) }}"></script>
     {% block extra_scripts %}{% endblock %}
 </body>
 </html>
