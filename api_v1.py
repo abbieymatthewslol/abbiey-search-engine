@@ -23,9 +23,10 @@ from __future__ import annotations
 import logging
 import os
 import time
-from typing import Optional
 
 from flask import Blueprint, current_app, jsonify, request
+
+from retrieval.rank_params import normalize_rank_mode
 
 logger = logging.getLogger(__name__)
 
@@ -154,6 +155,7 @@ def search():
     time_filter = (request.args.get("df") or "").strip()
     if time_filter not in _TIME_FILTERS:
         time_filter = ""
+    rank_mode = normalize_rank_mode(request.args.get("rank_mode"))
 
     try:
         from app import _fetch_results
@@ -165,6 +167,7 @@ def search():
             region=region,
             lang=lang,
             time_filter=time_filter,
+            rank_mode=rank_mode,
         )
     except Exception:
         logger.exception("api_v1_search_failed q=%s type=%s", query[:120], search_type)

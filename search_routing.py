@@ -5,6 +5,8 @@ from __future__ import annotations
 from typing import FrozenSet, Optional, Tuple
 from urllib.parse import urlencode
 
+from retrieval.rank_params import normalize_rank_mode
+
 
 def normalize_type_arg(raw: str, allowed: FrozenSet[str]) -> str:
     t = (raw or "text").strip().lower()
@@ -44,6 +46,7 @@ def search_mode_href(
     people_pf_extra: str = "",
     mybot_id=None,
     search_type_saved: bool = False,
+    rank_mode: str = "",
 ) -> str:
     """Relative URL for switching search tabs (/search or /search/<mode>?q=&…)."""
     t = (tab or "text").strip().lower()
@@ -60,6 +63,9 @@ def search_mode_href(
         pairs.append(("df", time_filter))
     if cleanweb:
         pairs.append(("cleanweb", "1"))
+    rm = normalize_rank_mode(rank_mode)
+    if rm != "neutral":
+        pairs.append(("rank_mode", rm))
     if onion_mode:
         pairs.append(("onion_mode", onion_mode))
     if mybot_id is not None:

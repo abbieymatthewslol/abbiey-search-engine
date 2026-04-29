@@ -36,6 +36,7 @@ const _S = {
   newTab:        { key: "abbiey_new_tab",        def: "true"    },
   defaultTab:    { key: "abbiey_default_tab",    def: "text"    },
   aiSummary:     { key: "abbiey_ai_summary",     def: "true"    },
+  rankMode:      { key: "abbiey_rank_mode",      def: "neutral" },
   autocomplete:  { key: "abbiey_autocomplete",   def: "true"    },
   persistRegion: { key: "abbiey_region_persist", def: "false"   },
   history:       { key: "abbiey_history",        def: "true"    },
@@ -196,6 +197,19 @@ test("saves and restores defaultTab", () => {
   const { gs, ss } = makeHelpers(ls);
   ss("defaultTab", "images");
   assertEqual(gs("defaultTab"), "images");
+});
+
+test("saves and restores rankMode preference", () => {
+  const ls = makeLocalStorage();
+  const { gs, ss } = makeHelpers(ls);
+  ss("rankMode", "raw");
+  assertEqual(gs("rankMode"), "raw");
+});
+
+test("returns default rankMode 'neutral' when localStorage is empty", () => {
+  const ls = makeLocalStorage();
+  const { gs } = makeHelpers(ls);
+  assertEqual(gs("rankMode"), "neutral");
 });
 
 test("saves and restores aiSummary flag", () => {
