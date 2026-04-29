@@ -21,6 +21,7 @@
           "query_understanding.py",
           "reverse_image.py",
           "reverse_image_storage.py",
+          "search_routing.py",
           "search_bots.py",
           "search_protocol.py",
           "startup_checks.py",

@@ -3823,11 +3823,6 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!btn || !row.contains(btn)) return;
       const mode = (btn.dataset.searchMode || "").trim();
       if (!mode) return;
-      if (mode === "people") {
-        e.preventDefault();
-        window.location.href = "/people/find";
-        return;
-      }
       typeInput.value = mode;
       syncPressed(btn);
     });
@@ -3887,11 +3882,16 @@ document.addEventListener("DOMContentLoaded", () => {
     tabsEl.appendChild(indicator);
 
     function moveIndicator() {
-      const active = tabsEl.querySelector(".tab.active");
+      const scroll = tabsEl.querySelector(".search-tabs-scroll");
+      const rectBase = scroll || tabsEl;
+      const active =
+        tabsEl.querySelector(".search-tabs-scroll .tab.active") ||
+        tabsEl.querySelector(".tab-more-wrap .tab.active") ||
+        tabsEl.querySelector(".tab.active");
       if (!active) { indicator.style.width = "0"; return; }
       const tRect = active.getBoundingClientRect();
-      const cRect = tabsEl.getBoundingClientRect();
-      indicator.style.left  = (tRect.left - cRect.left) + "px";
+      const cRect = rectBase.getBoundingClientRect();
+      indicator.style.left  = (tRect.left - cRect.left) + (scroll ? scroll.scrollLeft : 0) + "px";
       indicator.style.width = tRect.width + "px";
     }
 
@@ -3903,6 +3903,10 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     window.addEventListener("resize", moveIndicator, { passive: true });
+    const scrollHost = tabsEl.querySelector(".search-tabs-scroll");
+    if (scrollHost) {
+      scrollHost.addEventListener("scroll", moveIndicator, { passive: true });
+    }
   })();
 });
 

@@ -974,6 +974,14 @@ body.has-results .search-btn.search-btn-icon {
   overflow-x: auto;
   scrollbar-width: none;
   -ms-overflow-style: none;
+  flex-wrap: wrap;
+  row-gap: 0;
+}
+
+@media (min-width: 900px) {
+  .search-tabs-scroll {
+    flex-wrap: nowrap;
+  }
 }
 .search-tabs-scroll::-webkit-scrollbar { display: none; }
 
@@ -1107,8 +1115,12 @@ body.has-results .search-btn.search-btn-icon {
   color: var(--text-muted);
   font-weight: 600;
 }
-.tab-more-mybot-item {
-  padding-left: 1rem;
+.filter-pills-hint {
+  margin: 0;
+  font-size: .75rem;
+  color: var(--text-muted);
+  line-height: 1.35;
+  max-width: 22rem;
 }
 
 .tab-onion {

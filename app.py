@@ -82,6 +82,11 @@ from people_finder import (
 from osint.service import enrich as _osint_enrich_run
 from osint.service import enrich_from_query as _osint_enrich_from_query
 from osint.service import is_osint_enabled as _abbiey_osint_enabled
+from search_routing import (
+    resolve_search_type_path as _resolve_search_type_path,
+    search_mode_href as _search_mode_href,
+    search_mode_title_suffix as _search_mode_title_suffix,
+)
 from search_protocol import (
     ProtocolDepth,
     build_protocol_markdown,
@@ -1601,6 +1606,8 @@ def _inject_current_user():
         "google_adsense_slot_results": _GOOGLE_ADSENSE_SLOT_RESULTS,
         "support_url": _SUPPORT_URL,
         "site_base_url": _site_base_url(),
+        "search_mode_href": _search_mode_href,
+        "search_mode_title_suffix": _search_mode_title_suffix,
         "community_discord_url": os.environ.get("COMMUNITY_DISCORD_URL", "").strip() or None,
         "community_matrix_url": os.environ.get("COMMUNITY_MATRIX_URL", "").strip() or None,
         "community_github_url": os.environ.get(
@@ -4284,11 +4291,27 @@ def _promote_official_site(query: str, results: list) -> list:
 
 
 @app.route("/search")
+@app.route("/search/<stype>")
 @limiter.limit("120/minute")
-def search():
+def search(stype=None):
     query = request.args.get("q", "").strip()
     page = max(1, min(request.args.get("page", 1, type=int), MAX_PAGE))
-    search_type = request.args.get("type", "text")
+    _stp, _stp_bad = _resolve_search_type_path(
+        str(stype).strip().lower() if stype is not None else None,
+        request.args.get("type", "text"),
+        frozenset(ALLOWED_TYPES),
+    )
+    if _stp_bad == "invalid-path":
+        pairs = []
+        for key in request.args:
+            if key == "type":
+                continue
+            for val in request.args.getlist(key):
+                pairs.append((key, val))
+        qstr = urlencode(pairs)
+        canon = url_for("search") if _stp == "text" else url_for("search", stype=_stp)
+        return redirect(canon + ("?" + qstr if qstr else ""), code=301)
+    search_type = _stp
     mybot_id = request.args.get("bot_id", type=int)
     region = request.args.get("region", "").strip() or None
     lang = request.args.get("lang", "").strip() or None

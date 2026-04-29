@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>{% if query %}{{ query }} — abbieysearch{% else %}abbieysearch — unfiltered answers with receipts{% endif %}</title>
+    <title>{% if query %}{{ query }} — {{ search_mode_title_suffix(search_type) }} — abbieysearch{% else %}abbieysearch — unfiltered answers with receipts{% endif %}</title>
     <script nonce="{{ csp_nonce }}">
         (function() {
             var t  = localStorage.getItem('theme') || 'dark';
@@ -43,9 +43,10 @@
     <!-- SEO meta tags -->
     {% if query %}
     <meta name="description" content="Search results for &quot;{{ query }}&quot; on abbieysearch — sourced snippets, optional AI summary, and privacy-first search with no server-side query logging.">
-    <meta property="og:title" content="{{ query }} — abbieysearch">
+    <meta property="og:title" content="{{ query }} — {{ search_mode_title_suffix(search_type) }} — abbieysearch">
     <meta property="og:description" content="Sourced search results for &quot;{{ query }}&quot; on abbieysearch — read snippets and evidence without ad-tech tracking.">
-    <meta property="og:url" content="{{ site_base_url }}/search?q={{ query|urlencode }}">
+    <meta property="og:url" content="{{ site_base_url }}{{ search_mode_href(search_type, query, region=region, time_filter=time_filter or '', cleanweb=cleanweb, onion_mode=(onion_mode if search_type == 'onion' else ''), img_scroll_extras=(img_scroll_extras if search_type == 'images' else ''), people_pf_extra=(people_pf_url_extra if search_type == 'people' else ''), mybot_id=(mybot_id if search_type == 'mybot' else none), search_type_saved=(search_type == 'saved')) }}">
+    <link rel="canonical" href="{{ site_base_url }}{{ search_mode_href(search_type, query, region=region, time_filter=time_filter or '', cleanweb=cleanweb, onion_mode=(onion_mode if search_type == 'onion' else ''), img_scroll_extras=(img_scroll_extras if search_type == 'images' else ''), people_pf_extra=(people_pf_url_extra if search_type == 'people' else ''), mybot_id=(mybot_id if search_type == 'mybot' else none), search_type_saved=(search_type == 'saved')) }}">
     {% else %}
     <meta name="description" content="Search the web on abbieysearch: no server-side query logs, AI summaries, deep web and image modes, and optional sign-in for bookmarks and the API.">
     <meta property="og:title" content="abbieysearch — unfiltered answers with receipts">
@@ -59,7 +60,7 @@
     <meta property="og:image" content="{{ site_base_url }}/static/og-image.png">
     <meta name="twitter:card" content="summary_large_image">
     {% if query %}
-    <meta name="twitter:title" content="{{ query }} — abbieysearch">
+    <meta name="twitter:title" content="{{ query }} — {{ search_mode_title_suffix(search_type) }} — abbieysearch">
     <meta name="twitter:description" content="Sourced results for “{{ query }}” on abbieysearch — private search, no server-side query logging.">
     {% else %}
     <meta name="twitter:title" content="abbieysearch — unfiltered answers with receipts">
@@ -98,7 +99,7 @@
     }
     </script>
 </head>
-<body class="{% if query %}has-results{% endif %}">
+<body class="{% if query %}has-results page-search--{{ search_type }}{% endif %}">
     <noscript>
         <div class="noscript-banner" role="note">
             <strong>abbieysearch</strong> &mdash; direct, detailed search with receipts.
@@ -625,23 +626,23 @@
 
             <nav class="search-tabs">
                 <div class="search-tabs-scroll">
-                <a href="/search?q={{ query|urlencode }}&type=text{% if region %}&region={{ region }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab {% if search_type == 'text' %}active{% endif %}">All</a>
-                <a href="/search?q={{ query|urlencode }}&type=images{% if region %}&region={{ region }}{% endif %}{% if time_filter %}&df={{ time_filter|urlencode }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}{% if img_scroll_extras %}&amp;{{ img_scroll_extras }}{% endif %}" class="tab {% if search_type == 'images' %}active{% endif %}">Images</a>
-                <a href="/search?q={{ query|urlencode }}&type=news{% if region %}&region={{ region }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab {% if search_type == 'news' %}active{% endif %}">News</a>
-                <a href="/search?q={{ query|urlencode }}&type=videos{% if region %}&region={{ region }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab {% if search_type == 'videos' %}active{% endif %}">Videos</a>
-                <a href="/search?q={{ query|urlencode }}&type=code{% if region %}&region={{ region }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab {% if search_type == 'code' %}active{% endif %}">Code</a>
+                <a href="{{ search_mode_href('text', query, region=region, cleanweb=cleanweb) }}" class="tab {% if search_type == 'text' %}active{% endif %}">All</a>
+                <a href="{{ search_mode_href('images', query, region=region, time_filter=time_filter or '', cleanweb=cleanweb, img_scroll_extras=img_scroll_extras or '') }}" class="tab {% if search_type == 'images' %}active{% endif %}">Images</a>
+                <a href="{{ search_mode_href('news', query, region=region, cleanweb=cleanweb) }}" class="tab {% if search_type == 'news' %}active{% endif %}">News</a>
+                <a href="{{ search_mode_href('videos', query, region=region, cleanweb=cleanweb) }}" class="tab {% if search_type == 'videos' %}active{% endif %}">Videos</a>
+                <a href="{{ search_mode_href('code', query, region=region, cleanweb=cleanweb) }}" class="tab {% if search_type == 'code' %}active{% endif %}">Code</a>
+                <a href="{{ search_mode_href('people', query, region=region, cleanweb=cleanweb, people_pf_extra=people_pf_url_extra) }}" class="tab {% if search_type == 'people' %}active{% endif %}">People</a>
+                <a href="{{ search_mode_href('email', query, region=region, cleanweb=cleanweb) }}" class="tab {% if search_type == 'email' %}active{% endif %}">Email</a>
+                <a href="{{ search_mode_href('business', query, region=region, cleanweb=cleanweb) }}" class="tab {% if search_type == 'business' %}active{% endif %}">Business</a>
+                <a href="{{ search_mode_href('onion', query, region=region, cleanweb=cleanweb, onion_mode=onion_mode) }}" class="tab {% if search_type == 'onion' %}active{% endif %}" title="Clearnet-indexed .onion sites via Ahmia + DDG">Onion / Tor</a>
                 </div>
-                <div class="tab-more-wrap {% if search_type in ('people', 'email', 'business', 'onion', 'saved', 'mybot') %}has-active{% endif %}" id="tab-more-wrap">
-                    <button type="button" class="tab tab-more-btn {% if search_type in ('people', 'email', 'business', 'onion', 'saved', 'mybot') %}active{% endif %}" id="tab-more-btn" aria-haspopup="true" aria-expanded="false" aria-controls="tab-more-menu">
-                        {% if search_type == 'saved' %}Saved{% elif search_type == 'mybot' %}Custom bot{% elif search_type == 'people' %}People{% elif search_type == 'email' %}Email{% elif search_type == 'business' %}Business{% elif search_type == 'onion' %}Onion / Tor{% else %}More{% endif %}
+                <div class="tab-more-wrap {% if search_type in ('saved', 'mybot') %}has-active{% endif %}" id="tab-more-wrap">
+                    <button type="button" class="tab tab-more-btn {% if search_type in ('saved', 'mybot') %}active{% endif %}" id="tab-more-btn" aria-haspopup="true" aria-expanded="false" aria-controls="tab-more-menu">
+                        {% if search_type == 'saved' %}Saved{% elif search_type == 'mybot' %}Custom bot{% else %}More{% endif %}
                         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
                     </button>
                     <div class="tab-more-menu" id="tab-more-menu" hidden>
-                        <a href="/search?q={{ query|urlencode }}&type=people{% if region %}&region={{ region }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}{{ people_pf_url_extra|safe }}" class="tab-more-item {% if search_type == 'people' %}active{% endif %}">People</a>
-                        <a href="/search?q={{ query|urlencode }}&type=email{% if region %}&region={{ region }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab-more-item {% if search_type == 'email' %}active{% endif %}">Email</a>
-                        <a href="/search?q={{ query|urlencode }}&type=business{% if region %}&region={{ region }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab-more-item {% if search_type == 'business' %}active{% endif %}">Business</a>
-                        <a href="/search?q={{ query|urlencode }}&type=onion{% if region %}&region={{ region }}{% endif %}{% if onion_mode %}&onion_mode={{ onion_mode }}{% endif %}{% if cleanweb %}&cleanweb=1{% endif %}" class="tab-more-item {% if search_type == 'onion' %}active{% endif %}" title="Clearnet-indexed .onion search">Onion / Tor</a>
-                        <a href="/search?q={{ query|urlencode }}&type=saved{% if cleanweb %}&cleanweb=1{% endif %}" class="tab-more-item {% if search_type == 'saved' %}active{% endif %}">Saved <span class="bookmark-count-badge" id="bookmark-count-badge"></span></a>
+                        <a href="{{ search_mode_href('saved', query, search_type_saved=true) }}" class="tab-more-item {% if search_type == 'saved' %}active{% endif %}">Saved <span class="bookmark-count-badge" id="bookmark-count-badge"></span></a>
                         <a href="{% if current_user %}/profile#search-bots{% else %}{{ url_for('agents') }}{% endif %}" class="tab-more-item">Your bots</a>
                     </div>
                 </div>
@@ -734,11 +735,15 @@
             {# Filter extras — shown when Filters button is toggled #}
             <div class="filter-extras" id="filter-extras" {% if not (operators and ('filetype' in operators or 'site' in operators)) %}hidden{% endif %}>
                 <div class="filter-pills" id="filter-pills">
+                    {% if search_type == 'text' %}
                     <button class="filter-pill{% if operators and 'filetype' in operators and 'pdf' in operators.filetype %} active{% endif %}" data-ft="pdf">PDF</button>
                     <button class="filter-pill{% if operators and 'filetype' in operators and 'doc' in operators.filetype %} active{% endif %}" data-ft="doc">DOC</button>
                     <button class="filter-pill{% if operators and 'filetype' in operators and 'ppt' in operators.filetype %} active{% endif %}" data-ft="ppt">PPT</button>
                     <button class="filter-pill{% if operators and 'filetype' in operators and 'xls' in operators.filetype %} active{% endif %}" data-ft="xls">XLS</button>
                     <button class="filter-pill{% if operators and 'filetype' in operators and 'csv' in operators.filetype %} active{% endif %}" data-ft="csv">CSV</button>
+                    {% else %}
+                    <p class="filter-pills-hint">Document-type filters apply to the <strong>All</strong> tab.</p>
+                    {% endif %}
                 </div>
                 <input type="text" class="filter-site-input" id="filter-site" placeholder="site:" value="{% if operators and 'site' in operators %}{{ operators.site[0] }}{% endif %}" aria-label="Filter by site">
                 {% if results and search_type not in ('images', 'saved') %}
@@ -1300,7 +1305,57 @@
         </section>
         {% endif %}
 
-        {# ===== MAIN RESULTS ===== #}
+        {% if query and search_type == 'news' %}
+        <section class="media-search-section media-search-section--news" aria-labelledby="media-news-title">
+            <div class="media-search-section-head">
+                <h2 id="media-news-title" class="media-section-title">News search</h2>
+                <p class="media-section-lead">Headlines and articles from a public news index. Use <strong>Time</strong> above to narrow recency; we do not host articles or paywalls—open each source for the full story.</p>
+            </div>
+            <ul class="media-source-list" role="list" aria-label="Typical sources">
+                <li>News index (DuckDuckGo news)</li>
+                <li>Freshness follows the provider; use Past 24h / week / month when you need recency</li>
+            </ul>
+        </section>
+        {% endif %}
+        {% if query and search_type == 'people' %}
+        <section class="media-search-section media-search-section--people" aria-labelledby="media-people-title">
+            <div class="media-search-section-head">
+                <h2 id="media-people-title" class="media-section-title">People search</h2>
+                <p class="media-section-lead">Profile-style cards blend public knowledge bases and open-web mentions. We never store your questionnaire on the server (GET-only). For richer intent, use the <a href="/people/find?q={{ query|urlencode }}{% if region %}&amp;region={{ region|urlencode }}{% endif %}">People finder questionnaire</a>.</p>
+            </div>
+            <ul class="media-source-list" role="list" aria-label="Typical sources">
+                <li>Wikipedia &amp; Wikidata (biographical context)</li>
+                <li>GitHub public profiles (when names match)</li>
+                <li>DuckDuckGo social / web snippets</li>
+            </ul>
+        </section>
+        {% endif %}
+        {% if query and search_type == 'email' %}
+        <section class="media-search-section media-search-section--email" aria-labelledby="media-email-title">
+            <div class="media-search-section-head">
+                <h2 id="media-email-title" class="media-section-title">Email intelligence</h2>
+                <p class="media-section-lead">Public-resolution checks only: avatar hints (Gravatar), DNS records, breach-style web mentions—we do not log your query server-side beyond normal rate limits. Paste a full address for best DNS and Gravatar fidelity; prose around an address still works.</p>
+            </div>
+            <ul class="media-source-list" role="list" aria-label="Typical sources">
+                <li>Gravatar default images</li>
+                <li>DNS / MX sanity (public DNS)</li>
+                <li>Web mentions quoted for that address</li>
+            </ul>
+        </section>
+        {% endif %}
+        {% if query and search_type == 'business' %}
+        <section class="media-search-section media-search-section--business" aria-labelledby="media-business-title">
+            <div class="media-search-section-head">
+                <h2 id="media-business-title" class="media-section-title">Business &amp; org search</h2>
+                <p class="media-section-lead">Company cards pull from OpenCorporates-style discovery, EDGAR/SEC lookups when the name resolves, Wikipedia org pages, plus open-web business snippets. Prefer a legal entity name or ticker for cleaner matches.</p>
+            </div>
+            <ul class="media-source-list" role="list" aria-label="Typical sources">
+                <li>Corporate filings &amp; registry hints</li>
+                <li>SEC EDGAR (US issuers)</li>
+                <li>Wikipedia organization pages where available</li>
+            </ul>
+        </section>
+        {% endif %}
         <div id="results" class="results-container" data-type="{{ search_type }}">
             {% if search_type == 'saved' %}
                 <div id="saved-results-container">

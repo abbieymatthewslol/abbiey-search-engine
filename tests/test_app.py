@@ -62,6 +62,26 @@ class TestRoutes:
         assert resp.status_code == 200
         assert b"/people/find" in resp.data
 
+    def test_search_path_segment_redirects_invalid_type(self, client):
+        resp = client.get("/search/notatype?q=hello", follow_redirects=False)
+        assert resp.status_code == 301
+        assert "/search?q=hello" in (resp.headers.get("Location") or "")
+
+    def test_search_path_onion_matches_type_query(self, client):
+        r1 = client.get("/search/onion?q=testquery")
+        r2 = client.get("/search?q=testquery&type=onion")
+        assert r1.status_code == 200 and r2.status_code == 200
+        assert b"page-search--onion" in r1.data
+        assert b"page-search--onion" in r2.data
+        assert b"onion-scope-bar" in r1.data
+        assert b"onion-scope-bar" in r2.data
+
+    def test_search_path_people_has_hero(self, client):
+        resp = client.get("/search/people?q=Jane+Doe")
+        assert resp.status_code == 200
+        assert b"People search" in resp.data
+        assert b"/people/find" in resp.data
+
     def test_landing_redirects_to_about(self, client):
         resp = client.get("/landing", follow_redirects=False)
         assert resp.status_code == 301
