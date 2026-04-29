@@ -1784,7 +1784,7 @@ class TestRankModeParameter:
         from unittest.mock import patch
 
         mock_ddg.text.return_value = [
-            {"title": "Second preferred by LLM", "href": "https://b.example/x", "body": "bbb"},
+            {"title": "Second preferred by LLM for test widgets", "href": "https://b.example/x", "body": "test widgets"},
             {"title": "First preferred by LLM", "href": "https://a.example/x", "body": "aaa"},
         ]
 
@@ -1799,6 +1799,11 @@ class TestRankModeParameter:
         html = r.data.decode("utf-8", errors="ignore")
         m = re.search(r'<article class="result[^"]*"[^>]*data-url="([^"]+)"', html)
         assert m and m.group(1) == "https://a.example/x"
+
+    def test_tab_href_preserves_rank_mode_from_non_text_tab(self):
+        with app.app.test_request_context("/search/images?q=test&rank_mode=raw"):
+            href = app._search_mode_href_with_rank("text", "test", rank_mode="")
+        assert href == "/search?q=test&rank_mode=raw"
 
 
 class TestAccessResourcesTor:

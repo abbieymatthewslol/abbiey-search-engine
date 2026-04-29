@@ -99,8 +99,6 @@ from search_protocol import (
     sanitize_harmful_instructions,
 )
 
-_TOR_SOCKS_PROXY = (os.environ.get("TOR_SOCKS_PROXY") or "socks5://127.0.0.1:9050").strip()
-
 try:
     from dotenv import load_dotenv
 
@@ -109,6 +107,8 @@ try:
     load_dotenv(os.path.join(_env_root, ".env"), override=True)
 except ImportError:
     pass
+
+_TOR_SOCKS_PROXY = (os.environ.get("TOR_SOCKS_PROXY") or "socks5://127.0.0.1:9050").strip()
 
 
 def _resolve_flask_secret_key() -> str:
@@ -1600,8 +1600,8 @@ def _send_signup_verification_email(
 
 
 def _search_mode_href_with_rank(tab, q, **kwargs):
-    if has_request_context():
-        kwargs.setdefault("rank_mode", normalize_rank_mode(request.args.get("rank_mode")))
+    if has_request_context() and not kwargs.get("rank_mode"):
+        kwargs["rank_mode"] = normalize_rank_mode(request.args.get("rank_mode"))
     return _search_mode_href(tab, q, **kwargs)
 
 
@@ -10228,7 +10228,7 @@ def _fetch_results(
             results = rerank_text_hits_with_llm(_rq, results, chat_fn=_ollama_chat)
         except Exception:
             logger.exception("llm_rerank_failed")
-        results = _rank_neutral_query_aligned(results, query)
+            results = _rank_neutral_query_aligned(results, query)
     elif search_type == "text":
         # Default: neutral steering toward the user's query, without injecting
         # negativity the user did not ask for.
