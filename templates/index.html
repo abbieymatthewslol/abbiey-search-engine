@@ -45,8 +45,8 @@
     <meta name="description" content="Search results for &quot;{{ query }}&quot; on abbieysearch — sourced snippets, optional AI summary, and privacy-first search with no server-side query logging.">
     <meta property="og:title" content="{{ query }} — {{ search_mode_title_suffix(search_type) }} — abbieysearch">
     <meta property="og:description" content="Sourced search results for &quot;{{ query }}&quot; on abbieysearch — read snippets and evidence without ad-tech tracking.">
-    <meta property="og:url" content="{{ site_base_url }}{{ search_mode_href(search_type, query, region=region, time_filter=time_filter or '', cleanweb=cleanweb, onion_mode=(onion_mode if search_type == 'onion' else ''), img_scroll_extras=(img_scroll_extras if search_type == 'images' else ''), people_pf_extra=(people_pf_url_extra if search_type == 'people' else ''), mybot_id=(mybot_id if search_type == 'mybot' else none), search_type_saved=(search_type == 'saved')) }}">
-    <link rel="canonical" href="{{ site_base_url }}{{ search_mode_href(search_type, query, region=region, time_filter=time_filter or '', cleanweb=cleanweb, onion_mode=(onion_mode if search_type == 'onion' else ''), img_scroll_extras=(img_scroll_extras if search_type == 'images' else ''), people_pf_extra=(people_pf_url_extra if search_type == 'people' else ''), mybot_id=(mybot_id if search_type == 'mybot' else none), search_type_saved=(search_type == 'saved')) }}">
+    <meta property="og:url" content="{{ site_base_url }}{{ search_mode_href(search_type, query, region=region, time_filter=time_filter or '', cleanweb=cleanweb, rank_mode=(rank_mode if search_type == 'text' else ''), onion_mode=(onion_mode if search_type == 'onion' else ''), img_scroll_extras=(img_scroll_extras if search_type == 'images' else ''), people_pf_extra=(people_pf_url_extra if search_type == 'people' else ''), mybot_id=(mybot_id if search_type == 'mybot' else none), search_type_saved=(search_type == 'saved')) }}">
+    <link rel="canonical" href="{{ site_base_url }}{{ search_mode_href(search_type, query, region=region, time_filter=time_filter or '', cleanweb=cleanweb, rank_mode=(rank_mode if search_type == 'text' else ''), onion_mode=(onion_mode if search_type == 'onion' else ''), img_scroll_extras=(img_scroll_extras if search_type == 'images' else ''), people_pf_extra=(people_pf_url_extra if search_type == 'people' else ''), mybot_id=(mybot_id if search_type == 'mybot' else none), search_type_saved=(search_type == 'saved')) }}">
     {% else %}
     <meta name="description" content="Search the web on abbieysearch: no server-side query logs, AI summaries, deep web and image modes, and optional sign-in for bookmarks and the API.">
     <meta property="og:title" content="abbieysearch — unfiltered answers with receipts">
@@ -580,6 +580,7 @@
                 <input type="hidden" name="lang" id="lang-input" value="{{ lang or '' }}">
                 <input type="hidden" name="df" id="df-input" value="{{ time_filter or '' }}">
                 <input type="hidden" name="cleanweb" id="cleanweb-input" value="{% if cleanweb %}1{% endif %}">
+                <input type="hidden" name="rank_mode" id="rank-mode-input" value="{{ rank_mode or 'neutral' }}">
                 <input type="hidden" name="safesearch" id="safesearch-input" value="off">
                 <input type="hidden" name="lat" id="geo-lat-input" value="{% if search_lat is not none %}{{ search_lat }}{% endif %}">
                 <input type="hidden" name="lon" id="geo-lon-input" value="{% if search_lon is not none %}{{ search_lon }}{% endif %}">
@@ -626,15 +627,15 @@
 
             <nav class="search-tabs">
                 <div class="search-tabs-scroll">
-                <a href="{{ search_mode_href('text', query, region=region, cleanweb=cleanweb) }}" class="tab {% if search_type == 'text' %}active{% endif %}">All</a>
-                <a href="{{ search_mode_href('images', query, region=region, time_filter=time_filter or '', cleanweb=cleanweb, img_scroll_extras=img_scroll_extras or '') }}" class="tab {% if search_type == 'images' %}active{% endif %}">Images</a>
-                <a href="{{ search_mode_href('news', query, region=region, cleanweb=cleanweb) }}" class="tab {% if search_type == 'news' %}active{% endif %}">News</a>
-                <a href="{{ search_mode_href('videos', query, region=region, cleanweb=cleanweb) }}" class="tab {% if search_type == 'videos' %}active{% endif %}">Videos</a>
-                <a href="{{ search_mode_href('code', query, region=region, cleanweb=cleanweb) }}" class="tab {% if search_type == 'code' %}active{% endif %}">Code</a>
-                <a href="{{ search_mode_href('people', query, region=region, cleanweb=cleanweb, people_pf_extra=people_pf_url_extra) }}" class="tab {% if search_type == 'people' %}active{% endif %}">People</a>
-                <a href="{{ search_mode_href('email', query, region=region, cleanweb=cleanweb) }}" class="tab {% if search_type == 'email' %}active{% endif %}">Email</a>
-                <a href="{{ search_mode_href('business', query, region=region, cleanweb=cleanweb) }}" class="tab {% if search_type == 'business' %}active{% endif %}">Business</a>
-                <a href="{{ search_mode_href('onion', query, region=region, cleanweb=cleanweb, onion_mode=onion_mode) }}" class="tab {% if search_type == 'onion' %}active{% endif %}" title="Clearnet-indexed .onion sites via Ahmia + DDG">Onion / Tor</a>
+                <a href="{{ search_mode_href('text', query, region=region, cleanweb=cleanweb, rank_mode=(rank_mode if search_type == 'text' else '')) }}" class="tab {% if search_type == 'text' %}active{% endif %}">All</a>
+                <a href="{{ search_mode_href('images', query, region=region, time_filter=time_filter or '', cleanweb=cleanweb, rank_mode=(rank_mode if search_type == 'text' else ''), img_scroll_extras=img_scroll_extras or '') }}" class="tab {% if search_type == 'images' %}active{% endif %}">Images</a>
+                <a href="{{ search_mode_href('news', query, region=region, cleanweb=cleanweb, rank_mode=(rank_mode if search_type == 'text' else '')) }}" class="tab {% if search_type == 'news' %}active{% endif %}">News</a>
+                <a href="{{ search_mode_href('videos', query, region=region, cleanweb=cleanweb, rank_mode=(rank_mode if search_type == 'text' else '')) }}" class="tab {% if search_type == 'videos' %}active{% endif %}">Videos</a>
+                <a href="{{ search_mode_href('code', query, region=region, cleanweb=cleanweb, rank_mode=(rank_mode if search_type == 'text' else '')) }}" class="tab {% if search_type == 'code' %}active{% endif %}">Code</a>
+                <a href="{{ search_mode_href('people', query, region=region, cleanweb=cleanweb, rank_mode=(rank_mode if search_type == 'text' else ''), people_pf_extra=people_pf_url_extra) }}" class="tab {% if search_type == 'people' %}active{% endif %}">People</a>
+                <a href="{{ search_mode_href('email', query, region=region, cleanweb=cleanweb, rank_mode=(rank_mode if search_type == 'text' else '')) }}" class="tab {% if search_type == 'email' %}active{% endif %}">Email</a>
+                <a href="{{ search_mode_href('business', query, region=region, cleanweb=cleanweb, rank_mode=(rank_mode if search_type == 'text' else '')) }}" class="tab {% if search_type == 'business' %}active{% endif %}">Business</a>
+                <a href="{{ search_mode_href('onion', query, region=region, cleanweb=cleanweb, rank_mode=(rank_mode if search_type == 'text' else ''), onion_mode=onion_mode) }}" class="tab {% if search_type == 'onion' %}active{% endif %}" title="Clearnet-indexed .onion sites via Ahmia + DDG">Onion / Tor</a>
                 </div>
                 <div class="tab-more-wrap {% if search_type in ('saved', 'mybot') %}has-active{% endif %}" id="tab-more-wrap">
                     <button type="button" class="tab tab-more-btn {% if search_type in ('saved', 'mybot') %}active{% endif %}" id="tab-more-btn" aria-haspopup="true" aria-expanded="false" aria-controls="tab-more-menu">
@@ -719,6 +720,8 @@
                 </div>
                 {% if search_type == 'text' %}
                 <button type="button" class="filter-pill filter-pill-toggle{% if cleanweb %} active{% endif %}" id="cleanweb-pill" title="Re-rank results: fewer listicles and affiliate-style pages, more diverse domains" aria-pressed="{% if cleanweb %}true{% else %}false{% endif %}">Original web</button>
+                <button type="button" class="filter-pill filter-pill-toggle{% if rank_mode == 'raw' %} active{% endif %}" id="rank-raw-pill" title="Skip neutral steering: keep engine order after deduplication (surfaces critical/alternate framing more often)" aria-pressed="{% if rank_mode == 'raw' %}true{% else %}false{% endif %}">Unfiltered order</button>
+                <button type="button" class="filter-pill filter-pill-toggle{% if rank_mode == 'llm' %} active{% endif %}" id="rank-llm-pill" title="Re-rank first page by relevance using the local AI (Ollama) when available" aria-pressed="{% if rank_mode == 'llm' %}true{% else %}false{% endif %}">AI reorder</button>
                 {% endif %}
             </div>
             {% if search_type == 'onion' %}
@@ -1560,7 +1563,7 @@
         <div id="trending-searches" class="trending-searches" style="display:none"></div>
 
         {% if has_more %}
-        <div id="scroll-sentinel" data-page="1" data-query="{{ query }}" data-type="{{ search_type }}" data-has-more="true" data-img-extra="{{ img_scroll_extras or '' }}" data-img-rev-key="{{ img_rev_key or '' }}" data-cleanweb="{% if cleanweb %}1{% endif %}" data-lat="{% if search_lat is not none %}{{ search_lat }}{% endif %}" data-lon="{% if search_lon is not none %}{{ search_lon }}{% endif %}"{% if search_type == 'onion' %} data-onion-mode="{{ onion_mode }}"{% endif %}{% if search_type == 'mybot' and mybot_id %} data-bot-id="{{ mybot_id }}"{% endif %}>
+        <div id="scroll-sentinel" data-page="1" data-query="{{ query }}" data-type="{{ search_type }}" data-has-more="true" data-img-extra="{{ img_scroll_extras or '' }}" data-img-rev-key="{{ img_rev_key or '' }}" data-cleanweb="{% if cleanweb %}1{% endif %}" data-rank-mode="{{ rank_mode if search_type == 'text' else '' }}" data-lat="{% if search_lat is not none %}{{ search_lat }}{% endif %}" data-lon="{% if search_lon is not none %}{{ search_lon }}{% endif %}"{% if search_type == 'onion' %} data-onion-mode="{{ onion_mode }}"{% endif %}{% if search_type == 'mybot' and mybot_id %} data-bot-id="{{ mybot_id }}"{% endif %}>
             <div class="scroll-loader hidden" aria-hidden="true">
                 <div class="indexing-progress-wrap" style="--index-progress:0">
                     <svg class="indexing-progress-ring" viewBox="0 0 60 60" width="40" height="40" aria-hidden="true">
@@ -1727,6 +1730,7 @@
         window.__queryUi = {{ query_ui|tojson }};
         window.__showAnswerLayer = {{ show_answer_layer_block|tojson }};
         window.__osintEnabled = {{ osint_enabled|tojson }};
+        window.__rankMode = {{ rank_mode|tojson }};
     </script>
 
     {% if query and search_type == 'code' %}

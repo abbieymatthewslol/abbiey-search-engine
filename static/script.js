@@ -51,9 +51,12 @@ document.addEventListener("DOMContentLoaded", () => {
     const reg = document.getElementById("region-input");
     const lng = document.getElementById("lang-input");
     const cw = document.getElementById("cleanweb-input");
+    const rm = document.getElementById("rank-mode-input");
     if (reg && reg.value.trim()) s += `&region=${encodeURIComponent(reg.value.trim())}`;
     if (lng && lng.value.trim()) s += `&lang=${encodeURIComponent(lng.value.trim())}`;
     if (cw && cw.value === "1") s += "&cleanweb=1";
+    const rmVal = (rm && rm.value.trim()) || "";
+    if (rmVal && rmVal !== "neutral") s += `&rank_mode=${encodeURIComponent(rmVal)}`;
     return s;
   }
 
@@ -388,6 +391,7 @@ document.addEventListener("DOMContentLoaded", () => {
     newTab:        { key: "abbiey_new_tab",        def: "true"    },
     defaultTab:    { key: "abbiey_default_tab",    def: "text"    },
     aiSummary:     { key: "abbiey_ai_summary",     def: "true"    },
+    rankMode:      { key: "abbiey_rank_mode",      def: "neutral" },
     autocomplete:  { key: "abbiey_autocomplete",   def: "true"    },
     persistRegion: { key: "abbiey_region_persist", def: "false"   },
     history:       { key: "abbiey_history",        def: "false"   },
@@ -438,6 +442,12 @@ document.addEventListener("DOMContentLoaded", () => {
     const ssInput = document.getElementById("safesearch-input");
     if (ssInput) ssInput.value = gs("safesearch");
 
+    const rmInput = document.getElementById("rank-mode-input");
+    if (rmInput && !rmInput.value.trim()) rmInput.value = gs("rankMode");
+    else if (rmInput && rmInput.value.trim() && rmInput.value.trim() !== gs("rankMode")) {
+      ss("rankMode", rmInput.value.trim());
+    }
+
     // Default tab (only set on homepage, not when already on a search tab)
     if (!window.__searchType) {
       const typeInput = document.getElementById("search-type-input");
@@ -454,6 +464,14 @@ document.addEventListener("DOMContentLoaded", () => {
     if (aiCard && gs("aiSummary") === "false") aiCard.style.display = "none";
     const answerLayerCard = document.getElementById("answer-layer-card");
     if (answerLayerCard && gs("aiSummary") === "false") answerLayerCard.style.display = "none";
+    if (gs("aiSummary") === "false") {
+      document.querySelector(".app-layout")?.classList.remove("has-chat");
+      const _cp = document.getElementById("chat-panel");
+      const _cf = document.getElementById("chat-fab");
+      if (_cp) _cp.style.display = "none";
+      if (_cf) _cf.style.display = "none";
+      document.getElementById("results-how-link")?.closest(".results-positioning-strip")?.setAttribute("hidden", "");
+    }
 
     // Answer cards
     if (gs("showCards") === "false") {
@@ -852,6 +870,18 @@ document.addEventListener("DOMContentLoaded", () => {
     if (alc) alc.style.display = checked ? "" : "none";
     const alw = document.getElementById("answer-layer-restore-wrap");
     if (alw) alw.hidden = true;
+    const cp = document.getElementById("chat-panel");
+    const cf = document.getElementById("chat-fab");
+    if (!checked) {
+      document.querySelector(".app-layout")?.classList.remove("has-chat");
+      if (cp) cp.style.display = "none";
+      if (cf) cf.style.display = "none";
+      document.getElementById("results-how-link")?.closest(".results-positioning-strip")?.setAttribute("hidden", "");
+    } else {
+      if (cp) cp.style.display = "";
+      if (cf) cf.style.display = "";
+      document.getElementById("results-how-link")?.closest(".results-positioning-strip")?.removeAttribute("hidden");
+    }
     if (checked) {
       sessionStorage.removeItem("abbiey_ai_summary_session_hide");
       sessionStorage.removeItem("abbiey_answer_layer_session_hide");
@@ -1382,6 +1412,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function fetchAiSummaryOnly() {
     if (!aiCard || !aiBody || !aiSources || !window.__searchQuery || window.__searchType !== "text") return Promise.resolve();
+    if (gs("aiSummary") === "false") {
+      aiCard.classList.add("ai-hidden");
+      return Promise.resolve();
+    }
     if (window.__queryUi && window.__queryUi.show_ai_summary === false) {
       aiCard.classList.add("ai-hidden");
       return Promise.resolve();
@@ -1399,7 +1433,10 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   if (aiCard && aiBody && window.__searchQuery && window.__searchType === "text") {
-    if (window.__queryUi && window.__queryUi.show_ai_summary === false) {
+    if (gs("aiSummary") === "false") {
+      aiCard.classList.add("ai-hidden");
+      if (layerCard) layerCard.classList.add("ai-hidden");
+    } else if (window.__queryUi && window.__queryUi.show_ai_summary === false) {
       aiCard.classList.add("ai-hidden");
       if (layerCard) layerCard.classList.add("ai-hidden");
     } else if (window.__showAnswerLayer && layerCard && layerBody && layerSources) {
@@ -1777,6 +1814,34 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     }
 
+    const rankModeInput = document.getElementById("rank-mode-input");
+    const rankRawPill = document.getElementById("rank-raw-pill");
+    const rankLlmPill = document.getElementById("rank-llm-pill");
+    function syncRankModePills() {
+      const v = (rankModeInput && rankModeInput.value.trim()) || "neutral";
+      if (rankRawPill) {
+        rankRawPill.classList.toggle("active", v === "raw");
+        rankRawPill.setAttribute("aria-pressed", String(v === "raw"));
+      }
+      if (rankLlmPill) {
+        rankLlmPill.classList.toggle("active", v === "llm");
+        rankLlmPill.setAttribute("aria-pressed", String(v === "llm"));
+      }
+    }
+    function setRankMode(next) {
+      if (!rankModeInput || !filterForm) return;
+      const cur = (rankModeInput.value.trim() || "neutral");
+      const n = next === cur ? "neutral" : next;
+      rankModeInput.value = n;
+      ss("rankMode", n);
+      window.__rankMode = n;
+      syncRankModePills();
+      applyFilter();
+    }
+    if (rankRawPill) rankRawPill.addEventListener("click", () => setRankMode("raw"));
+    if (rankLlmPill) rankLlmPill.addEventListener("click", () => setRankMode("llm"));
+    syncRankModePills();
+
     // Deep web mode toggles
     const onionScopeBar = document.getElementById("onion-scope-bar");
     const onionModeInput = document.getElementById("onion-mode-input");
@@ -1983,6 +2048,8 @@ document.addEventListener("DOMContentLoaded", () => {
     if (langVal) scrollUrl += `&lang=${encodeURIComponent(langVal)}`;
     if (dfVal) scrollUrl += `&df=${encodeURIComponent(dfVal)}`;
     if (sentinel.dataset.cleanweb === "1") scrollUrl += "&cleanweb=1";
+    const _rm = (sentinel.dataset.rankMode || "").trim();
+    if (_rm && _rm !== "neutral") scrollUrl += `&rank_mode=${encodeURIComponent(_rm)}`;
     const imgExtra = sentinel.dataset.imgExtra;
     if (type === "images" && imgExtra) scrollUrl += `&${imgExtra}`;
     if (type === "images" && sentinel.dataset.imgRevKey) {
@@ -2686,6 +2753,10 @@ document.addEventListener("DOMContentLoaded", () => {
   // ===== AI Research Chat =====
   const chatPanel = document.getElementById("chat-panel");
   const chatFab = document.getElementById("chat-fab");
+  if (gs("aiSummary") === "false") {
+    if (chatPanel) chatPanel.style.display = "none";
+    if (chatFab) chatFab.style.display = "none";
+  }
   const chatToggle = document.getElementById("chat-toggle");
   const chatNew = document.getElementById("chat-new");
   const chatInput = document.getElementById("chat-input");
@@ -2694,7 +2765,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const chatWelcome = document.getElementById("chat-welcome");
   const chatBody = document.getElementById("chat-body");
 
-  if (chatPanel && chatFab) {
+  if (gs("aiSummary") !== "false" && chatPanel && chatFab) {
     let chatHistory = [];
     const searchQuery = window.__searchQuery || "";
     let chatOpen = false;
@@ -2872,7 +2943,12 @@ document.addEventListener("DOMContentLoaded", () => {
       fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: searchQuery, message: msg, history: chatHistory }),
+        body: JSON.stringify({
+          query: searchQuery,
+          message: msg,
+          history: chatHistory,
+          rank_mode: (typeof window.__rankMode === "string" && window.__rankMode) || (document.getElementById("rank-mode-input") || {}).value || "neutral",
+        }),
       })
         .then(r => r.json())
         .then(data => {

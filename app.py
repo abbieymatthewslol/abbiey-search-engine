@@ -62,7 +62,9 @@ from query_understanding import (
     detect_query_clarification,
     is_simple_answer_query,
 )
+from retrieval.llm_rerank import rerank_text_hits_with_llm
 from retrieval.pipeline import run_text_retrieval_pipeline_sync
+from retrieval.rank_params import normalize_rank_mode, rank_mode_cache_segment
 from reverse_image import fetch_reverse_hits_for_image_url, validate_client_image_url
 import reverse_image_storage as _reverse_image_storage
 from search_bots import crawl_bot_pages, normalize_http_seed, parse_json_list
@@ -96,6 +98,8 @@ from search_protocol import (
     protocol_sources_from_hits,
     sanitize_harmful_instructions,
 )
+
+_TOR_SOCKS_PROXY = (os.environ.get("TOR_SOCKS_PROXY") or "socks5://127.0.0.1:9050").strip()
 
 try:
     from dotenv import load_dotenv
@@ -1595,6 +1599,12 @@ def _send_signup_verification_email(
         return False
 
 
+def _search_mode_href_with_rank(tab, q, **kwargs):
+    if has_request_context():
+        kwargs.setdefault("rank_mode", normalize_rank_mode(request.args.get("rank_mode")))
+    return _search_mode_href(tab, q, **kwargs)
+
+
 @app.context_processor
 def _inject_current_user():
     ctx = {
@@ -1606,7 +1616,7 @@ def _inject_current_user():
         "google_adsense_slot_results": _GOOGLE_ADSENSE_SLOT_RESULTS,
         "support_url": _SUPPORT_URL,
         "site_base_url": _site_base_url(),
-        "search_mode_href": _search_mode_href,
+        "search_mode_href": _search_mode_href_with_rank,
         "search_mode_title_suffix": _search_mode_title_suffix,
         "community_discord_url": os.environ.get("COMMUNITY_DISCORD_URL", "").strip() or None,
         "community_matrix_url": os.environ.get("COMMUNITY_MATRIX_URL", "").strip() or None,
@@ -2979,6 +2989,7 @@ _TEMPLATE_DEFAULTS = dict(
     onion_mode="balanced",
     onion_sources=[],
     cleanweb=False,
+    rank_mode="neutral",
     safeguard={"show_crisis_strip": False, "show_inclusive_hint": False, "chaotic_query": False},
     osint_enabled=True,
     mybot_id=None,
@@ -3535,6 +3546,15 @@ ACCESS_RESOURCES_JSON = {
         "deep_web_tab": "/search?type=onion",
         "access_json": "/api/access-resources",
     },
+    "tor_and_proxy": {
+        "env": "TOR_SOCKS_PROXY",
+        "default": "socks5://127.0.0.1:9050",
+        "note": (
+            "Endpoints such as /api/onion-proxy and onion reachability checks use a SOCKS5 URL from "
+            "TOR_SOCKS_PROXY (default 127.0.0.1:9050). Stock Vercel serverless has no local Tor daemon; "
+            "use Tor Browser for .onion links, or self-host this app with Tor or a reachable SOCKS proxy."
+        ),
+    },
     "privacy_tools": {
         "tor_browser": "https://www.torproject.org/download/",
         "ahmia_clearnet_index": "https://ahmia.fi",
@@ -3546,6 +3566,8 @@ ACCESS_RESOURCES_JSON = {
         "If one tab (e.g. News) is empty, try All or Web — backends differ.",
         "For .onion sites, use Tor Browser; Ahmia on the Deep Web tab works from the clearnet.",
         "Long queries are allowed (see ABBIEY_MAX_QUERY_LENGTH) for power users and pasted context.",
+        "Optional rank_mode=raw skips neutral result steering; rank_mode=llm re-orders the first page with an LLM when configured (see Ollama).",
+        "Set TOR_SOCKS_PROXY when self-hosting so onion proxy routes match your Tor or SOCKS endpoint.",
     ],
 }
 
@@ -4390,6 +4412,7 @@ def search(stype=None):
 
     cleanweb = request.args.get("cleanweb", "").strip().lower() in ("1", "true", "yes", "on")
     anti_template = bool(cleanweb and search_type == "text")
+    rank_mode = normalize_rank_mode(request.args.get("rank_mode"))
 
     image_opts = _parse_image_search_options() if search_type == "images" else None
 
@@ -4425,6 +4448,7 @@ def search(stype=None):
                 "lang": lang or "",
                 "time_filter": time_filter or "",
                 "cleanweb": cleanweb,
+                "rank_mode": rank_mode,
                 "img_rev_key": img_rev_key,
                 "osint_enabled": _abbiey_osint_enabled(),
                 "onion_scope": onion_scope,
@@ -4473,6 +4497,7 @@ def search(stype=None):
             show_answer_layer_block=False,
             search_notice=None,
             cleanweb=False,
+            rank_mode=rank_mode,
             safeguard={"show_crisis_strip": False, "show_inclusive_hint": False, "chaotic_query": False},
             osint_enabled=_abbiey_osint_enabled(),
             mybot_id=None,
@@ -4570,6 +4595,7 @@ def search(stype=None):
             image_opts=image_opts,
             local_rank_context=local_rank_context,
             anti_template=anti_template,
+            rank_mode=rank_mode,
             source_query_for_fallback=query,
             mybot_id=_mb_id,
             mybot_user_id=_mb_uid,
@@ -4603,6 +4629,7 @@ def search(stype=None):
         image_opts=image_opts,
         local_rank_context=local_rank_context,
         anti_template=anti_template,
+        rank_mode=rank_mode,
         source_query_for_fallback=query,
         mybot_id=_mb_id,
         mybot_user_id=_mb_uid,
@@ -4758,6 +4785,7 @@ def search(stype=None):
         onion_sources=results.get("sources") or [],
         cleanweb=cleanweb,
         safeguard=safeguard,
+        rank_mode=rank_mode,
         osint_enabled=_abbiey_osint_enabled(),
         mybot_id=mybot_id,
         mybot_name=mybot_name,
@@ -5280,7 +5308,7 @@ def api_onion_proxy():
     try:
         import httpx
         # Route through Tor SOCKS5 proxy
-        transport = httpx.HTTPTransport(proxy="socks5://127.0.0.1:9050")
+        transport = httpx.HTTPTransport(proxy=_TOR_SOCKS_PROXY)
         with httpx.Client(transport=transport, timeout=10.0, follow_redirects=True) as client:
             resp = client.get(
                 url,
@@ -5340,7 +5368,7 @@ def _check_single_onion(url):
         return url, "down"
 
     try:
-        transport = httpx.HTTPTransport(proxy="socks5://127.0.0.1:9050")
+        transport = httpx.HTTPTransport(proxy=_TOR_SOCKS_PROXY)
         with httpx.Client(transport=transport, timeout=10.0, follow_redirects=True) as client:
             resp = client.head(
                 url,
@@ -5717,6 +5745,7 @@ def api_chat():
     query = data.get("query", "").strip()
     message = data.get("message", "").strip()
     history = data.get("history", [])
+    rank_mode = normalize_rank_mode(data.get("rank_mode"))
 
     if not query or not message:
         return jsonify({"error": _CHAT_MSG_MISSING}), 400
@@ -5739,7 +5768,7 @@ def api_chat():
             return jsonify({"error": _CHAT_MSG_HISTORY}), 400
 
     # Fetch search results for context
-    context_results = _fetch_results(query, 1, "text")
+    context_results = _fetch_results(query, 1, "text", rank_mode=rank_mode)
     # Build context from top results
     context_lines = [f"Search results for '{query}':\n"]
     for i, r in enumerate(context_results["results"][:5], 1):
@@ -5781,7 +5810,7 @@ def api_chat():
         # For follow-up questions, also search for the specific question
         all_results = list(context_results["results"])
         if message.lower() != query.lower():
-            extra = _fetch_results(f"{query} {message}", 1, "text")
+            extra = _fetch_results(f"{query} {message}", 1, "text", rank_mode=rank_mode)
             all_results.extend(extra["results"])
             all_results = _deduplicate(all_results)
         response = _extractive_research(message, all_results)
@@ -5800,6 +5829,7 @@ def api_answer_layer():
     lang = (request.args.get("lang") or "").strip()
     cleanweb = request.args.get("cleanweb", "").strip().lower() in ("1", "true", "yes", "on")
     anti_template = bool(cleanweb)
+    rank_mode = normalize_rank_mode(request.args.get("rank_mode"))
 
     if not query or len(query) > MAX_QUERY_LENGTH:
         return jsonify({"error": "Invalid query"}), 400
@@ -5837,6 +5867,7 @@ def api_answer_layer():
             region or None,
             lang or None,
             anti_template=anti_template,
+            rank_mode=rank_mode,
             local_rank_context=loc_ctx if loc_ctx.get("has_local_intent") else None,
             source_query_for_fallback=query,
         )
@@ -5958,6 +5989,7 @@ def api_protocol_answer():
     lang = (request.args.get("lang") or "").strip()
     depth = (request.args.get("depth") or ProtocolDepth.STANDARD).strip().lower()
     cleanweb = request.args.get("cleanweb", "").strip().lower() in ("1", "true", "yes", "on")
+    rank_mode = normalize_rank_mode(request.args.get("rank_mode"))
 
     if not query or len(query) > MAX_QUERY_LENGTH:
         return Response("Invalid query\n", status=400, mimetype="text/plain")
@@ -5989,6 +6021,7 @@ def api_protocol_answer():
             region or None,
             lang or None,
             anti_template=anti_template,
+            rank_mode=rank_mode,
             local_rank_context=loc_ctx if loc_ctx.get("has_local_intent") else None,
             source_query_for_fallback=query,
         )
@@ -6110,6 +6143,7 @@ def api_protocol_answer():
 def api_ai_summary():
     """Generate a 2-3 sentence AI summary with citations for a query."""
     query = request.args.get("q", "").strip()
+    rank_mode = normalize_rank_mode(request.args.get("rank_mode"))
     if not query or len(query) > MAX_QUERY_LENGTH:
         return jsonify({"error": "Invalid query"}), 400
 
@@ -6136,7 +6170,7 @@ def api_ai_summary():
 
     _n_ctx = _AI_SUMMARY_MAX_SOURCES_SIMPLE if simple else _AI_SUMMARY_MAX_SOURCES_STANDARD
     context_results = _fetch_results(
-        backend_q, 1, "text", local_rank_context=loc_ctx if loc_ctx.get("has_local_intent") else None
+        backend_q, 1, "text", rank_mode=rank_mode, local_rank_context=loc_ctx if loc_ctx.get("has_local_intent") else None
     )
     top5 = context_results["results"][:_n_ctx]
     if not top5:
@@ -9711,6 +9745,7 @@ def _fetch_results(
     image_opts=None,
     local_rank_context=None,
     anti_template=False,
+    rank_mode="neutral",
     source_query_for_fallback=None,
     mybot_id=None,
     mybot_user_id=None,
@@ -9740,12 +9775,14 @@ def _fetch_results(
         }
 
     operators = operators or {}
+    rank_mode = normalize_rank_mode(rank_mode)
     # Include operators in cache key to prevent cross-contamination
     ops_str = "&".join(f"{k}={','.join(v)}" for k, v in sorted(operators.items())) if operators else ""
     img_seg = ""
     if image_opts and search_type == "images":
         img_seg = "|img:" + json.dumps(image_opts, sort_keys=True, separators=(",", ":"))
     cw_seg = "|cw=1" if (search_type == "text" and anti_template) else ""
+    rm_seg = rank_mode_cache_segment(rank_mode) if search_type == "text" else ""
     bot_seg = ""
     if search_type == "mybot" and mybot_id is not None and mybot_user_id is not None:
         bot_seg = f"|mb={int(mybot_id)}|u={int(mybot_user_id)}"
@@ -9753,7 +9790,7 @@ def _fetch_results(
     if search_type == "onion":
         onion_seg = f"|om={onion_mode}"
     pf_seg = people_finder_cache_suffix(people_finder_pf) if search_type == "people" else ""
-    cache_key = f"{query}|{search_type}|{region or ''}|{lang or ''}|{ops_str}|{time_filter or ''}|{safesearch or 'off'}{img_seg}{cw_seg}{bot_seg}{onion_seg}{pf_seg}"
+    cache_key = f"{query}|{search_type}|{region or ''}|{lang or ''}|{ops_str}|{time_filter or ''}|{safesearch or 'off'}{img_seg}{cw_seg}{rm_seg}{bot_seg}{onion_seg}{pf_seg}"
 
     def _onion_notice(all_results):
         if search_type != "onion":
@@ -10183,6 +10220,15 @@ def _fetch_results(
         results = _rank_local_search_results(results, local_rank_context)
     elif search_type == "text" and anti_template:
         results = _rank_anti_template_results(results)
+    elif search_type == "text" and rank_mode == "raw":
+        pass
+    elif search_type == "text" and rank_mode == "llm":
+        try:
+            _rq = (source_query_for_fallback or query or "").strip()
+            results = rerank_text_hits_with_llm(_rq, results, chat_fn=_ollama_chat)
+        except Exception:
+            logger.exception("llm_rerank_failed")
+        results = _rank_neutral_query_aligned(results, query)
     elif search_type == "text":
         # Default: neutral steering toward the user's query, without injecting
         # negativity the user did not ask for.

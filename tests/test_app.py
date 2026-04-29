@@ -1759,6 +1759,58 @@ class TestNeutralQueryAlignedRanking:
         assert _rank_neutral_query_aligned([], "anything") == []
 
 
+class TestRankModeParameter:
+    """rank_mode=raw preserves backend ordering through neutral steering."""
+
+    def test_raw_keeps_negative_first_for_neutral_query(self, client, mock_ddg):
+        mock_ddg.text.return_value = [
+            {"title": "Acme widgets scam exposed", "href": "https://rant.example/acme", "body": "Scam lawsuit fraud disaster"},
+            {"title": "Acme widgets overview", "href": "https://acme.example/widgets", "body": "Technical overview of widgets"},
+        ]
+
+        def _first_result_url(html: str):
+            m = re.search(r'<article class="result[^"]*"[^>]*data-url="([^"]+)"', html)
+            return m.group(1) if m else None
+
+        r_raw = client.get("/search?q=acme+widgets&type=text&rank_mode=raw")
+        r_neu = client.get("/search?q=acme+widgets&type=text")
+        assert r_raw.status_code == 200 and r_neu.status_code == 200
+        u_raw = _first_result_url(r_raw.data.decode("utf-8", errors="ignore"))
+        u_neu = _first_result_url(r_neu.data.decode("utf-8", errors="ignore"))
+        assert u_raw == "https://rant.example/acme"
+        assert u_neu == "https://acme.example/widgets"
+
+    def test_llm_rank_mode_applies_reorder_when_configured(self, client, mock_ddg):
+        from unittest.mock import patch
+
+        mock_ddg.text.return_value = [
+            {"title": "Second preferred by LLM", "href": "https://b.example/x", "body": "bbb"},
+            {"title": "First preferred by LLM", "href": "https://a.example/x", "body": "aaa"},
+        ]
+
+        def _fake_rerank(_q, results, chat_fn=None, max_items=12):
+            if len(results) >= 2:
+                return [results[1], results[0]]
+            return results
+
+        with patch("app.rerank_text_hits_with_llm", side_effect=_fake_rerank):
+            r = client.get("/search?q=test+widgets&type=text&rank_mode=llm")
+        assert r.status_code == 200
+        html = r.data.decode("utf-8", errors="ignore")
+        m = re.search(r'<article class="result[^"]*"[^>]*data-url="([^"]+)"', html)
+        assert m and m.group(1) == "https://a.example/x"
+
+
+class TestAccessResourcesTor:
+    def test_json_documents_tor_socks_env(self, client):
+        resp = client.get("/api/access-resources")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data.get("tor_and_proxy", {}).get("env") == "TOR_SOCKS_PROXY"
+        tips = data.get("tips") or []
+        assert any("TOR_SOCKS_PROXY" in str(t) for t in tips)
+
+
 class TestExaAdapter:
     """Exa search backend: activates only when EXA_API_KEY is set."""
 
