@@ -79,7 +79,7 @@ def search_mode_href(
             p = p.lstrip("&")
         if p:
             extras.append(p)
-    tail = "&".join([stem] + extras) if extras else stem
+    tail = "&".join(part for part in [stem] + extras if part)
     return path + ("?" + tail if tail else "")
 
 

@@ -3891,7 +3891,9 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!active) { indicator.style.width = "0"; return; }
       const tRect = active.getBoundingClientRect();
       const cRect = rectBase.getBoundingClientRect();
+      const tabsRect = tabsEl.getBoundingClientRect();
       indicator.style.left  = (tRect.left - cRect.left) + (scroll ? scroll.scrollLeft : 0) + "px";
+      indicator.style.top = (tRect.bottom - tabsRect.top - 2) + "px";
       indicator.style.width = tRect.width + "px";
     }
 

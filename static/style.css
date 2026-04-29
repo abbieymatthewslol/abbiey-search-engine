@@ -1014,11 +1014,11 @@ body.has-results .search-btn.search-btn-icon {
 .tab:active { opacity: 0.85; }
 .tab-indicator {
   position: absolute;
-  bottom: -1px;
+  top: calc(100% - 1px);
   height: 2px;
   background: var(--accent);
   border-radius: 0;
-  transition: left var(--dur-base) var(--ease-spring), width var(--dur-base) var(--ease-spring);
+  transition: left var(--dur-base) var(--ease-spring), top var(--dur-base) var(--ease-spring), width var(--dur-base) var(--ease-spring);
   pointer-events: none;
 }
 
