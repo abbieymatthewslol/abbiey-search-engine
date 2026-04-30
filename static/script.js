@@ -3615,53 +3615,230 @@ document.addEventListener("DOMContentLoaded", () => {
     recognition.addEventListener("error", () => stopListening());
   })();
 
-  // ===== Feature 2: In-Results Filter =====
+  // ===== Feature 2: Filter words (in-results) =====
   (function initResultsFilter() {
     const filterInput = document.getElementById("results-filter-input");
     const filterCount = document.getElementById("results-filter-count");
     const filterClear = document.getElementById("results-filter-clear");
+    const deepToggle = document.getElementById("results-filter-deep");
     if (!filterInput) return;
 
-    const container = document.getElementById("results");
-    if (!container) return;
+    const resultsRoot = document.getElementById("results");
+    const entityRoot = document.querySelector(".entity-results-section");
 
-    function getResults() {
-      return Array.from(container.querySelectorAll(".result:not(.result-compact)"));
+    const RESULT_CARD_SEL = ".entity-results-section article.result[data-url], #results .result[data-url]";
+    const HIGHLIGHT_SELECTORS = [".result-title", ".result-snippet", ".result-domain", ".result-url", "cite.result-url", "time.result-date", ".profile-bio"];
+
+    let _deepGen = 0;
+    let _debounceTimer = null;
+    const _previewCache = new Map();
+
+    function fetchPreviewJson(url) {
+      if (_previewCache.has(url)) return _previewCache.get(url);
+      const p = fetch(`/api/preview?url=${encodeURIComponent(url)}`)
+        .then((r) => r.json())
+        .finally(() => {
+          setTimeout(() => {
+            if (_previewCache.get(url) === p) _previewCache.delete(url);
+          }, 25_000);
+        });
+      _previewCache.set(url, p);
+      return p;
     }
 
-    function highlight(el, term) {
-      // Highlight in title and snippet only
-      [".result-title", ".result-snippet"].forEach(sel => {
-        const node = el.querySelector(sel);
-        if (!node) return;
-        // Strip old highlights first
-        node.innerHTML = node.innerHTML.replace(/<mark class="result-filter-highlight">([^<]*)<\/mark>/gi, "$1");
-        if (!term) return;
-        const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        node.innerHTML = node.innerHTML.replace(
-          new RegExp(`(${escaped})`, "gi"),
-          '<mark class="result-filter-highlight">$1</mark>'
-        );
-      });
+    function normalizeMatchText(s) {
+      try {
+        return String(s || "")
+          .normalize("NFKD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .toLowerCase();
+      } catch (_e) {
+        return String(s || "").toLowerCase();
+      }
     }
 
-    function applyFilter(term) {
-      const results = getResults();
-      const q = term.trim().toLowerCase();
-      let visible = 0;
+    function escapeRe(s) {
+      return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    }
 
-      results.forEach(r => {
-        const text = (r.textContent || "").toLowerCase();
-        const match = !q || text.includes(q);
-        r.classList.toggle("filter-hidden", !match);
-        if (match) {
-          visible++;
-          highlight(r, q ? term.trim() : "");
+    function parseFilterTokens(raw) {
+      const parts = String(raw || "")
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean);
+      return parts.slice(0, 8);
+    }
+
+    function tokenRegex(tok) {
+      const n = normalizeMatchText(tok);
+      if (!n) return null;
+      if (/^\d+$/.test(n)) return new RegExp(escapeRe(tok.trim()), "gi");
+      if (/^[\x00-\x7f]+$/.test(n)) return new RegExp(`\\b${escapeRe(n)}\\b`, "gi");
+      try {
+        return new RegExp(`(?<![\\p{L}\\p{N}_])${escapeRe(n)}(?![\\p{L}\\p{N}_])`, "giu");
+      } catch (_e) {
+        return new RegExp(escapeRe(n), "gi");
+      }
+    }
+
+    function textMatchesAllTokens(hayRaw, tokens) {
+      if (!tokens.length) return true;
+      const hay = normalizeMatchText(hayRaw);
+      return tokens.every((t) => {
+        const n = normalizeMatchText(t);
+        if (!n) return true;
+        if (/^\d+$/.test(n)) return hay.includes(n);
+        if (/^[\x00-\x7f]+$/.test(n)) {
+          try {
+            return new RegExp(`\\b${escapeRe(n)}\\b`).test(hay);
+          } catch (_e) {
+            return hay.includes(n);
+          }
+        }
+        try {
+          return new RegExp(`(?<![\\p{L}\\p{N}_])${escapeRe(n)}(?![\\p{L}\\p{N}_])`, "u").test(hay);
+        } catch (_e2) {
+          return hay.includes(n);
         }
       });
+    }
 
-      if (q) {
-        filterCount.textContent = `${visible} of ${results.length}`;
+    function stripFilterMarks(root) {
+      root.querySelectorAll("mark.result-filter-highlight").forEach((m) => {
+        const p = m.parentNode;
+        if (!p) return;
+        while (m.firstChild) p.insertBefore(m.firstChild, m);
+        p.removeChild(m);
+      });
+    }
+
+    function removeDeepSnippets(root) {
+      root.querySelectorAll(".result-deep-snippet").forEach((el) => el.remove());
+    }
+
+    function highlightTextInElement(el, tokens) {
+      if (!tokens.length) return;
+      for (const t of tokens) {
+        const re = tokenRegex(t);
+        if (!re) continue;
+        const tw = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, {
+          acceptNode(node) {
+            let p = node.parentElement;
+            while (p && p !== el) {
+              if (p.classList && p.classList.contains("result-filter-highlight")) return NodeFilter.FILTER_REJECT;
+              const tag = p.tagName;
+              if (tag === "SCRIPT" || tag === "STYLE") return NodeFilter.FILTER_REJECT;
+              p = p.parentElement;
+            }
+            return NodeFilter.FILTER_ACCEPT;
+          },
+        });
+        const textNodes = [];
+        while (tw.nextNode()) textNodes.push(tw.currentNode);
+        for (const node of textNodes) {
+          const text = node.nodeValue;
+          if (!text || !re.test(text)) {
+            re.lastIndex = 0;
+            continue;
+          }
+          re.lastIndex = 0;
+          const frag = document.createDocumentFragment();
+          let last = 0;
+          let m;
+          const localRe = new RegExp(re.source, re.flags.includes("g") ? re.flags : re.flags + "g");
+          while ((m = localRe.exec(text)) !== null) {
+            frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+            const mark = document.createElement("mark");
+            mark.className = "result-filter-highlight";
+            mark.textContent = m[0];
+            frag.appendChild(mark);
+            last = m.index + m[0].length;
+            if (m[0].length === 0) localRe.lastIndex++;
+          }
+          frag.appendChild(document.createTextNode(text.slice(last)));
+          node.parentNode.replaceChild(frag, node);
+        }
+      }
+    }
+
+    function highlightCard(el, tokens) {
+      stripFilterMarks(el);
+      if (!tokens.length) return;
+      HIGHLIGHT_SELECTORS.forEach((sel) => {
+        el.querySelectorAll(sel).forEach((node) => highlightTextInElement(node, tokens));
+      });
+      el.querySelectorAll(".result-deep-snippet").forEach((node) => highlightTextInElement(node, tokens));
+    }
+
+    function getResultCards() {
+      return Array.from(document.querySelectorAll(RESULT_CARD_SEL));
+    }
+
+    function cardPrimaryText(el) {
+      let s = "";
+      HIGHLIGHT_SELECTORS.forEach((sel) => {
+        el.querySelectorAll(sel).forEach((n) => {
+          s += " " + (n.textContent || "");
+        });
+      });
+      return s;
+    }
+
+    function ensureDeepSnippet(el, excerpt) {
+      let row = el.querySelector(".result-deep-snippet");
+      const snippetHost =
+        el.querySelector(".result-text") ||
+        el.querySelector(".result-domain-row")?.parentElement ||
+        el;
+      if (!row) {
+        row = document.createElement("p");
+        row.className = "result-deep-snippet";
+        row.setAttribute("role", "note");
+        const actions = el.querySelector(".result-actions");
+        if (actions && actions.parentNode === el) el.insertBefore(row, actions);
+        else snippetHost.appendChild(row);
+      }
+      row.textContent = excerpt;
+      return row;
+    }
+
+    function scheduleDeepFetch(tokens) {
+      if (!deepToggle || !deepToggle.checked || !tokens.length) return;
+      const gen = ++_deepGen;
+      const cards = getResultCards();
+      const targets = cards
+        .filter((c) => {
+          const u = c.getAttribute("data-url") || "";
+          if (!u || /\.onion(\/|$)/i.test(u)) return false;
+          return c.classList.contains("filter-hidden");
+        })
+        .slice(0, 10);
+
+      targets.forEach((card) => {
+        const url = card.getAttribute("data-url");
+        if (!url) return;
+        fetchPreviewJson(url)
+          .then((data) => {
+            if (gen !== _deepGen || !data || data.error) return;
+            const blob = `${data.description || ""}\n${data.excerpt || ""}`;
+            if (!textMatchesAllTokens(blob, tokens)) return;
+            card.classList.remove("filter-hidden");
+            const ex = (data.excerpt || data.description || "").trim();
+            const short = ex.length > 260 ? ex.slice(0, 260).trim() + "…" : ex;
+            ensureDeepSnippet(card, short ? `From page: ${short}` : "From page: match found");
+            highlightCard(card, tokens);
+            applyFilterCounts(filterInput.value.trim());
+          })
+          .catch(() => {});
+      });
+    }
+
+    function applyFilterCounts(raw) {
+      const tokens = parseFilterTokens(raw);
+      const cards = getResultCards();
+      const visible = cards.filter((c) => !c.classList.contains("filter-hidden")).length;
+      if (tokens.length) {
+        filterCount.textContent = `${visible} of ${cards.length}`;
         filterClear.style.display = "";
       } else {
         filterCount.textContent = "";
@@ -3669,11 +3846,56 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
 
-    filterInput.addEventListener("input", () => applyFilter(filterInput.value));
+    function applyFilter(raw) {
+      const tokens = parseFilterTokens(raw);
+      const cards = getResultCards();
+
+      cards.forEach((card) => {
+        removeDeepSnippets(card);
+        stripFilterMarks(card);
+        if (!tokens.length) {
+          card.classList.remove("filter-hidden");
+          return;
+        }
+        const blob = cardPrimaryText(card);
+        const ok = textMatchesAllTokens(blob, tokens);
+        card.classList.toggle("filter-hidden", !ok);
+        if (ok) highlightCard(card, tokens);
+      });
+
+      applyFilterCounts(raw);
+
+      if (tokens.length && deepToggle && deepToggle.checked) {
+        scheduleDeepFetch(tokens);
+      }
+    }
+
+    function debouncedApply() {
+      if (_debounceTimer) clearTimeout(_debounceTimer);
+      const d = deepToggle && deepToggle.checked ? 220 : 80;
+      _debounceTimer = setTimeout(() => applyFilter(filterInput.value.trim()), d);
+    }
+
+    filterInput.addEventListener("input", debouncedApply);
+    if (deepToggle) {
+      deepToggle.addEventListener("change", () => applyFilter(filterInput.value.trim()));
+    }
     filterClear.addEventListener("click", () => {
       filterInput.value = "";
+      _deepGen++;
       applyFilter("");
       filterInput.focus();
+    });
+
+    const moRoots = [resultsRoot, entityRoot].filter(Boolean);
+    moRoots.forEach((root) => {
+      try {
+        const mo = new MutationObserver(() => {
+          clearTimeout(_debounceTimer);
+          _debounceTimer = setTimeout(() => applyFilter(filterInput.value.trim()), 100);
+        });
+        mo.observe(root, { childList: true, subtree: true });
+      } catch (_e) {}
     });
   })();
 

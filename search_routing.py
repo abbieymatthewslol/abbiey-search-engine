@@ -39,6 +39,7 @@ def search_mode_href(
     region: str = "",
     time_filter: str = "",
     cleanweb: bool = False,
+    open_knowledge: bool = False,
     onion_mode: str = "",
     img_scroll_extras: str = "",
     people_pf_extra: str = "",
@@ -60,6 +61,8 @@ def search_mode_href(
         pairs.append(("df", time_filter))
     if cleanweb:
         pairs.append(("cleanweb", "1"))
+    if open_knowledge:
+        pairs.append(("open_knowledge", "1"))
     if onion_mode:
         pairs.append(("onion_mode", onion_mode))
     if mybot_id is not None:

@@ -63,6 +63,7 @@ from query_understanding import (
     is_simple_answer_query,
 )
 from retrieval.pipeline import run_text_retrieval_pipeline_sync
+from retrieval.open_catalog_blend import fetch_open_knowledge_hits
 from reverse_image import fetch_reverse_hits_for_image_url, validate_client_image_url
 import reverse_image_storage as _reverse_image_storage
 from search_bots import crawl_bot_pages, normalize_http_seed, parse_json_list
@@ -2979,6 +2980,7 @@ _TEMPLATE_DEFAULTS = dict(
     onion_mode="balanced",
     onion_sources=[],
     cleanweb=False,
+    open_knowledge=False,
     safeguard={"show_crisis_strip": False, "show_inclusive_hint": False, "chaotic_query": False},
     osint_enabled=True,
     mybot_id=None,
@@ -4390,6 +4392,7 @@ def search(stype=None):
 
     cleanweb = request.args.get("cleanweb", "").strip().lower() in ("1", "true", "yes", "on")
     anti_template = bool(cleanweb and search_type == "text")
+    open_knowledge = request.args.get("open_knowledge", "").strip().lower() in ("1", "true", "yes", "on")
 
     image_opts = _parse_image_search_options() if search_type == "images" else None
 
@@ -4425,6 +4428,7 @@ def search(stype=None):
                 "lang": lang or "",
                 "time_filter": time_filter or "",
                 "cleanweb": cleanweb,
+                "open_knowledge": open_knowledge,
                 "img_rev_key": img_rev_key,
                 "osint_enabled": _abbiey_osint_enabled(),
                 "onion_scope": onion_scope,
@@ -4473,6 +4477,7 @@ def search(stype=None):
             show_answer_layer_block=False,
             search_notice=None,
             cleanweb=False,
+            open_knowledge=False,
             safeguard={"show_crisis_strip": False, "show_inclusive_hint": False, "chaotic_query": False},
             osint_enabled=_abbiey_osint_enabled(),
             mybot_id=None,
@@ -4576,6 +4581,7 @@ def search(stype=None):
             img_rev_key=img_rev_key or None,
             onion_mode=onion_mode,
             people_finder_pf=people_finder_pf,
+            open_knowledge=open_knowledge,
         )
         if results.get("results") and search_type not in ("images", "saved"):
             results["results"] = _rerank_results_with_feedback(query, results["results"])
@@ -4609,6 +4615,7 @@ def search(stype=None):
         img_rev_key=img_rev_key or None,
         onion_mode=onion_mode,
         people_finder_pf=people_finder_pf,
+        open_knowledge=open_knowledge,
     )
     if results.get("results") and search_type not in ("images", "saved"):
         results["results"] = _rerank_results_with_feedback(query, results["results"])
@@ -4757,6 +4764,7 @@ def search(stype=None):
         onion_mode=onion_mode,
         onion_sources=results.get("sources") or [],
         cleanweb=cleanweb,
+        open_knowledge=open_knowledge,
         safeguard=safeguard,
         osint_enabled=_abbiey_osint_enabled(),
         mybot_id=mybot_id,
@@ -5521,6 +5529,21 @@ def api_preview():
     except Exception:
         logger.exception("preview_fetch_failed")
         return jsonify({"error": _PREVIEW_MSG_UNAVAILABLE}), 502
+
+
+@app.route("/api/open-catalog")
+@limiter.limit("60/minute")
+def api_open_catalog():
+    """Blend Wikidata + OpenAlex + Crossref hits (public, no API key)."""
+    q = (request.args.get("q") or "").strip()
+    if not q or len(q) > MAX_QUERY_LENGTH:
+        return jsonify({"error": "Invalid query"}), 400
+    try:
+        hits = fetch_open_knowledge_hits(q, max_total=15)
+    except Exception:
+        logger.exception("open_catalog_api_failed")
+        return jsonify({"error": "unavailable"}), 502
+    return jsonify({"query": q, "results": hits, "count": len(hits)})
 
 
 # ---------------------------------------------------------------------------
@@ -9717,6 +9740,7 @@ def _fetch_results(
     img_rev_key=None,
     onion_mode="balanced",
     people_finder_pf=None,
+    open_knowledge=False,
 ):
     """Fetch results with caching. Returns paginated slice."""
     if search_type == "images" and img_rev_key:
@@ -9753,7 +9777,8 @@ def _fetch_results(
     if search_type == "onion":
         onion_seg = f"|om={onion_mode}"
     pf_seg = people_finder_cache_suffix(people_finder_pf) if search_type == "people" else ""
-    cache_key = f"{query}|{search_type}|{region or ''}|{lang or ''}|{ops_str}|{time_filter or ''}|{safesearch or 'off'}{img_seg}{cw_seg}{bot_seg}{onion_seg}{pf_seg}"
+    ok_seg = "|ok=1" if open_knowledge else ""
+    cache_key = f"{query}|{search_type}|{region or ''}|{lang or ''}|{ops_str}|{time_filter or ''}|{safesearch or 'off'}{img_seg}{cw_seg}{bot_seg}{onion_seg}{pf_seg}{ok_seg}"
 
     def _onion_notice(all_results):
         if search_type != "onion":
@@ -10179,6 +10204,18 @@ def _fetch_results(
             raw_query=(source_query_for_fallback or "").strip() or None,
         )
     results = _deduplicate(results)
+    if page == 1 and search_type == "text" and open_knowledge and results:
+        try:
+            _ok_extra = fetch_open_knowledge_hits((source_query_for_fallback or query or "").strip(), max_total=12)
+            if _ok_extra:
+                _ok_seen = {r.get("url") or "" for r in results}
+                for _h in _ok_extra:
+                    _u = _h.get("url") or ""
+                    if _u and _u not in _ok_seen:
+                        _ok_seen.add(_u)
+                        results.append(_h)
+        except Exception:
+            logger.debug("open_knowledge_blend_failed", exc_info=True)
     if search_type == "text" and local_rank_context and local_rank_context.get("has_local_intent"):
         results = _rank_local_search_results(results, local_rank_context)
     elif search_type == "text" and anti_template:
