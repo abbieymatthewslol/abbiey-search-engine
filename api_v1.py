@@ -155,6 +155,8 @@ def search():
     if time_filter not in _TIME_FILTERS:
         time_filter = ""
 
+    open_knowledge = request.args.get("open_knowledge", "").strip().lower() in ("1", "true", "yes", "on")
+
     try:
         from app import _fetch_results
 
@@ -165,6 +167,7 @@ def search():
             region=region,
             lang=lang,
             time_filter=time_filter,
+            open_knowledge=open_knowledge,
         )
     except Exception:
         logger.exception("api_v1_search_failed q=%s type=%s", query[:120], search_type)
@@ -182,6 +185,7 @@ def search():
             "region": region,
             "lang": lang,
             "time_filter": time_filter or None,
+            "open_knowledge": open_knowledge,
             "has_more": bool(results.get("has_more")),
             "count": len(results.get("results") or []),
             "results": results.get("results") or [],

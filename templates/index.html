@@ -45,8 +45,8 @@
     <meta name="description" content="Search results for &quot;{{ query }}&quot; on abbieysearch — sourced snippets, optional AI summary, and privacy-first search with no server-side query logging.">
     <meta property="og:title" content="{{ query }} — {{ search_mode_title_suffix(search_type) }} — abbieysearch">
     <meta property="og:description" content="Sourced search results for &quot;{{ query }}&quot; on abbieysearch — read snippets and evidence without ad-tech tracking.">
-    <meta property="og:url" content="{{ site_base_url }}{{ search_mode_href(search_type, query, region=region, time_filter=time_filter or '', cleanweb=cleanweb, onion_mode=(onion_mode if search_type == 'onion' else ''), img_scroll_extras=(img_scroll_extras if search_type == 'images' else ''), people_pf_extra=(people_pf_url_extra if search_type == 'people' else ''), mybot_id=(mybot_id if search_type == 'mybot' else none), search_type_saved=(search_type == 'saved')) }}">
-    <link rel="canonical" href="{{ site_base_url }}{{ search_mode_href(search_type, query, region=region, time_filter=time_filter or '', cleanweb=cleanweb, onion_mode=(onion_mode if search_type == 'onion' else ''), img_scroll_extras=(img_scroll_extras if search_type == 'images' else ''), people_pf_extra=(people_pf_url_extra if search_type == 'people' else ''), mybot_id=(mybot_id if search_type == 'mybot' else none), search_type_saved=(search_type == 'saved')) }}">
+    <meta property="og:url" content="{{ site_base_url }}{{ search_mode_href(search_type, query, region=region, time_filter=time_filter or '', cleanweb=cleanweb, open_knowledge=open_knowledge, onion_mode=(onion_mode if search_type == 'onion' else ''), img_scroll_extras=(img_scroll_extras if search_type == 'images' else ''), people_pf_extra=(people_pf_url_extra if search_type == 'people' else ''), mybot_id=(mybot_id if search_type == 'mybot' else none), search_type_saved=(search_type == 'saved')) }}">
+    <link rel="canonical" href="{{ site_base_url }}{{ search_mode_href(search_type, query, region=region, time_filter=time_filter or '', cleanweb=cleanweb, open_knowledge=open_knowledge, onion_mode=(onion_mode if search_type == 'onion' else ''), img_scroll_extras=(img_scroll_extras if search_type == 'images' else ''), people_pf_extra=(people_pf_url_extra if search_type == 'people' else ''), mybot_id=(mybot_id if search_type == 'mybot' else none), search_type_saved=(search_type == 'saved')) }}">
     {% else %}
     <meta name="description" content="Search the web on abbieysearch: no server-side query logs, AI summaries, deep web and image modes, and optional sign-in for bookmarks and the API.">
     <meta property="og:title" content="abbieysearch — unfiltered answers with receipts">
@@ -581,6 +581,7 @@
                 <input type="hidden" name="df" id="df-input" value="{{ time_filter or '' }}">
                 <input type="hidden" name="cleanweb" id="cleanweb-input" value="{% if cleanweb %}1{% endif %}">
                 <input type="hidden" name="safesearch" id="safesearch-input" value="off">
+                {# open_knowledge: optional checkbox in filter-extras uses form="search-form" #}
                 <input type="hidden" name="lat" id="geo-lat-input" value="{% if search_lat is not none %}{{ search_lat }}{% endif %}">
                 <input type="hidden" name="lon" id="geo-lon-input" value="{% if search_lon is not none %}{{ search_lon }}{% endif %}">
             </form>
@@ -626,15 +627,15 @@
 
             <nav class="search-tabs">
                 <div class="search-tabs-scroll">
-                <a href="{{ search_mode_href('text', query, region=region, cleanweb=cleanweb) }}" class="tab {% if search_type == 'text' %}active{% endif %}">All</a>
-                <a href="{{ search_mode_href('images', query, region=region, time_filter=time_filter or '', cleanweb=cleanweb, img_scroll_extras=img_scroll_extras or '') }}" class="tab {% if search_type == 'images' %}active{% endif %}">Images</a>
-                <a href="{{ search_mode_href('news', query, region=region, cleanweb=cleanweb) }}" class="tab {% if search_type == 'news' %}active{% endif %}">News</a>
-                <a href="{{ search_mode_href('videos', query, region=region, cleanweb=cleanweb) }}" class="tab {% if search_type == 'videos' %}active{% endif %}">Videos</a>
-                <a href="{{ search_mode_href('code', query, region=region, cleanweb=cleanweb) }}" class="tab {% if search_type == 'code' %}active{% endif %}">Code</a>
-                <a href="{{ search_mode_href('people', query, region=region, cleanweb=cleanweb, people_pf_extra=people_pf_url_extra) }}" class="tab {% if search_type == 'people' %}active{% endif %}">People</a>
-                <a href="{{ search_mode_href('email', query, region=region, cleanweb=cleanweb) }}" class="tab {% if search_type == 'email' %}active{% endif %}">Email</a>
-                <a href="{{ search_mode_href('business', query, region=region, cleanweb=cleanweb) }}" class="tab {% if search_type == 'business' %}active{% endif %}">Business</a>
-                <a href="{{ search_mode_href('onion', query, region=region, cleanweb=cleanweb, onion_mode=onion_mode) }}" class="tab {% if search_type == 'onion' %}active{% endif %}" title="Clearnet-indexed .onion sites via Ahmia + DDG">Onion / Tor</a>
+                <a href="{{ search_mode_href('text', query, region=region, cleanweb=cleanweb, open_knowledge=open_knowledge) }}" class="tab {% if search_type == 'text' %}active{% endif %}">All</a>
+                <a href="{{ search_mode_href('images', query, region=region, time_filter=time_filter or '', cleanweb=cleanweb, open_knowledge=open_knowledge, img_scroll_extras=img_scroll_extras or '') }}" class="tab {% if search_type == 'images' %}active{% endif %}">Images</a>
+                <a href="{{ search_mode_href('news', query, region=region, cleanweb=cleanweb, open_knowledge=open_knowledge) }}" class="tab {% if search_type == 'news' %}active{% endif %}">News</a>
+                <a href="{{ search_mode_href('videos', query, region=region, cleanweb=cleanweb, open_knowledge=open_knowledge) }}" class="tab {% if search_type == 'videos' %}active{% endif %}">Videos</a>
+                <a href="{{ search_mode_href('code', query, region=region, cleanweb=cleanweb, open_knowledge=open_knowledge) }}" class="tab {% if search_type == 'code' %}active{% endif %}">Code</a>
+                <a href="{{ search_mode_href('people', query, region=region, cleanweb=cleanweb, open_knowledge=open_knowledge, people_pf_extra=people_pf_url_extra) }}" class="tab {% if search_type == 'people' %}active{% endif %}">People</a>
+                <a href="{{ search_mode_href('email', query, region=region, cleanweb=cleanweb, open_knowledge=open_knowledge) }}" class="tab {% if search_type == 'email' %}active{% endif %}">Email</a>
+                <a href="{{ search_mode_href('business', query, region=region, cleanweb=cleanweb, open_knowledge=open_knowledge) }}" class="tab {% if search_type == 'business' %}active{% endif %}">Business</a>
+                <a href="{{ search_mode_href('onion', query, region=region, cleanweb=cleanweb, open_knowledge=open_knowledge, onion_mode=onion_mode) }}" class="tab {% if search_type == 'onion' %}active{% endif %}" title="Clearnet-indexed .onion sites via Ahmia + DDG">Onion / Tor</a>
                 </div>
                 <div class="tab-more-wrap {% if search_type in ('saved', 'mybot') %}has-active{% endif %}" id="tab-more-wrap">
                     <button type="button" class="tab tab-more-btn {% if search_type in ('saved', 'mybot') %}active{% endif %}" id="tab-more-btn" aria-haspopup="true" aria-expanded="false" aria-controls="tab-more-menu">
@@ -749,9 +750,17 @@
                 {% if results and search_type not in ('images', 'saved') %}
                 <div class="results-filter-bar" id="results-filter-bar">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-                    <input type="text" id="results-filter-input" class="results-filter-input" placeholder="Filter these results…" autocomplete="off" aria-label="Filter results">
+                    <input type="text" id="results-filter-input" class="results-filter-input" placeholder="Filter words in titles and snippets…" autocomplete="off" aria-label="Filter words">
+                    <label class="results-filter-deep-toggle" title="Fetches short page excerpts for the first results when words are not in snippets (uses more bandwidth)">
+                        <input type="checkbox" id="results-filter-deep" autocomplete="off">
+                        <span>Match page text</span>
+                    </label>
+                    <label class="open-knowledge-toggle" title="Add Wikidata, OpenAlex, and Crossref links (extra latency on each search)">
+                        <input type="checkbox" name="open_knowledge" value="1" id="open-knowledge-check" form="search-form" {% if open_knowledge %}checked{% endif %}>
+                        <span>Open catalogs</span>
+                    </label>
                     <span class="results-filter-count" id="results-filter-count"></span>
-                    <button class="results-filter-clear" id="results-filter-clear" aria-label="Clear filter" style="display:none">{% include 'includes/close_icon.html' %}</button>
+                    <button class="results-filter-clear" id="results-filter-clear" aria-label="Clear filter words" style="display:none">{% include 'includes/close_icon.html' %}</button>
                 </div>
                 {% endif %}
             </div>
