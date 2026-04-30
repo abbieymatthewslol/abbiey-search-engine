@@ -1123,6 +1123,16 @@ body.has-results .search-btn.search-btn-icon {
   max-width: 22rem;
 }
 
+/* Hint row aligns with adjacent controls in filter-extras */
+.filter-extras > .filter-pills {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
 .tab-onion {
   color: color-mix(in srgb, var(--text-muted) 78%, #a855f7 22%);
 }
@@ -1193,10 +1203,10 @@ body.has-results .search-btn.search-btn-icon {
 .filter-extras {
   display: flex;
   align-items: center;
-  gap: .5rem;
+  gap: .5rem .65rem;
   flex-wrap: wrap;
   margin-top: .5rem;
-  padding: .5rem .75rem;
+  padding: .55rem .75rem;
   background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -1210,8 +1220,8 @@ body.has-results .search-btn.search-btn-icon {
 /* results-filter-bar inside filter-extras */
 .filter-extras .results-filter-bar {
   margin-top: 0;
-  flex: 1;
-  min-width: 200px;
+  flex: 1 1 min(100%, 260px);
+  min-width: 0;
 }
 
 .filter-pill {
@@ -1232,9 +1242,11 @@ body.has-results .search-btn.search-btn-icon {
   border: 1px solid var(--border);
   color: var(--text);
   font-size: .775rem;
-  padding: .3rem .5rem;
+  padding: .35rem .55rem;
   border-radius: var(--radius-sm);
-  width: 140px;
+  width: min(11.5rem, 100%);
+  min-width: 9rem;
+  flex: 0 1 auto;
   outline: none;
   transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
 }
@@ -1309,7 +1321,9 @@ body.has-results .search-btn.search-btn-icon {
 .results-filter-bar {
   display: flex;
   align-items: center;
-  gap: .5rem;
+  flex-wrap: wrap;
+  gap: .45rem .5rem;
+  row-gap: .4rem;
   margin-top: .625rem;
   padding: .4rem .65rem;
   background: var(--bg-surface);
@@ -1327,6 +1341,7 @@ body.has-results .search-btn.search-btn-icon {
   cursor: pointer;
   user-select: none;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 .results-filter-deep-toggle input,
 .open-knowledge-toggle input {
@@ -1334,7 +1349,8 @@ body.has-results .search-btn.search-btn-icon {
   margin: 0;
 }
 .results-filter-input {
-  flex: 1;
+  flex: 1 1 120px;
+  min-width: 0;
   background: transparent;
   border: none;
   outline: none;
@@ -1342,13 +1358,14 @@ body.has-results .search-btn.search-btn-icon {
   font-size: .85rem;
 }
 .results-filter-input::placeholder { color: var(--text-muted); }
-.results-filter-count { font-size: .75rem; color: var(--text-muted); }
+.results-filter-count { font-size: .75rem; color: var(--text-muted); flex-shrink: 0; white-space: nowrap; }
 .results-filter-clear {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 1.25rem;
   height: 1.25rem;
+  flex-shrink: 0;
   color: var(--text-muted);
   transition: color var(--dur-fast) var(--ease-out);
 }
@@ -3329,7 +3346,7 @@ a.clarify-chip:hover {
 /* Dedicated image / video search sections */
 .media-search-section {
   margin: 0.5rem 0 1rem;
-  padding: 0.85rem 1rem 0.95rem;
+  padding: 1rem 1rem 1rem;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--bg-surface);
@@ -3339,7 +3356,7 @@ a.clarify-chip:hover {
   border-color: color-mix(in srgb, var(--accent) 22%, var(--border));
 }
 .media-section-title {
-  margin: 0 0 0.35rem;
+  margin: 0 0 0.45rem;
   font-size: 1.05rem;
   font-weight: 700;
   letter-spacing: -0.02em;
@@ -3699,10 +3716,16 @@ header > .header-brand-top {
   align-items: center;
   justify-content: center;
   height: 100%;
+  min-height: 12rem;
+  padding: 0 0.35rem;
   text-align: center;
   color: var(--text-muted);
   font-size: .875rem;
   line-height: 1.7;
+}
+.preview-empty p {
+  margin: 0;
+  max-width: 17rem;
 }
 .preview-empty kbd {
   display: inline-block;
@@ -3750,9 +3773,10 @@ header > .header-brand-top {
 /* ===== 12. CHAT PANEL ===== */
 .chat-panel {
   position: fixed;
-  bottom: 0; right: 0;
+  bottom: env(safe-area-inset-bottom, 0px);
+  right: max(0px, env(safe-area-inset-right, 0px));
   width: var(--chat-panel-width, 360px);
-  max-width: calc(100vw - 0.5rem);
+  max-width: min(var(--chat-panel-width, 360px), calc(100vw - 1rem - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)));
   max-height: min(520px, 92vh);
   height: auto;
   background: var(--bg-surface);
@@ -3985,7 +4009,8 @@ header > .header-brand-top {
 /* Chat FAB — pill with label */
 .chat-fab {
   position: fixed;
-  bottom: 1.5rem; right: 1.5rem;
+  bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px));
+  right: calc(1.5rem + env(safe-area-inset-right, 0px));
   height: 44px;
   padding: 0 1.125rem 0 0.875rem;
   border-radius: var(--radius-full);
@@ -5491,8 +5516,8 @@ footer {
   }
   .chat-panel {
     width: 100%;
-    right: 0;
-    bottom: 0;
+    right: env(safe-area-inset-right, 0px);
+    bottom: env(safe-area-inset-bottom, 0px);
     max-width: 100%;
     padding-bottom: env(safe-area-inset-bottom, 0px);
     border-left: none;
@@ -5632,6 +5657,7 @@ footer {
   .filter-site-input {
     width: 100%;
     max-width: 100%;
+    min-width: 0;
     flex: 1 1 100%;
   }
   .chat-fab {
