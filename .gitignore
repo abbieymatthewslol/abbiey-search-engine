@@ -11,7 +11,7 @@ dist/
 .vercel/*
 !.vercel/project.json
 .env*.local
-
-# Vercel local env
 .env.local
-.env*.local
+
+# Encrypted local secrets (scripts/store-vercel-token.ps1 — DPAPI; never commit)
+.local/

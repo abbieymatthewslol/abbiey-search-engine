@@ -19,7 +19,7 @@ When the user asks to **push to GitHub**, **push**, **sync with origin**, **depl
    powershell -NoProfile -ExecutionPolicy Bypass -File scripts/push-and-notify.ps1 -SkipVercelWait
    ```
 
-3. **Requirements for auto detect of Vercel READY:** user must have **`VERCEL_TOKEN`** in Windows user environment (same as Vercel CLI). Without it, the script still pushes and notifies; it only skips the API poll.
+3. **Requirements for auto detect of Vercel READY:** set **`VERCEL_TOKEN`** in your Windows user environment (same as Vercel CLI), **or** run `scripts/store-vercel-token.ps1` once to save an encrypted token under `.local/vercel_token.secure` (DPAPI, current Windows user only; gitignored). Env wins if both are set. Without either, the script still pushes and notifies; it only skips the API poll.
 
 4. After the script exits, tell the user briefly what happened (push OK / Vercel READY or timeout). Do not paste tokens.
 

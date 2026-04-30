@@ -18,6 +18,9 @@
 .NOTES
   Set ABBIEY_PRODUCTION_BRANCH to override the production branch this helper
   waits on (defaults to main).
+
+  VERCEL_TOKEN: use user env, or run scripts/store-vercel-token.ps1 once to save
+  an encrypted token under .local/vercel_token.secure (Windows DPAPI).
 #>
 [CmdletBinding()]
 param(
@@ -30,6 +33,24 @@ param(
 $ErrorActionPreference = "Stop"
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 Set-Location $RepoRoot
+
+function Read-StoredVercelToken {
+    $path = Join-Path $RepoRoot ".local\vercel_token.secure"
+    if (-not (Test-Path -LiteralPath $path)) {
+        return $null
+    }
+    try {
+        $enc = ([System.IO.File]::ReadAllText($path)).Trim()
+        if (-not $enc) { return $null }
+        $sec = ConvertTo-SecureString -String $enc
+        $cred = New-Object System.Management.Automation.PSCredential ("vercel", $sec)
+        return $cred.GetNetworkCredential().Password
+    }
+    catch {
+        Write-Warning "Could not decrypt .local/vercel_token.secure (wrong Windows user or machine?): $($_.Exception.Message)"
+        return $null
+    }
+}
 
 # Match .vercel/project.json (Vercel CLI) — single source of truth for API polling
 $projectId = "prj_hGdLqDsNtQK2A57hWyZNxdZKMi3b"
@@ -125,8 +146,11 @@ Show-DeployNotification -Title "abbiey.search - GitHub" -Body "Pushed $Branch. W
 
 $tok = $env:VERCEL_TOKEN
 if (-not $tok) {
-    Show-DeployNotification -Title "abbiey.search - Vercel" -Body "Set user env VERCEL_TOKEN to auto-detect deploy READY after push." -Kind Info
-    Write-Warning "VERCEL_TOKEN not set; skipping Vercel API poll."
+    $tok = Read-StoredVercelToken
+}
+if (-not $tok) {
+    Show-DeployNotification -Title "abbiey.search - Vercel" -Body "Set user env VERCEL_TOKEN or run scripts/store-vercel-token.ps1 for encrypted local token." -Kind Info
+    Write-Warning "VERCEL_TOKEN not set and no .local/vercel_token.secure; skipping Vercel API poll."
     exit 0
 }
 
