@@ -1,0 +1,49 @@
+static/style.css
+  1652940ff726b116 30,32-34,69,71-73,650,658-659,829,839-840,844,1028-1029,1371,1443,2148-2150,2153-2155,2158-2160,2163-2165,2168-2169,2338,2340
+static/script.js
+  h_c2f486820b99b6 1516,1519
+templates/signup.html
+  abb45e5d3f4b2784 273-333,336-342
+app.py
+  abb45e5d3f4b2784 11319-11416
+templates/index.html
+  h_c2f486820b99b6 538,546,613,724,760-761
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "1a8a55abe21c30dfd1fe62541ebc16fa190cefd8",
+  "prompts": {
+    "1652940ff726b116": {
+      "agent_id": {
+        "tool": "github-copilot",
+        "id": "cc02e4d4-d166-4926-b12f-caa2399a75ee",
+        "model": "copilot/auto"
+      },
+      "human_author": "abbiey",
+      "messages": [],
+      "total_additions": 35,
+      "total_deletions": 64,
+      "accepted_lines": 6216,
+      "overriden_lines": 0
+    },
+    "abb45e5d3f4b2784": {
+      "agent_id": {
+        "tool": "github-copilot",
+        "id": "20effda8-25ec-4cbf-9269-228c69944b1e",
+        "model": "copilot/claude-sonnet-4.6"
+      },
+      "human_author": "abbiey",
+      "messages": [],
+      "total_additions": 175,
+      "total_deletions": 9,
+      "accepted_lines": 13184,
+      "overriden_lines": 0
+    }
+  },
+  "humans": {
+    "h_c2f486820b99b6": {
+      "author": "abbiey"
+    }
+  }
+}
