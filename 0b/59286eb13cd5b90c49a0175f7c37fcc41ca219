@@ -1,0 +1,23 @@
+templates/index.html
+  abb45e5d3f4b2784 478
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "0b59286eb13cd5b90c49a0175f7c37fcc41ca219",
+  "prompts": {
+    "abb45e5d3f4b2784": {
+      "agent_id": {
+        "tool": "github-copilot",
+        "id": "20effda8-25ec-4cbf-9269-228c69944b1e",
+        "model": "copilot/claude-sonnet-4.6"
+      },
+      "human_author": "abbiey",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 25,
+      "accepted_lines": 2217,
+      "overriden_lines": 0
+    }
+  }
+}
