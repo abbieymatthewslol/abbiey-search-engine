@@ -87,12 +87,16 @@ jobs:
           python-version: "3.12"
       - run: pip install python-dotenv
       - name: Live health check (optional)
+        env:
+          SITE_URL: ${{ secrets.SITE_URL }}
+          ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
+          API_TEST_KEY: ${{ secrets.API_TEST_KEY }}
         run: |
-          if [ -z "${{ secrets.SITE_URL }}" ] || [ -z "${{ secrets.ADMIN_TOKEN }}" ]; then
-            echo "Skipping post-deploy health: add SITE_URL and ADMIN_TOKEN repo/environment secrets to enforce live verification."
+          if [ -z "$SITE_URL" ] || [ -z "$ADMIN_TOKEN" ]; then
+            echo "Skipping post-deploy health: SITE_URL and ADMIN_TOKEN secrets not configured."
             exit 0
           fi
-          SITE_URL="${{ secrets.SITE_URL }}" ADMIN_TOKEN="${{ secrets.ADMIN_TOKEN }}" API_TEST_KEY="${{ secrets.API_TEST_KEY }}" python scripts/verify_production_env.py --ping
+          python scripts/verify_production_env.py --ping
 
   smoke-live:
     needs: verify-live
