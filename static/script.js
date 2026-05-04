@@ -452,6 +452,7 @@ document.addEventListener("DOMContentLoaded", () => {
     urlStyle:      { key: "abbiey_url_style",      def: "full"    },
     snippetStyle:  { key: "abbiey_snippet_style",  def: "full"    },
     searchBar:     { key: "abbiey_searchbar",      def: "default" },
+    hoverPreview:  { key: "abbiey_hover_preview",  def: "true"    },
   };
   function gs(name) { return localStorage.getItem(_S[name].key) ?? _S[name].def; }
   function ss(name, val) { localStorage.setItem(_S[name].key, val); }
@@ -838,6 +839,7 @@ document.addEventListener("DOMContentLoaded", () => {
     syncToggle("cards-toggle",         gs("showCards")     === "true");
     syncToggle("favicons-toggle",      gs("showFavicons")  === "true");
     syncToggle("dates-toggle",         gs("showDates")     === "true");
+    syncToggle("hover-preview-toggle", gs("hoverPreview")  === "true");
     const regionSelectModal = document.getElementById("region-select-modal");
     const regionInput = document.getElementById("region-input");
     if (regionSelectModal && regionInput) {
@@ -969,6 +971,7 @@ document.addEventListener("DOMContentLoaded", () => {
       st.textContent = ".result-date{display:none!important}";
     } else if (st) { st.textContent = ""; }
   });
+  wireToggle("hover-preview-toggle", "hoverPreview", null);
   if (gs("history") !== "true") clearStoredSearchHistory();
 
   // ===== Accent color (in settings modal) =====
@@ -2437,6 +2440,8 @@ document.addEventListener("DOMContentLoaded", () => {
       previewPanel.classList.remove("open");
       previewOpen = false;
       clearResultHighlight();
+      ss("hoverPreview", "false");
+      syncToggle("hover-preview-toggle", false);
     });
 
     if (previewDockBtn && layoutRoot) {
@@ -2668,6 +2673,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Hover to preview (all result cards with data-url: main grid, saved, entity sections)
     let hoverTimer = null;
     document.addEventListener("mouseover", (e) => {
+      if (gs("hoverPreview") !== "true") return;
       const result = e.target.closest(PREVIEW_CARD_SEL);
       if (!result || !result.dataset.url) return;
       previewFocusFromKeyboard = false;
