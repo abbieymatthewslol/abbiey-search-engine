@@ -6,6 +6,7 @@
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
 [data-theme="dark"] {
+  color-scheme: dark; /* LOCK: tells browsers to use dark-mode UA styles for all form controls so input text is never rendered black on black */
   --bg:            #000000;
   --bg-surface:    #0a0a0a;
   --bg-surface-2:  #141414;
@@ -27,11 +28,11 @@
   --shadow-lg:     0 4px 12px rgba(0,0,0,.4);
   --shadow-glow:   0 0 0 1px var(--border);
   --search-surface: rgba(255,255,255,0.04);
-  --search-surface-focus: linear-gradient(120deg, rgba(255,255,255,0.05), rgba(74,222,128,0.08));
+  --search-surface-focus: rgba(255,255,255,0.06);
   --search-border: rgba(255,255,255,0.08);
-  --search-border-hover: rgba(255,255,255,0.16);
-  --search-shadow: 0 10px 30px rgba(0,0,0,.18);
-  --search-shadow-hover: 0 14px 34px rgba(0,0,0,.22);
+  --search-border-hover: rgba(255,255,255,0.13);
+  --search-shadow: 0 6px 20px rgba(0,0,0,.16);
+  --search-shadow-hover: 0 9px 24px rgba(0,0,0,.2);
   --search-placeholder: rgba(255,255,255,0.35);
   --search-button-bg: #4ade80;
   --search-button-bg-hover: #22c55e;
@@ -46,6 +47,7 @@
 }
 
 [data-theme="light"] {
+  color-scheme: light; /* LOCK: explicit light-mode UA, counterpart to dark above */
   --bg:            #fafaf9;
   --bg-surface:    #ffffff;
   --bg-surface-2:  #f5f5f4;
@@ -68,11 +70,11 @@
   --shadow-glow:   0 0 0 1px var(--border);
   /* Solid surface so the bar reads clearly on warm off-white page bg */
   --search-surface: #ffffff;
-  --search-surface-focus: linear-gradient(120deg, #ffffff, rgba(74,222,128,0.12));
+  --search-surface-focus: #ffffff;
   --search-border: rgba(28,25,23,0.14);
-  --search-border-hover: rgba(28,25,23,0.22);
-  --search-shadow: 0 8px 26px rgba(28,25,23,.1);
-  --search-shadow-hover: 0 12px 32px rgba(28,25,23,.14);
+  --search-border-hover: rgba(28,25,23,0.18);
+  --search-shadow: 0 4px 16px rgba(28,25,23,.08);
+  --search-shadow-hover: 0 7px 20px rgba(28,25,23,.1);
   --search-placeholder: rgba(28,25,23,0.38);
   --search-button-bg: #4ade80;
   --search-button-bg-hover: #22c55e;
@@ -183,7 +185,8 @@ button, .btn, [role="button"] {
 }
 button:active, .btn:active, [role="button"]:active { opacity: 0.92; }
 button:disabled, .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
-input, select, textarea { font-family: inherit; }
+/* LOCK: always inherit color so inputs never default to browser-black on a dark background */
+input, select, textarea { font-family: inherit; color: inherit; }
 img { display: block; max-width: 100%; }
 code { font-family: ui-monospace, "Cascadia Mono", Consolas, "Liberation Mono", monospace; }
 
@@ -652,7 +655,7 @@ body:not(.has-results) .search-box {
 }
 .search-box:hover {
   border-color: var(--search-accent-border-hover, var(--search-border-hover));
-  transform: translateY(-1px);
+  transform: none;
   box-shadow: var(--search-shadow-hover);
 }
 .search-box:focus-within {
@@ -660,9 +663,8 @@ body:not(.has-results) .search-box {
   border-color: var(--search-accent-focus, #4ade80);
   outline: none;
   box-shadow:
-    0 0 0 2px var(--search-accent-ring, rgba(74, 222, 128, 0.15)),
-    0 8px 30px rgba(0,0,0,0.35);
-  transform: translateY(-1px);
+    0 0 0 2px var(--search-accent-ring, rgba(74, 222, 128, 0.12));
+  transform: none;
 }
 
 .search-icon { flex-shrink: 0; color: var(--text-muted); }
@@ -847,7 +849,7 @@ body.has-results .voice-btn {
 }
 .search-btn:active {
   opacity: 0.96;
-  transform: scale(0.97);
+  transform: none;
 }
 .search-btn.search-btn-icon {
   width: 40px;
@@ -1039,8 +1041,8 @@ body.has-results .search-btn.search-btn-icon {
   margin: .5rem 0 0;
   padding: .45rem .65rem;
   border-radius: 6px;
-  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 8%, var(--bg-elevated)) 0%, var(--bg-elevated) 100%);
-  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border-subtle));
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
   line-height: 1.45;
 }
 
@@ -1437,7 +1439,7 @@ article.result {
 }
 article.result:last-child { border-bottom: none; }
 article.result:hover {
-  background: var(--bg-hover);
+  background: color-mix(in srgb, var(--bg-hover) 70%, transparent);
 }
 
 .result-domain-row {
@@ -1509,7 +1511,7 @@ cite.result-url {
   display: flex; align-items: center; justify-content: center;
   border-radius: var(--radius-sm);
   color: var(--text-muted);
-  opacity: 0;
+  opacity: .45;
   transition: opacity var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
 }
 article.result:hover .bookmark-btn { opacity: 1; }
@@ -2480,7 +2482,6 @@ html[data-theme="light"] .home-mode-btn[data-search-mode="onion"] {
 }
 html[data-theme="light"] .home-mode-btn[data-search-mode="onion"]:hover {
   background: color-mix(in srgb, #fff 88%, #ddd6fe 12%);
-}
 
 .home-message {
   margin-top: 1rem;
@@ -2612,9 +2613,9 @@ html[data-theme="light"] .home-mode-btn[data-search-mode="onion"]:hover {
 .home-message-sub {
   margin: .9rem auto 0;
   max-width: 34rem;
-  font-size: .85rem;
+  font-size: .84rem;
   line-height: 1.5;
-  color: var(--text-dim);
+  color: var(--text-muted);
   text-align: center;
 }
 
@@ -4630,6 +4631,20 @@ header > .header-brand-top {
 .form-group input::placeholder { color: var(--text-dim); opacity: .6; }
 [data-theme="dark"] .form-group input { box-shadow: none; }
 [data-theme="dark"] .form-group input:focus { box-shadow: none; }
+/* LOCK: global dark-mode input text visibility guarantee — do NOT remove.
+   Without these rules typed text is invisible (black-on-black) when the browser
+   overrides color or autofill resets it. */
+[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+[data-theme="dark"] textarea,
+[data-theme="dark"] select { color: var(--text) !important; }
+[data-theme="dark"] input:-webkit-autofill,
+[data-theme="dark"] input:-webkit-autofill:hover,
+[data-theme="dark"] input:-webkit-autofill:focus,
+[data-theme="dark"] input:-webkit-autofill:active {
+  -webkit-text-fill-color: var(--text) !important;
+  -webkit-box-shadow: 0 0 0 1000px var(--bg-surface) inset !important;
+  caret-color: var(--text);
+}
 .password-wrap { position: relative; display: flex; align-items: center; }
 .password-wrap input { flex: 1; padding-right: 2.75rem; width: 100%; }
 .password-wrap .pw-toggle { position: absolute; right: .75rem; color: var(--text-muted); display: flex; align-items: center; padding: .25rem; border-radius: var(--radius-sm); transition: color var(--dur-fast) var(--ease-out); }

@@ -1,7 +1,7 @@
 /**
  * script.js — main client bundle (single file for simple deploy/caching).
  * Logical regions (grep for "// ====="):
- *   Paywall, loading bars, theme, settings modal, filters, infinite scroll,
+ *   Post-checkout search unlock sync, loading bars, theme, settings modal, filters, infinite scroll,
  *   lightbox, preview panel + layout gutter, "/" shortcut, chat, onion verify,
  *   bookmarks, related/trending, voice, result reorder prefs (drag), scroll indexing ring,
  *   unfiltered leaderboard, in-results filter, view mode, ripple, tabs.
@@ -152,6 +152,114 @@ document.addEventListener("DOMContentLoaded", () => {
     );
   }
 
+  // Search paywall (quota / $7 / 24h) removed; keep Stripe return handling so post-checkout unlock still syncs.
+  (async function initSearchUnlockFromReturn() {
+    const ACCESS_URLS = {
+      status: "/api/search-access",
+      claim: "/api/search-access/claim",
+    };
+    const UNLOCK_COOKIE = "abbiey_search_unlocked";
+    const UNLOCK_COOKIE_MAX_AGE = 315360000;
+    let hasServerUnlock = window.__currentUserHasPaidAccess === true;
+
+    function hasUnlockCookie() {
+      try {
+        return document.cookie.split(";").some((c) => {
+          const t = c.trim();
+          const i = t.indexOf("=");
+          if (i === -1) return false;
+          const name = t.slice(0, i).trim();
+          const val = t.slice(i + 1).trim();
+          return name === UNLOCK_COOKIE && val === "1";
+        });
+      } catch (_) {
+        return false;
+      }
+    }
+
+    function setPaidUnlockPersistence() {
+      try {
+        localStorage.setItem("abbiey_unlocked", "1");
+      } catch (_) {}
+      try {
+        const secure = window.location.protocol === "https:";
+        document.cookie =
+          UNLOCK_COOKIE +
+          "=1; path=/; max-age=" +
+          UNLOCK_COOKIE_MAX_AGE +
+          "; samesite=lax" +
+          (secure ? "; secure" : "");
+      } catch (_) {}
+    }
+    function applyLocalUnlock() {
+      hasServerUnlock = true;
+      setPaidUnlockPersistence();
+    }
+    async function refreshServerUnlock() {
+      try {
+        const result = await fetchJson(ACCESS_URLS.status);
+        if (result.ok && result.data && result.data.unlocked) {
+          applyLocalUnlock();
+          return true;
+        }
+      } catch (_) {}
+      return false;
+    }
+    async function claimReturnedUnlock() {
+      var checkoutToken = "";
+      try {
+        checkoutToken = localStorage.getItem("abbiey_checkout_token") || "";
+      } catch (_) {}
+      try {
+        const result = await fetchJson(ACCESS_URLS.claim, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ checkout_token: checkoutToken }),
+        });
+        if (result.ok && result.data && result.data.unlocked) {
+          try {
+            localStorage.removeItem("abbiey_checkout_token");
+          } catch (_) {}
+          applyLocalUnlock();
+          return true;
+        }
+        showToast(
+          userFacingApiError(result.data && result.data.message, "We couldn't sync your unlock yet. Try again from your account or email recovery."),
+          "error"
+        );
+      } catch (_) {
+        showToast("We couldn't sync your unlock yet.", "error");
+      }
+      return false;
+    }
+    if (localStorage.getItem("abbiey_unlocked") === "1" || hasUnlockCookie()) {
+      try {
+        localStorage.setItem("abbiey_unlocked", "1");
+      } catch (_) {}
+      hasServerUnlock = true;
+    }
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("unlocked") === "1" || params.get("paid") === "1") {
+      var restored = await claimReturnedUnlock();
+      if (!restored) {
+        restored = await refreshServerUnlock();
+      }
+      if (!restored) {
+        applyLocalUnlock();
+      }
+      params.delete("unlocked");
+      params.delete("paid");
+      const qs = params.toString();
+      const nu = window.location.pathname + (qs ? "?" + qs : "") + window.location.hash;
+      window.history.replaceState({}, "", nu);
+    } else {
+      await refreshServerUnlock();
+    }
+    if (hasServerUnlock && typeof window !== "undefined") {
+      window.__currentUserHasPaidAccess = true;
+    }
+  })();
+
   // ===== After Stripe (API keys): remember return to developer dashboard =====
   (function initApiCheckoutReturnCapture() {
     document.querySelectorAll("a.dev-stripe-btn").forEach((a) => {
@@ -226,65 +334,8 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // ===== Custom accent color =====
-  const SEARCH_ACCENT_KEY = "abbiey_search_accent";
   const savedAccent = localStorage.getItem("accent-color");
   if (savedAccent) applyAccentColor(savedAccent);
-
-  function parseHexRgb(color) {
-    let h = String(color || "").replace("#", "").trim();
-    if (h.length === 3 && /^[0-9a-fA-F]{3}$/.test(h)) {
-      h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
-    }
-    if (h.length !== 6 || !/^[0-9a-fA-F]{6}$/.test(h)) return null;
-    return {
-      r: parseInt(h.slice(0, 2), 16),
-      g: parseInt(h.slice(2, 4), 16),
-      b: parseInt(h.slice(4, 6), 16),
-      hex: "#" + h.toLowerCase(),
-    };
-  }
-
-  /** WCAG relative luminance for sRGB hex #rrggbb — for button label contrast */
-  function contrastTextOn(hex) {
-    const p = parseHexRgb(hex);
-    if (!p) return "#1c1917";
-    const lin = (x) => {
-      const c = x / 255;
-      return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
-    };
-    const L = 0.2126 * lin(p.r) + 0.7152 * lin(p.g) + 0.0722 * lin(p.b);
-    return L > 0.55 ? "#1c1917" : "#fafaf9";
-  }
-
-  /** Main search submit button: follows search-bar colour when set, else accent from settings */
-  function applySearchSubmitButtonColors() {
-    const searchPick = localStorage.getItem(SEARCH_ACCENT_KEY) || "";
-    let baseHex = parseHexRgb(searchPick);
-    if (!baseHex) baseHex = parseHexRgb(localStorage.getItem("accent-color") || "");
-    if (!baseHex) {
-      [
-        "--search-button-bg",
-        "--search-button-bg-hover",
-        "--search-button-text",
-        "--search-button-shadow",
-        "--search-button-shadow-hover",
-      ].forEach((v) => html.style.removeProperty(v));
-      return;
-    }
-    const bg = baseHex.hex;
-    const hover = adjustBrightness(bg.replace("#", ""), -26);
-    html.style.setProperty("--search-button-bg", bg);
-    html.style.setProperty("--search-button-bg-hover", hover);
-    html.style.setProperty("--search-button-text", contrastTextOn(bg));
-    html.style.setProperty(
-      "--search-button-shadow",
-      `0 6px 18px color-mix(in srgb, ${bg} 42%, transparent)`
-    );
-    html.style.setProperty(
-      "--search-button-shadow-hover",
-      `0 10px 24px color-mix(in srgb, ${hover} 45%, transparent)`
-    );
-  }
 
   function applyAccentColor(color) {
     html.style.setProperty("--accent", color);
@@ -293,15 +344,15 @@ document.addEventListener("DOMContentLoaded", () => {
     html.style.setProperty("--accent-dim", dim);
     localStorage.setItem("accent-color", color);
     // Mark active swatch
-    document.querySelectorAll(".color-swatch").forEach((s) => {
+    document.querySelectorAll(".color-swatch").forEach(s => {
       s.classList.toggle("active", s.dataset.color === color);
     });
-    applySearchSubmitButtonColors();
   }
 
   // ===== Custom search-bar colour =====
   // Independent from --accent so users can theme the search pill without
   // dragging every other accent-tinted element along. Empty string = reset.
+  const SEARCH_ACCENT_KEY = "abbiey_search_accent";
   const savedSearchAccent = localStorage.getItem(SEARCH_ACCENT_KEY) || "";
   applySearchAccent(savedSearchAccent);
 
@@ -328,7 +379,6 @@ document.addEventListener("DOMContentLoaded", () => {
     document.querySelectorAll(".search-color-swatch").forEach(s => {
       s.classList.toggle("active", s.dataset.color === color);
     });
-    applySearchSubmitButtonColors();
   }
 
   function _mix(hex, alpha, brighten) {
@@ -1218,15 +1268,6 @@ document.addEventListener("DOMContentLoaded", () => {
         hidePrivacyPopover();
       }
     });
-    const resultsHowLink = document.getElementById("results-how-link");
-    if (resultsHowLink) {
-      resultsHowLink.addEventListener("click", (e) => {
-        e.preventDefault();
-        if (!privacyPopover.classList.contains("open")) {
-          privacyBadge.click();
-        }
-      });
-    }
   }
 
   // ===== Answer layer + AI Summary async fetch (text tab, page 1 only) =====
@@ -1472,25 +1513,10 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // ===== Rotating placeholder =====
+  // ===== Stable placeholder copy =====
   const rotatingInput = document.querySelector("[data-placeholder-rotate]");
   if (rotatingInput && !rotatingInput.value) {
-    const placeholders = [
-      "Search anything…",
-      "Try a name, email, or username…",
-      "Search a domain or IP address…",
-      "Ask anything — weather, math, conversions…",
-      "Search phone numbers, crypto addresses…",
-      "Find people, places, or things…",
-      "Try a hashtag or social handle…",
-    ];
-    let phIdx = 0;
-    function rotatePlaceholder() {
-      phIdx = (phIdx + 1) % placeholders.length;
-      rotatingInput.setAttribute("placeholder", placeholders[phIdx]);
-    }
-    const phInterval = window.setInterval(rotatePlaceholder, 3500);
-    rotatingInput.addEventListener("focus", () => clearInterval(phInterval));
+    rotatingInput.setAttribute("placeholder", "Search web, images, news, code, people, or .onion references…");
   }
 
   // ===== Operator chip removal =====
@@ -3615,230 +3641,53 @@ document.addEventListener("DOMContentLoaded", () => {
     recognition.addEventListener("error", () => stopListening());
   })();
 
-  // ===== Feature 2: Filter words (in-results) =====
+  // ===== Feature 2: In-Results Filter =====
   (function initResultsFilter() {
     const filterInput = document.getElementById("results-filter-input");
     const filterCount = document.getElementById("results-filter-count");
     const filterClear = document.getElementById("results-filter-clear");
-    const deepToggle = document.getElementById("results-filter-deep");
     if (!filterInput) return;
 
-    const resultsRoot = document.getElementById("results");
-    const entityRoot = document.querySelector(".entity-results-section");
+    const container = document.getElementById("results");
+    if (!container) return;
 
-    const RESULT_CARD_SEL = ".entity-results-section article.result[data-url], #results .result[data-url]";
-    const HIGHLIGHT_SELECTORS = [".result-title", ".result-snippet", ".result-domain", ".result-url", "cite.result-url", "time.result-date", ".profile-bio"];
-
-    let _deepGen = 0;
-    let _debounceTimer = null;
-    const _previewCache = new Map();
-
-    function fetchPreviewJson(url) {
-      if (_previewCache.has(url)) return _previewCache.get(url);
-      const p = fetch(`/api/preview?url=${encodeURIComponent(url)}`)
-        .then((r) => r.json())
-        .finally(() => {
-          setTimeout(() => {
-            if (_previewCache.get(url) === p) _previewCache.delete(url);
-          }, 25_000);
-        });
-      _previewCache.set(url, p);
-      return p;
+    function getResults() {
+      return Array.from(container.querySelectorAll(".result:not(.result-compact)"));
     }
 
-    function normalizeMatchText(s) {
-      try {
-        return String(s || "")
-          .normalize("NFKD")
-          .replace(/[\u0300-\u036f]/g, "")
-          .toLowerCase();
-      } catch (_e) {
-        return String(s || "").toLowerCase();
-      }
+    function highlight(el, term) {
+      // Highlight in title and snippet only
+      [".result-title", ".result-snippet"].forEach(sel => {
+        const node = el.querySelector(sel);
+        if (!node) return;
+        // Strip old highlights first
+        node.innerHTML = node.innerHTML.replace(/<mark class="result-filter-highlight">([^<]*)<\/mark>/gi, "$1");
+        if (!term) return;
+        const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        node.innerHTML = node.innerHTML.replace(
+          new RegExp(`(${escaped})`, "gi"),
+          '<mark class="result-filter-highlight">$1</mark>'
+        );
+      });
     }
 
-    function escapeRe(s) {
-      return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    }
+    function applyFilter(term) {
+      const results = getResults();
+      const q = term.trim().toLowerCase();
+      let visible = 0;
 
-    function parseFilterTokens(raw) {
-      const parts = String(raw || "")
-        .trim()
-        .split(/\s+/)
-        .filter(Boolean);
-      return parts.slice(0, 8);
-    }
-
-    function tokenRegex(tok) {
-      const n = normalizeMatchText(tok);
-      if (!n) return null;
-      if (/^\d+$/.test(n)) return new RegExp(escapeRe(tok.trim()), "gi");
-      if (/^[\x00-\x7f]+$/.test(n)) return new RegExp(`\\b${escapeRe(n)}\\b`, "gi");
-      try {
-        return new RegExp(`(?<![\\p{L}\\p{N}_])${escapeRe(n)}(?![\\p{L}\\p{N}_])`, "giu");
-      } catch (_e) {
-        return new RegExp(escapeRe(n), "gi");
-      }
-    }
-
-    function textMatchesAllTokens(hayRaw, tokens) {
-      if (!tokens.length) return true;
-      const hay = normalizeMatchText(hayRaw);
-      return tokens.every((t) => {
-        const n = normalizeMatchText(t);
-        if (!n) return true;
-        if (/^\d+$/.test(n)) return hay.includes(n);
-        if (/^[\x00-\x7f]+$/.test(n)) {
-          try {
-            return new RegExp(`\\b${escapeRe(n)}\\b`).test(hay);
-          } catch (_e) {
-            return hay.includes(n);
-          }
-        }
-        try {
-          return new RegExp(`(?<![\\p{L}\\p{N}_])${escapeRe(n)}(?![\\p{L}\\p{N}_])`, "u").test(hay);
-        } catch (_e2) {
-          return hay.includes(n);
+      results.forEach(r => {
+        const text = (r.textContent || "").toLowerCase();
+        const match = !q || text.includes(q);
+        r.classList.toggle("filter-hidden", !match);
+        if (match) {
+          visible++;
+          highlight(r, q ? term.trim() : "");
         }
       });
-    }
 
-    function stripFilterMarks(root) {
-      root.querySelectorAll("mark.result-filter-highlight").forEach((m) => {
-        const p = m.parentNode;
-        if (!p) return;
-        while (m.firstChild) p.insertBefore(m.firstChild, m);
-        p.removeChild(m);
-      });
-    }
-
-    function removeDeepSnippets(root) {
-      root.querySelectorAll(".result-deep-snippet").forEach((el) => el.remove());
-    }
-
-    function highlightTextInElement(el, tokens) {
-      if (!tokens.length) return;
-      for (const t of tokens) {
-        const re = tokenRegex(t);
-        if (!re) continue;
-        const tw = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, {
-          acceptNode(node) {
-            let p = node.parentElement;
-            while (p && p !== el) {
-              if (p.classList && p.classList.contains("result-filter-highlight")) return NodeFilter.FILTER_REJECT;
-              const tag = p.tagName;
-              if (tag === "SCRIPT" || tag === "STYLE") return NodeFilter.FILTER_REJECT;
-              p = p.parentElement;
-            }
-            return NodeFilter.FILTER_ACCEPT;
-          },
-        });
-        const textNodes = [];
-        while (tw.nextNode()) textNodes.push(tw.currentNode);
-        for (const node of textNodes) {
-          const text = node.nodeValue;
-          if (!text || !re.test(text)) {
-            re.lastIndex = 0;
-            continue;
-          }
-          re.lastIndex = 0;
-          const frag = document.createDocumentFragment();
-          let last = 0;
-          let m;
-          const localRe = new RegExp(re.source, re.flags.includes("g") ? re.flags : re.flags + "g");
-          while ((m = localRe.exec(text)) !== null) {
-            frag.appendChild(document.createTextNode(text.slice(last, m.index)));
-            const mark = document.createElement("mark");
-            mark.className = "result-filter-highlight";
-            mark.textContent = m[0];
-            frag.appendChild(mark);
-            last = m.index + m[0].length;
-            if (m[0].length === 0) localRe.lastIndex++;
-          }
-          frag.appendChild(document.createTextNode(text.slice(last)));
-          node.parentNode.replaceChild(frag, node);
-        }
-      }
-    }
-
-    function highlightCard(el, tokens) {
-      stripFilterMarks(el);
-      if (!tokens.length) return;
-      HIGHLIGHT_SELECTORS.forEach((sel) => {
-        el.querySelectorAll(sel).forEach((node) => highlightTextInElement(node, tokens));
-      });
-      el.querySelectorAll(".result-deep-snippet").forEach((node) => highlightTextInElement(node, tokens));
-    }
-
-    function getResultCards() {
-      return Array.from(document.querySelectorAll(RESULT_CARD_SEL));
-    }
-
-    function cardPrimaryText(el) {
-      let s = "";
-      HIGHLIGHT_SELECTORS.forEach((sel) => {
-        el.querySelectorAll(sel).forEach((n) => {
-          s += " " + (n.textContent || "");
-        });
-      });
-      return s;
-    }
-
-    function ensureDeepSnippet(el, excerpt) {
-      let row = el.querySelector(".result-deep-snippet");
-      const snippetHost =
-        el.querySelector(".result-text") ||
-        el.querySelector(".result-domain-row")?.parentElement ||
-        el;
-      if (!row) {
-        row = document.createElement("p");
-        row.className = "result-deep-snippet";
-        row.setAttribute("role", "note");
-        const actions = el.querySelector(".result-actions");
-        if (actions && actions.parentNode === el) el.insertBefore(row, actions);
-        else snippetHost.appendChild(row);
-      }
-      row.textContent = excerpt;
-      return row;
-    }
-
-    function scheduleDeepFetch(tokens) {
-      if (!deepToggle || !deepToggle.checked || !tokens.length) return;
-      const gen = ++_deepGen;
-      const cards = getResultCards();
-      const targets = cards
-        .filter((c) => {
-          const u = c.getAttribute("data-url") || "";
-          if (!u || /\.onion(\/|$)/i.test(u)) return false;
-          return c.classList.contains("filter-hidden");
-        })
-        .slice(0, 10);
-
-      targets.forEach((card) => {
-        const url = card.getAttribute("data-url");
-        if (!url) return;
-        fetchPreviewJson(url)
-          .then((data) => {
-            if (gen !== _deepGen || !data || data.error) return;
-            const blob = `${data.description || ""}\n${data.excerpt || ""}`;
-            if (!textMatchesAllTokens(blob, tokens)) return;
-            card.classList.remove("filter-hidden");
-            const ex = (data.excerpt || data.description || "").trim();
-            const short = ex.length > 260 ? ex.slice(0, 260).trim() + "…" : ex;
-            ensureDeepSnippet(card, short ? `From page: ${short}` : "From page: match found");
-            highlightCard(card, tokens);
-            applyFilterCounts(filterInput.value.trim());
-          })
-          .catch(() => {});
-      });
-    }
-
-    function applyFilterCounts(raw) {
-      const tokens = parseFilterTokens(raw);
-      const cards = getResultCards();
-      const visible = cards.filter((c) => !c.classList.contains("filter-hidden")).length;
-      if (tokens.length) {
-        filterCount.textContent = `${visible} of ${cards.length}`;
+      if (q) {
+        filterCount.textContent = `${visible} of ${results.length}`;
         filterClear.style.display = "";
       } else {
         filterCount.textContent = "";
@@ -3846,56 +3695,11 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
 
-    function applyFilter(raw) {
-      const tokens = parseFilterTokens(raw);
-      const cards = getResultCards();
-
-      cards.forEach((card) => {
-        removeDeepSnippets(card);
-        stripFilterMarks(card);
-        if (!tokens.length) {
-          card.classList.remove("filter-hidden");
-          return;
-        }
-        const blob = cardPrimaryText(card);
-        const ok = textMatchesAllTokens(blob, tokens);
-        card.classList.toggle("filter-hidden", !ok);
-        if (ok) highlightCard(card, tokens);
-      });
-
-      applyFilterCounts(raw);
-
-      if (tokens.length && deepToggle && deepToggle.checked) {
-        scheduleDeepFetch(tokens);
-      }
-    }
-
-    function debouncedApply() {
-      if (_debounceTimer) clearTimeout(_debounceTimer);
-      const d = deepToggle && deepToggle.checked ? 220 : 80;
-      _debounceTimer = setTimeout(() => applyFilter(filterInput.value.trim()), d);
-    }
-
-    filterInput.addEventListener("input", debouncedApply);
-    if (deepToggle) {
-      deepToggle.addEventListener("change", () => applyFilter(filterInput.value.trim()));
-    }
+    filterInput.addEventListener("input", () => applyFilter(filterInput.value));
     filterClear.addEventListener("click", () => {
       filterInput.value = "";
-      _deepGen++;
       applyFilter("");
       filterInput.focus();
-    });
-
-    const moRoots = [resultsRoot, entityRoot].filter(Boolean);
-    moRoots.forEach((root) => {
-      try {
-        const mo = new MutationObserver(() => {
-          clearTimeout(_debounceTimer);
-          _debounceTimer = setTimeout(() => applyFilter(filterInput.value.trim()), 100);
-        });
-        mo.observe(root, { childList: true, subtree: true });
-      } catch (_e) {}
     });
   })();
 
@@ -4104,16 +3908,11 @@ document.addEventListener("DOMContentLoaded", () => {
     tabsEl.appendChild(indicator);
 
     function moveIndicator() {
-      const scroll = tabsEl.querySelector(".search-tabs-scroll");
-      const rectBase = scroll || tabsEl;
-      const active =
-        tabsEl.querySelector(".search-tabs-scroll .tab.active") ||
-        tabsEl.querySelector(".tab-more-wrap .tab.active") ||
-        tabsEl.querySelector(".tab.active");
+      const active = tabsEl.querySelector(".tab.active");
       if (!active) { indicator.style.width = "0"; return; }
       const tRect = active.getBoundingClientRect();
-      const cRect = rectBase.getBoundingClientRect();
-      indicator.style.left  = (tRect.left - cRect.left) + (scroll ? scroll.scrollLeft : 0) + "px";
+      const cRect = tabsEl.getBoundingClientRect();
+      indicator.style.left  = (tRect.left - cRect.left) + "px";
       indicator.style.width = tRect.width + "px";
     }
 
@@ -4125,10 +3924,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     window.addEventListener("resize", moveIndicator, { passive: true });
-    const scrollHost = tabsEl.querySelector(".search-tabs-scroll");
-    if (scrollHost) {
-      scrollHost.addEventListener("scroll", moveIndicator, { passive: true });
-    }
   })();
 });
 
