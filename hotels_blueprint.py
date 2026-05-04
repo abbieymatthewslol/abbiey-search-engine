@@ -9,17 +9,14 @@ Hotels.com, Expedia, and Google Hotels.
 from __future__ import annotations
 
 import logging
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, urlparse
 
-import httpx
+from ddgs import DDGS
 from flask import Blueprint, jsonify, render_template, request
 
 logger = logging.getLogger(__name__)
 
 hotels_bp = Blueprint("hotels", __name__, url_prefix="/hotels")
-
-_DDG_SEARCH_URL = "https://api.duckduckgo.com/"
-_DDGS_TIMEOUT = 8.0
 
 # Maximum results to surface in the API response
 _MAX_RESULTS = 12
@@ -82,8 +79,6 @@ def _ddg_hotel_search(destination: str, checkin: str, checkout: str, guests: int
     query = f"hotels in {destination}{date_hint} {guests} guests book"
 
     try:
-        from ddgs import DDGS
-
         results = []
         with DDGS() as ddgs:
             for r in ddgs.text(query, max_results=_MAX_RESULTS):
@@ -97,15 +92,13 @@ def _ddg_hotel_search(destination: str, checkin: str, checkout: str, guests: int
                 )
         return results
     except Exception:
-        logger.exception("hotels_ddg_search_failed")
+        logger.exception("hotels_ddg_search_failed destination=%s", destination)
         return []
 
 
 def _domain_from_url(url: str) -> str:
     try:
-        from urllib.parse import urlparse as _up
-
-        return _up(url).netloc.replace("www.", "")
+        return urlparse(url).netloc.replace("www.", "")
     except Exception:
         return ""
 
