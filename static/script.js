@@ -702,6 +702,35 @@ document.addEventListener("DOMContentLoaded", () => {
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") overflowMenu.setAttribute("hidden", "");
     });
+
+    // Make entire rows clickable (for Settings, Theme, Density, etc.)
+    const overflowRows = overflowMenu.querySelectorAll(".overflow-menu-row");
+    overflowRows.forEach(row => {
+      // Add pointer cursor so it feels clickable
+      row.style.cursor = "pointer";
+      row.addEventListener("click", (e) => {
+        // If they actually clicked the interactive element inside, don't double trigger
+        const interactive = row.querySelector("button, select, input, a");
+        if (!interactive || e.target === interactive || interactive.contains(e.target)) return;
+        
+        // For selects, focus or showPicker if available
+        if (interactive.tagName === "SELECT") {
+          try {
+            if (typeof interactive.showPicker === "function") {
+              interactive.showPicker();
+            } else {
+              interactive.focus();
+            }
+          } catch (err) {
+            interactive.focus();
+          }
+        } 
+        // For buttons/anchors, mock click
+        else if (typeof interactive.click === "function") {
+          interactive.click();
+        }
+      });
+    });
   }
 
   // ===== Tab More dropdown =====
