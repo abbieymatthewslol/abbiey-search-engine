@@ -27,11 +27,11 @@
   --shadow-lg:     0 4px 12px rgba(0,0,0,.4);
   --shadow-glow:   0 0 0 1px var(--border);
   --search-surface: rgba(255,255,255,0.04);
-  --search-surface-focus: linear-gradient(120deg, rgba(255,255,255,0.05), rgba(74,222,128,0.08));
+  --search-surface-focus: rgba(255,255,255,0.06);
   --search-border: rgba(255,255,255,0.08);
-  --search-border-hover: rgba(255,255,255,0.16);
-  --search-shadow: 0 10px 30px rgba(0,0,0,.18);
-  --search-shadow-hover: 0 14px 34px rgba(0,0,0,.22);
+  --search-border-hover: rgba(255,255,255,0.13);
+  --search-shadow: 0 6px 20px rgba(0,0,0,.16);
+  --search-shadow-hover: 0 9px 24px rgba(0,0,0,.2);
   --search-placeholder: rgba(255,255,255,0.35);
   --search-button-bg: #4ade80;
   --search-button-bg-hover: #22c55e;
@@ -66,11 +66,11 @@
   --shadow-glow:   0 0 0 1px var(--border);
   /* Solid surface so the bar reads clearly on warm off-white page bg */
   --search-surface: #ffffff;
-  --search-surface-focus: linear-gradient(120deg, #ffffff, rgba(74,222,128,0.12));
+  --search-surface-focus: #ffffff;
   --search-border: rgba(28,25,23,0.14);
-  --search-border-hover: rgba(28,25,23,0.22);
-  --search-shadow: 0 8px 26px rgba(28,25,23,.1);
-  --search-shadow-hover: 0 12px 32px rgba(28,25,23,.14);
+  --search-border-hover: rgba(28,25,23,0.18);
+  --search-shadow: 0 4px 16px rgba(28,25,23,.08);
+  --search-shadow-hover: 0 7px 20px rgba(28,25,23,.1);
   --search-placeholder: rgba(28,25,23,0.38);
   --search-button-bg: #4ade80;
   --search-button-bg-hover: #22c55e;
@@ -647,7 +647,7 @@ body:not(.has-results) .search-box {
 }
 .search-box:hover {
   border-color: var(--search-accent-border-hover, var(--search-border-hover));
-  transform: translateY(-1px);
+  transform: none;
   box-shadow: var(--search-shadow-hover);
 }
 .search-box:focus-within {
@@ -655,9 +655,8 @@ body:not(.has-results) .search-box {
   border-color: var(--search-accent-focus, #4ade80);
   outline: none;
   box-shadow:
-    0 0 0 2px var(--search-accent-ring, rgba(74, 222, 128, 0.15)),
-    0 8px 30px rgba(0,0,0,0.35);
-  transform: translateY(-1px);
+    0 0 0 2px var(--search-accent-ring, rgba(74, 222, 128, 0.12));
+  transform: none;
 }
 
 .search-icon { flex-shrink: 0; color: var(--text-muted); }
@@ -827,7 +826,7 @@ body.has-results .voice-btn {
   min-height: 42px;
   font-size: .8125rem;
   font-weight: 600;
-  box-shadow: 0 6px 18px rgba(74, 222, 128, 0.22);
+  box-shadow: 0 2px 10px rgba(74, 222, 128, 0.18);
   transition:
     background var(--dur-fast) var(--ease-out),
     color var(--dur-fast) var(--ease-out),
@@ -837,12 +836,12 @@ body.has-results .voice-btn {
 }
 .search-btn:hover {
   background: var(--search-button-bg-hover);
-  transform: scale(1.04);
-  box-shadow: 0 10px 24px rgba(34, 197, 94, 0.28);
+  transform: none;
+  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.2);
 }
 .search-btn:active {
   opacity: 0.96;
-  transform: scale(0.97);
+  transform: none;
 }
 .search-btn.search-btn-icon {
   width: 40px;
@@ -1026,8 +1025,8 @@ body.has-results .search-btn.search-btn-icon {
   margin: .5rem 0 0;
   padding: .45rem .65rem;
   border-radius: 6px;
-  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 8%, var(--bg-elevated)) 0%, var(--bg-elevated) 100%);
-  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border-subtle));
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
   line-height: 1.45;
 }
 
@@ -1369,7 +1368,7 @@ article.result {
 }
 article.result:last-child { border-bottom: none; }
 article.result:hover {
-  background: var(--bg-hover);
+  background: color-mix(in srgb, var(--bg-hover) 70%, transparent);
 }
 
 .result-domain-row {
@@ -1441,7 +1440,7 @@ cite.result-url {
   display: flex; align-items: center; justify-content: center;
   border-radius: var(--radius-sm);
   color: var(--text-muted);
-  opacity: 0;
+  opacity: .45;
   transition: opacity var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
 }
 article.result:hover .bookmark-btn { opacity: 1; }
@@ -2146,56 +2145,28 @@ article.result.code-result { font-size: .9rem; }
  * violet to signal "different source" (Ahmia/Tor) rather than normal web.
  */
 .home-mode-btn[data-search-mode="onion"] {
-  color: #c4b5fd;
-  background: color-mix(in srgb, #7c3aed 10%, transparent);
-  border-color: color-mix(in srgb, #7c3aed 55%, transparent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, #7c3aed 15%, transparent),
-              0 2px 10px -4px color-mix(in srgb, #7c3aed 50%, transparent);
-  padding-left: 0.7rem;
-  position: relative;
-}
-.home-mode-btn[data-search-mode="onion"]::before {
-  content: "";
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  margin-right: 0.45rem;
-  border-radius: 50%;
-  background: #a78bfa;
-  box-shadow: 0 0 8px #7c3aed;
-  vertical-align: middle;
-  animation: onionPulse 2.4s ease-in-out infinite;
-}
-@keyframes onionPulse {
-  0%, 100% { opacity: 0.55; transform: scale(1); }
-  50%      { opacity: 1.0;  transform: scale(1.15); }
+  color: color-mix(in srgb, var(--text-dim) 80%, #7c3aed 20%);
+  background: color-mix(in srgb, #7c3aed 6%, transparent);
+  border-color: color-mix(in srgb, #7c3aed 35%, var(--border));
 }
 .home-mode-btn[data-search-mode="onion"]:hover {
-  background: color-mix(in srgb, #7c3aed 22%, transparent);
-  border-color: color-mix(in srgb, #7c3aed 75%, transparent);
-  color: #ddd6fe;
-  box-shadow: 0 0 0 1px color-mix(in srgb, #7c3aed 35%, transparent),
-              0 4px 16px -4px color-mix(in srgb, #7c3aed 70%, transparent);
-  transform: translateY(-1px);
+  background: color-mix(in srgb, #7c3aed 12%, transparent);
+  border-color: color-mix(in srgb, #7c3aed 50%, var(--border));
+  color: color-mix(in srgb, var(--text) 85%, #c084fc 15%);
 }
 .home-mode-btn[data-search-mode="onion"].active {
-  color: #fff;
-  background: color-mix(in srgb, #7c3aed 35%, transparent);
-  border-color: #a78bfa;
-  box-shadow: 0 0 0 2px color-mix(in srgb, #7c3aed 30%, transparent),
-              0 4px 20px -4px color-mix(in srgb, #7c3aed 80%, transparent);
+  color: var(--text);
+  background: color-mix(in srgb, #7c3aed 16%, transparent);
+  border-color: color-mix(in srgb, #7c3aed 55%, var(--border));
 }
 html[data-theme="light"] .home-mode-btn[data-search-mode="onion"] {
-  color: #5b21b6;
-  background: color-mix(in srgb, #7c3aed 8%, #fff);
-  border-color: color-mix(in srgb, #7c3aed 45%, transparent);
+  color: color-mix(in srgb, var(--text-dim) 82%, #7c3aed 18%);
+  background: color-mix(in srgb, #7c3aed 6%, #fff);
+  border-color: color-mix(in srgb, #7c3aed 35%, var(--border));
 }
 html[data-theme="light"] .home-mode-btn[data-search-mode="onion"]:hover {
-  background: color-mix(in srgb, #7c3aed 15%, #fff);
-  color: #4c1d95;
-}
-@media (prefers-reduced-motion: reduce) {
-  .home-mode-btn[data-search-mode="onion"]::before { animation: none; }
+  background: color-mix(in srgb, #7c3aed 11%, #fff);
+  color: color-mix(in srgb, var(--text) 80%, #7c3aed 20%);
 }
 
 .home-message {
@@ -2364,9 +2335,9 @@ html[data-theme="light"] .home-mode-btn[data-search-mode="onion"]:hover {
 .home-message-sub {
   margin: .9rem auto 0;
   max-width: 34rem;
-  font-size: .85rem;
+  font-size: .84rem;
   line-height: 1.5;
-  color: var(--text-dim);
+  color: var(--text-muted);
   text-align: center;
 }
 

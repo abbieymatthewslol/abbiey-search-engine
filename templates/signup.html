@@ -270,7 +270,75 @@
                 }
             });
             if (res.error) {
+                var errMsg = (res.error.message || '').toLowerCase();
+                // Supabase created the account but couldn't send the confirmation email
+                // (e.g. free-tier rate limit, SMTP misconfiguration). Treat as soft success.
+                if (res.data && res.data.user && res.data.user.id &&
+                    (errMsg.includes('confirmation email') || errMsg.includes('sending email') || errMsg.includes('email rate limit'))) {
+                    if (okEl) {
+                        okEl.classList.remove('auth-flash-hidden');
+                        okEl.innerHTML =
+                            '<p>Account created! The confirmation email couldn\u2019t be sent automatically. ' +
+                            'Click the button below to get your confirmation email.</p>' +
+                            '<button id="resend-confirm-btn" class="search-btn auth-submit" ' +
+                            '  style="margin-top:0.75rem" type="button" ' +
+                            '  data-email="' + escapeHtml(email) + '">Send confirmation email</button>';
+                        var resendBtn = document.getElementById('resend-confirm-btn');
+                        if (resendBtn) {
+                            resendBtn.addEventListener('click', async function () {
+                                resendBtn.disabled = true;
+                                resendBtn.textContent = 'Sending\u2026';
+                                try {
+                                    var rr = await fetch('/api/resend-confirmation', {
+                                        method: 'POST',
+                                        headers: {'Content-Type': 'application/json'},
+                                        credentials: 'same-origin',
+                                        body: JSON.stringify({email: resendBtn.getAttribute('data-email')})
+                                    });
+                                    var rd = await rr.json().catch(function(){return null;});
+                                    if (rr.ok && rd && rd.ok) {
+                                        if (rd.already_confirmed) {
+                                            okEl.innerHTML = '<p>Your email is already confirmed. <a href="/login">Sign in here</a>.</p>';
+                                        } else {
+                                            okEl.innerHTML = '<p>Confirmation email sent! Check your inbox and click the link to activate your account.</p>';
+                                        }
+                                    } else {
+                                        var emsg = (rd && (rd.error || rd.message)) ? rd.error || rd.message : 'Could not send email. Please try again.';
+                                        okEl.innerHTML =
+                                            '<p>Account created! ' + escapeHtml(emsg) + '</p>' +
+                                            '<button id="resend-confirm-btn" class="search-btn auth-submit" ' +
+                                            '  style="margin-top:0.75rem" type="button" ' +
+                                            '  data-email="' + escapeHtml(resendBtn.getAttribute('data-email')) + '">Try again</button>';
+                                        // Re-attach listener to new button
+                                        document.getElementById('resend-confirm-btn') && document.getElementById('resend-confirm-btn').addEventListener('click', resendBtn.onclick);
+                                    }
+                                } catch (_re) {
+                                    resendBtn.disabled = false;
+                                    resendBtn.textContent = 'Try again';
+                                }
+                            });
+                        }
+                    }
+                    if (errEl) { errEl.classList.add('auth-flash-hidden'); errEl.innerHTML = ''; }
+                    releaseSubmit();
+                    return;
+                }
+                // Supabase returns a dummy user with empty identities when the email already exists
+                // (to prevent email enumeration). Guide the user to sign in instead.
+                if (res.data && res.data.user &&
+                    Array.isArray(res.data.user.identities) && res.data.user.identities.length === 0) {
+                    showErr('An account with that email already exists. <a href="/login">Sign in instead</a>.');
+                    releaseSubmit();
+                    return;
+                }
                 showErr(escapeHtml(res.error.message || 'Sign up failed.'));
+                releaseSubmit();
+                return;
+            }
+            // Supabase returns a dummy user with empty identities when email is already registered
+            if (res.data && res.data.user &&
+                Array.isArray(res.data.user.identities) && res.data.user.identities.length === 0) {
+                showErr('An account with that email already exists. <a href="/login">Sign in instead</a>.');
                 releaseSubmit();
                 return;
             }

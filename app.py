@@ -11316,6 +11316,104 @@ def auth_callback():
     return resp
 
 
+@app.route("/api/resend-confirmation", methods=["POST"])
+@limiter.limit("5/hour")
+def api_resend_confirmation():
+    """Resend Supabase email confirmation via the Admin API + Resend, bypassing Supabase's SMTP rate limit."""
+    if not _SUPABASE_AUTH_ENABLED:
+        return jsonify({"error": "Auth not configured"}), 400
+    data = request.get_json(silent=True) or {}
+    email = (data.get("email") or "").strip().lower()
+    if not email or "@" not in email or len(email) > 254:
+        return jsonify({"error": "Invalid email address."}), 400
+
+    service_key = (os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or "").strip()
+    if not service_key:
+        # Fall back to Supabase's own resend endpoint (anon key, subject to rate limit)
+        try:
+            r = httpx.post(
+                f"{_SUPABASE_URL}/auth/v1/resend",
+                headers={
+                    "apikey": _SUPABASE_ANON_KEY,
+                    "Content-Type": "application/json",
+                },
+                json={"type": "signup", "email": email},
+                timeout=10.0,
+            )
+            if r.status_code < 400:
+                return jsonify({"ok": True, "method": "supabase_resend"})
+            return jsonify({"error": "Could not resend confirmation email. Please try again later."}), 502
+        except Exception:
+            logger.exception("api_resend_confirmation_fallback_failed")
+            return jsonify({"error": "Could not resend confirmation email."}), 502
+
+    # Use Admin API to generate a confirm link, then email it ourselves via Resend
+    try:
+        confirm_url = _site_base_url().rstrip("/") + "/auth/confirm"
+        r = httpx.post(
+            f"{_SUPABASE_URL}/auth/v1/admin/generate_link",
+            headers={
+                "apikey": service_key,
+                "Authorization": f"Bearer {service_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "type": "signup",
+                "email": email,
+                "options": {"redirect_to": confirm_url},
+            },
+            timeout=10.0,
+        )
+        if r.status_code == 422:
+            # Already confirmed — just tell them to sign in
+            return jsonify({"ok": True, "already_confirmed": True})
+        if r.status_code >= 400:
+            logger.warning("admin_generate_link error %s: %s", r.status_code, (r.text or "")[:300])
+            return jsonify({"error": "Could not generate confirmation link."}), 502
+        link_data = r.json()
+        action_link = (link_data.get("action_link") or "").strip()
+        if not action_link:
+            return jsonify({"error": "No confirmation link returned."}), 502
+    except Exception:
+        logger.exception("api_resend_confirmation_admin_failed")
+        return jsonify({"error": "Could not generate confirmation link."}), 502
+
+    resend_key = (os.environ.get("RESEND_API_KEY") or "").strip()
+    from_addr = (os.environ.get("EMAIL_FROM") or "abbiey.search <onboarding@resend.dev>").strip()
+    if not resend_key:
+        return jsonify({"error": "Email service not configured. Please contact support."}), 503
+
+    try:
+        er = httpx.post(
+            "https://api.resend.com/emails",
+            headers={"Authorization": f"Bearer {resend_key}", "Content-Type": "application/json"},
+            json={
+                "from": from_addr,
+                "to": [email],
+                "subject": "Confirm your abbiey.search account",
+                "html": (
+                    "<p>Click the link below to confirm your email address and activate your account:</p>"
+                    f'<p><a href="{action_link}">Confirm my account</a></p>'
+                    "<p>This link expires in 24 hours.</p>"
+                    '<p style="color:#888">If you did not create an account, ignore this email.</p>'
+                ),
+                "text": (
+                    "Click the link below to confirm your email address:\n\n"
+                    f"{action_link}\n\n"
+                    "This link expires in 24 hours."
+                ),
+            },
+            timeout=10.0,
+        )
+        if er.status_code >= 400:
+            logger.warning("Resend error %s: %s", er.status_code, (er.text or "")[:300])
+            return jsonify({"error": "Could not send email. Please try again."}), 502
+        return jsonify({"ok": True, "method": "resend"})
+    except Exception:
+        logger.exception("api_resend_confirmation_send_failed")
+        return jsonify({"error": "Could not send email."}), 502
+
+
 @app.route("/auth/confirm")
 def auth_confirm():
     """Landing page after Supabase OAuth redirect (e.g. Google). JS picks up the session."""

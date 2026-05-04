@@ -152,4 +152,3 @@ git push heroku main
 - `/api/preview?url=...` — Page preview metadata
 - `/api/chat` (POST) — AI research assistant
 - `/api/entity?q=...` — Entity detection
-

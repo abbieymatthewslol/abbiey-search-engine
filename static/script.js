@@ -1513,25 +1513,10 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // ===== Rotating placeholder =====
+  // ===== Stable placeholder copy =====
   const rotatingInput = document.querySelector("[data-placeholder-rotate]");
   if (rotatingInput && !rotatingInput.value) {
-    const placeholders = [
-      "Search anything…",
-      "Try a name, email, or username…",
-      "Search a domain or IP address…",
-      "Ask anything — weather, math, conversions…",
-      "Search phone numbers, crypto addresses…",
-      "Find people, places, or things…",
-      "Try a hashtag or social handle…",
-    ];
-    let phIdx = 0;
-    function rotatePlaceholder() {
-      phIdx = (phIdx + 1) % placeholders.length;
-      rotatingInput.setAttribute("placeholder", placeholders[phIdx]);
-    }
-    const phInterval = window.setInterval(rotatePlaceholder, 3500);
-    rotatingInput.addEventListener("focus", () => clearInterval(phInterval));
+    rotatingInput.setAttribute("placeholder", "Search web, images, news, code, people, or .onion references…");
   }
 
   // ===== Operator chip removal =====
