@@ -2482,6 +2482,7 @@ html[data-theme="light"] .home-mode-btn[data-search-mode="onion"] {
 }
 html[data-theme="light"] .home-mode-btn[data-search-mode="onion"]:hover {
   background: color-mix(in srgb, #fff 88%, #ddd6fe 12%);
+}
 
 .home-message {
   margin-top: 1rem;
