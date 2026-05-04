@@ -26,6 +26,7 @@
           "search_protocol.py",
           "startup_checks.py",
           "unfiltered_engagement.py",
+          "hotels_blueprint.py",
           "app.py"
         ]
       }

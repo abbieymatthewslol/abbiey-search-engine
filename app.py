@@ -71,6 +71,7 @@ import bot_crawler as _bot_crawler
 import billing as _billing
 from api_v1 import api_v1 as _api_v1_bp
 from unfiltered_engagement import unfiltered_bp as _unfiltered_bp
+from hotels_blueprint import hotels_bp as _hotels_bp
 import startup_checks as _startup_checks
 from people_finder import (
     append_pf_query_string,
@@ -11988,6 +11989,7 @@ except Exception:
 _billing.configure(_users_execute)
 app.register_blueprint(_api_v1_bp)
 app.register_blueprint(_unfiltered_bp)
+app.register_blueprint(_hotels_bp)
 
 # Attach per-API-key rate limits to the blueprint views. Must run after the
 # blueprint registration so ``current_app.view_functions`` has the endpoints.
