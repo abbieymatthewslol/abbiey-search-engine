@@ -3927,6 +3927,78 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
+  // ===== SERP category tabs: href q= matches live search box =====
+  (function initSearchTabHrefSync() {
+    const tabsRoot = document.querySelector(".search-tabs");
+    const searchInput = document.getElementById("search-input");
+    if (!tabsRoot || !searchInput) return;
+
+    function patchAnchorHref(a) {
+      const raw = a.getAttribute("href");
+      if (!raw || raw.startsWith("#")) return;
+      try {
+        const u = new URL(raw, window.location.origin);
+        if (!u.pathname.startsWith("/search")) return;
+        const q = searchInput.value.trim();
+        if (q) u.searchParams.set("q", q);
+        else u.searchParams.delete("q");
+        a.setAttribute("href", u.pathname + u.search + u.hash);
+      } catch (_) {}
+    }
+
+    function syncSearchTabAnchorsFromInput() {
+      tabsRoot.querySelectorAll(".search-tabs-scroll a.tab[href]").forEach(patchAnchorHref);
+      const menu = document.getElementById("tab-more-menu");
+      if (menu) menu.querySelectorAll("a[href^='/search']").forEach(patchAnchorHref);
+    }
+
+    function tabNavAnchorFromEventTarget(target) {
+      const a = target && target.closest && target.closest("a[href^='/search']");
+      if (!a || !tabsRoot.contains(a)) return null;
+      const inScroll = a.closest(".search-tabs-scroll");
+      const inMenu = document.getElementById("tab-more-menu")?.contains(a);
+      if (inScroll && a.classList.contains("tab")) return a;
+      if (inMenu && (a.classList.contains("tab-more-item") || a.classList.contains("tab-more-mybot-item"))) return a;
+      return null;
+    }
+
+    tabsRoot.addEventListener(
+      "focusin",
+      (e) => {
+        if (tabNavAnchorFromEventTarget(e.target)) syncSearchTabAnchorsFromInput();
+      },
+      true
+    );
+    tabsRoot.addEventListener(
+      "pointerdown",
+      (e) => {
+        if (tabNavAnchorFromEventTarget(e.target)) syncSearchTabAnchorsFromInput();
+      },
+      true
+    );
+    tabsRoot.addEventListener(
+      "click",
+      (e) => {
+        if (!tabNavAnchorFromEventTarget(e.target)) return;
+        if (!searchInput.value.trim()) {
+          e.preventDefault();
+          searchInput.focus();
+        }
+      },
+      true
+    );
+
+    let tabHrefTimer = null;
+    searchInput.addEventListener("input", () => {
+      clearTimeout(tabHrefTimer);
+      tabHrefTimer = window.setTimeout(() => {
+        syncSearchTabAnchorsFromInput();
+      }, motionDelay(120));
+    });
+
+    syncSearchTabAnchorsFromInput();
+  })();
+
   // ===== Tab sliding indicator =====
   (function initTabIndicator() {
     const tabsEl = document.querySelector(".search-tabs");
