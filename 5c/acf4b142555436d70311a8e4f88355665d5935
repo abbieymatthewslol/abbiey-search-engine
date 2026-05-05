@@ -1,0 +1,23 @@
+scripts/set-github-npm-secret-from-clipboard.ps1
+  43de4da8ae0ec537 1-37
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "5cacf4b142555436d70311a8e4f88355665d5935",
+  "prompts": {
+    "43de4da8ae0ec537": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "24a4f913-ce9b-4b94-a78b-89fac4af4c96",
+        "model": "composer-2"
+      },
+      "human_author": "abbiey",
+      "messages": [],
+      "total_additions": 45,
+      "total_deletions": 8,
+      "accepted_lines": 37,
+      "overriden_lines": 0
+    }
+  }
+}
