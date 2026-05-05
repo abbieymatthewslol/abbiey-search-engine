@@ -1,0 +1,31 @@
+.github/workflows/cli-npm-publish.yml
+  43de4da8ae0ec537 1-57
+app.py
+  43de4da8ae0ec537 3396-3397,11924
+templates/developer.html
+  43de4da8ae0ec537 37-44
+cli/package.json
+  43de4da8ae0ec537 3
+vercel.json
+  43de4da8ae0ec537 18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "8b882de5a467eb67a13a0aac658a677c8669df54",
+  "prompts": {
+    "43de4da8ae0ec537": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "24a4f913-ce9b-4b94-a78b-89fac4af4c96",
+        "model": "composer-2"
+      },
+      "human_author": "abbiey",
+      "messages": [],
+      "total_additions": 71,
+      "total_deletions": 2,
+      "accepted_lines": 12374,
+      "overriden_lines": 0
+    }
+  }
+}
