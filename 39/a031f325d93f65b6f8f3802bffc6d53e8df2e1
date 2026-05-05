@@ -1,0 +1,35 @@
+.gitignore
+  a1ab50754c68378c 1-3
+.github/workflows/python-package.yml
+  a1ab50754c68378c 13-30
+cli/package.json
+  a1ab50754c68378c 16-17
+README.md
+  a1ab50754c68378c 15,70,99,109,119
+docs/README.md
+  a1ab50754c68378c 13
+CHANGELOG.md
+  a1ab50754c68378c 10-12
+cli/README.md
+  a1ab50754c68378c 3-4
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "39a031f325d93f65b6f8f3802bffc6d53e8df2e1",
+  "prompts": {
+    "a1ab50754c68378c": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "8d1728a6-a90a-4237-b57b-d18ba3905342",
+        "model": "composer-2"
+      },
+      "human_author": "abbiey",
+      "messages": [],
+      "total_additions": 35,
+      "total_deletions": 2,
+      "accepted_lines": 198,
+      "overriden_lines": 0
+    }
+  }
+}
