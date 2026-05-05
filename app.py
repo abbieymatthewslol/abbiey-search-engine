@@ -12155,3 +12155,8 @@ if __name__ == "__main__":
         threaded=True
     )
 
+
+@app.route('/api/healthz')
+def healthz_api():
+    return healthz()
+
