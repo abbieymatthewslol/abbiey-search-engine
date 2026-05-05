@@ -1,0 +1,25 @@
+templates/index.html
+  950667d11e37cfcb 1694-1698
+static/style.css
+  950667d11e37cfcb 2654-2703,5739-5743
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "737c5dcb983b9bfe4f787c9817a053b6ff4fdf0c",
+  "prompts": {
+    "950667d11e37cfcb": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "9aa783d4-54aa-4dfc-999c-225b673d8168",
+        "model": "composer-2"
+      },
+      "human_author": "abbiey",
+      "messages": [],
+      "total_additions": 64,
+      "total_deletions": 9,
+      "accepted_lines": 8065,
+      "overriden_lines": 0
+    }
+  }
+}
