@@ -35,11 +35,8 @@
     <meta name="deploy-hash" content="{{ deploy_hash }}">
     {% include 'includes/google_site_verification.html' %}
     {% include 'includes/google_adsense_head.html' %}
-    <!-- Vercel Speed Insights -->
-    <script nonce="{{ csp_nonce }}">
-        window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
-    </script>
-    <script defer src="/_vercel/speed-insights/script.js"></script>
+    {% include 'includes/vercel_observability_head.html' %}
+    <link rel="preload" href="{{ url_for('static', filename='script.js', v=deploy_hash) }}" as="script">
     <!-- SEO meta tags -->
     {% if query %}
     <meta name="description" content="Search results for &quot;{{ query }}&quot; on abbieysearch — sourced snippets, optional AI summary, and privacy-first search with no server-side query logging.">
@@ -1826,9 +1823,9 @@
     </script>
     {% endif %}
 
-    <script src="{{ url_for('static', filename='script.js', v=deploy_hash) }}"></script>
+    <script defer src="{{ url_for('static', filename='script.js', v=deploy_hash) }}"></script>
     {% if query and search_type == 'onion' %}
-    <script src="{{ url_for('static', filename='onion-rewriter.js', v=deploy_hash) }}"></script>
+    <script defer src="{{ url_for('static', filename='onion-rewriter.js', v=deploy_hash) }}"></script>
     {% endif %}
     <script nonce="{{ csp_nonce }}">
     // Share button

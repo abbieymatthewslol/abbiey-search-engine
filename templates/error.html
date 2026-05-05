@@ -4,11 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="deploy-hash" content="{{ deploy_hash }}">
-    <!-- Vercel Speed Insights -->
-    <script nonce="{{ csp_nonce }}">
-        window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
-    </script>
-    <script defer src="/_vercel/speed-insights/script.js"></script>
+    {% include 'includes/vercel_observability_head.html' %}
     <title>{{ code }} — abbieysearch</title>
     <script nonce="{{ csp_nonce }}">
         (function() {
