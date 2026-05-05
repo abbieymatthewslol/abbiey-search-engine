@@ -108,7 +108,7 @@ def _domain_from_url(url: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-@hotels_bp.route("/")
+@hotels_bp.route("/", strict_slashes=False)
 def hotels_page():
     """Hotel finder landing page."""
     destination = request.args.get("destination", "").strip()
@@ -137,7 +137,7 @@ def hotels_page():
     )
 
 
-@hotels_bp.route("/api/search")
+@hotels_bp.route("/api/search", strict_slashes=False)
 def hotels_api_search():
     """JSON endpoint for hotel search results."""
     destination = request.args.get("destination", "").strip()

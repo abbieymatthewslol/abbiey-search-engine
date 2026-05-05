@@ -1091,6 +1091,11 @@
                 {% endif %}
             </div>
             {% endif %}
+            {% if primary_entity.type == 'place_category' and primary_entity.meta and primary_entity.meta.category_key in ('hotel', 'hostel') %}
+            <div class="platform-links">
+                <a href="/hotels" class="platform-link">Hotels</a>
+            </div>
+            {% endif %}
 
             {% if primary_entity.type == 'phone' and primary_entity.meta %}
             <div class="entity-details">

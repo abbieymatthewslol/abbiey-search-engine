@@ -70,6 +70,7 @@ SYNONYM_MAP: Dict[str, str] = {
     "roundabout": "traffic circle",
     "zebra crossing": "crosswalk",
     "takeaway coffee": "coffee to go",
+    "hotels": "hotel",
     "brekkie": "breakfast",
     "arvo": "afternoon",
     "maccas": "mcdonalds",
