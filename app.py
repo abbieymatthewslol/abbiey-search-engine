@@ -138,6 +138,35 @@ def _resolve_flask_secret_key() -> str:
 
 
 app = Flask(__name__)
+
+# === BEGIN: request logging patch (safe, minimal) ===
+import hashlib
+from datetime import datetime
+from flask import request
+
+def _req_log():
+    try:
+        ip = request.headers.get("x-real-ip") or request.headers.get("x-forwarded-for") or request.remote_addr
+        ua = request.headers.get("user-agent", "")
+        path = request.path
+
+        # stable-ish device fingerprint (non-invasive)
+        device_id = hashlib.sha256(f"{ip}|{ua}".encode()).hexdigest()[:16]
+
+        print({
+            "ts": datetime.utcnow().isoformat(),
+            "ip": ip,
+            "ua": ua,
+            "path": path,
+            "device_id": device_id
+        })
+    except Exception:
+        pass
+# === END: request logging patch ===
+
+@app.before_request
+def _log_req(): _req_log()
+
 app.config["SECRET_KEY"] = _resolve_flask_secret_key()
 app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 31536000  # 1-year cache for static files
 app.config["SESSION_COOKIE_HTTPONLY"] = True
@@ -12125,3 +12154,4 @@ if __name__ == "__main__":
         use_reloader=is_dev,
         threaded=True
     )
+
