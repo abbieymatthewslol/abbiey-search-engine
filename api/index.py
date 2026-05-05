@@ -1,11 +1,15 @@
-"""Optional Vercel serverless entry: import the Flask app.
+# Vercel Python entrypoint ? expose Flask app
 
-Production deploys use ``vercel.json`` with ``builds`` → ``app.py`` and a catch-all route.
-This file remains valid if a project is pointed at ``api/index.py`` instead.
-"""
 import os
 import sys
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+# Ensure project root is importable
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
 
-from app import app  # noqa: F401
+# Import the Flask app instance from your main file
+from app import app as app
+
+# Optional: alias for some runtimes (harmless)
+handler = app
