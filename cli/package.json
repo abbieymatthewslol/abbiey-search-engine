@@ -1,0 +1,45 @@
+{
+  "name": "abbieysearch-cli",
+  "version": "0.1.0",
+  "description": "Command-line interface for abbieysearch — private search, unfiltered answers, developer-friendly URLs",
+  "keywords": [
+    "abbieysearch",
+    "search",
+    "cli",
+    "privacy",
+    "developer-tools"
+  ],
+  "license": "MIT",
+  "author": "",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/abbieymatthewslol/abbiey-search-engine-2.git",
+    "directory": "cli"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "bin": {
+    "abbiey": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "node --import tsx src/cli.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "commander": "^12.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsup": "^8.3.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

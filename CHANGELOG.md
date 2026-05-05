@@ -7,6 +7,9 @@ Follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) conventions.
 
 ## [Unreleased]
 
+### Added
+- **Developer CLI** — [`cli/`](cli/) ships `abbieysearch-cli` (global binary `abbiey`): builds `/search` URLs with depth/evidence/style flags, ImgOps shortcuts, `--json` / `--stdin` automation, shell completions, and `abbiey doctor`. Documented in [`cli/README.md`](cli/README.md).
+
 ### Added — reviewer remediation (2026-04-22)
 - **Image upload via Supabase Storage** — `POST /api/reverse-image` now hosts user uploads in a private `reverse-image-uploads` bucket for ~60 seconds (signed URL) and cleans up after the lookup. A Supabase pg_cron job sweeps any stragglers every 5 minutes. `SITE_URL` is no longer required for image upload when Supabase is configured. Migration in [`supabase/migrations/20260422100000_reverse_image_uploads.sql`](supabase/migrations/20260422100000_reverse_image_uploads.sql).
 - **Chunked, resumable bot crawls** — `search_bots.crawl_bot_pages_step` replaces the old "crawl everything in one synchronous request" path. `POST /api/user/search-bots/<id>/crawl` now enqueues a job and runs a 3-page chunk inline; a GitHub Actions worker (`.github/workflows/bot-crawl-worker.yml`) ticks `/admin/api/bot-crawl-step` every 5 minutes to drain the queue. New `GET /api/user/search-bots/<id>/status` and UI polling. Per-page timeout dropped from 12s → 6s. `vercel.json` `maxDuration` bumped to 60s.

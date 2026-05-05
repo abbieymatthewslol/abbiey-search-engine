@@ -10,6 +10,7 @@ and project tracking.
 - [`SELF-HOSTING.md`](./SELF-HOSTING.md) - deployment walkthroughs for Docker,
   Vercel, Render, Fly.io, and bare-metal setups
 - [`API.md`](./API.md) - public API behavior, auth, billing, and rate-limit docs
+- [`../cli/README.md`](../cli/README.md) - developer CLI (`abbiey`): URLs, ImgOps, scripting flags
 - [`deep-web.md`](./deep-web.md) - Deep Web / Onion search behavior and caveats
 - [`PROJECT-INDEX.md`](./PROJECT-INDEX.md) - current feature inventory, endpoint
   map, and architecture snapshot

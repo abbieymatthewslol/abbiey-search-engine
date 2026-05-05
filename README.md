@@ -12,6 +12,7 @@ Fly.io, Railway, or self-hosted with one `docker compose up`.
 | Custom crawl bots (per-user, chunked) | Shipping |
 | Reverse image search (URL + upload)   | Shipping |
 | Public `/api/v1` for developers       | Shipping |
+| Developer CLI (`abbiey`) — [`cli/`](./cli/) | Shipping |
 | Self-host via Docker                  | Shipping |
 | Stripe unlocks + metered API billing  | Shipping |
 
@@ -66,6 +67,7 @@ each deployment mode (Docker, Render, Fly.io, Vercel, bare-metal).
 - **Payments:** Stripe Payment Links + webhooks; metered API billing
 - **Caching:** in-memory TTLCache + optional Vercel Runtime Cache
 - **Hosting:** Vercel (serverless, `api/index.py`) or any Docker host
+- **CLI:** Node 18+ — [`cli/`](cli/) (`abbiey`; publishable as `abbieysearch-cli`)
 - **CI:** GitHub Actions — `pytest` on push, production-readiness gate on PR,
   GHCR image on tag
 
@@ -94,6 +96,7 @@ accounts only), `none` (hard kill-switch).
 - [`docs/SELF-HOSTING.md`](docs/SELF-HOSTING.md) — deploy it yourself, any mode
 - [`docs/deep-web.md`](docs/deep-web.md) — what the Onion / Tor tab actually does
 - [`docs/API.md`](docs/API.md) — `GET /api/v1/search`, auth, billing, rate limits
+- [`cli/README.md`](cli/README.md) — terminal CLI (`abbiey`): `/search` URLs, ImgOps, scripting flags
 - [`docs/PROJECT-INDEX.md`](docs/PROJECT-INDEX.md) — current architecture, features, and endpoint inventory
 - [`docs/TODO.md`](docs/TODO.md) — completed roadmap and recent project checklist
 - [`CHANGELOG.md`](./CHANGELOG.md) — human-readable release notes (also at `/changelog`)
@@ -103,6 +106,7 @@ accounts only), `none` (hard kill-switch).
 ## Repository layout
 
 - **Root:** runtime entrypoints and deployment config only (`app.py`, `api/`, `vercel.json`, `Dockerfile`, `render.yaml`)
+- **`cli/`:** Node-based developer CLI (`abbieysearch-cli`, binary `abbiey`)
 - **`docs/`:** self-hosting, API, architecture, and project-tracking docs
 - **`scripts/`:** local verification, deploy, and environment-management helpers
 - **`retrieval/`, `osint/`, `templates/`, `static/`, `tests/`:** search pipeline, enrichment, UI, assets, and automated coverage
@@ -112,6 +116,7 @@ accounts only), `none` (hard kill-switch).
 ```bash
 pytest tests/ -q                  # 427 Python tests, <2 min
 node tests/test_settings_persistence.js   # 21 JS tests, no bundler required
+(cd cli && npm ci && npm run build)       # bundles the developer CLI (`abbiey`)
 ```
 
 ---
