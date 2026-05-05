@@ -15,6 +15,7 @@
           "api_v1.py",
           "abbiey_product_knowledge.py",
           "billing.py",
+          "cli/README.md",
           "bot_crawler.py",
           "entity_parser.py",
           "people_finder.py",

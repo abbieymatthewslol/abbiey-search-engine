@@ -3393,6 +3393,8 @@ _DOCS_ALLOWED = {
                      "Step-by-step guide to running your own private abbieysearch instance with Docker, Fly.io, or bare Python."),
     "api": ("API reference", "docs/API.md",
             "Complete REST API v1 reference for abbieysearch — authentication, search, bots, reverse-image, and health endpoints."),
+    "cli": ("abbiey CLI", "cli/README.md",
+           "Terminal CLI (abbiey / abbieysearch-cli): build search URLs, ImgOps, JSON automation, completions, and doctor."),
 }
 
 
@@ -11919,6 +11921,7 @@ def sitemap():
         ("/login",     "monthly", "0.60"),
         ("/developer", "weekly",  "0.75"),
         ("/community", "weekly",  "0.75"),
+        ("/docs/cli",  "weekly",  "0.70"),
         ("/docs/api",  "weekly",  "0.70"),
         ("/changelog", "weekly",  "0.70"),
         ("/status",    "hourly",  "0.65"),
