@@ -5854,6 +5854,17 @@ footer {
   padding: 1rem 1.5rem;
   border-bottom: 1px solid var(--border);
 }
+/* .header-btn is sized for 34×34 icon controls in the main app header; marketing
+   pages reuse the class for text links and need a normal inline pill, not a fixed square. */
+.landing-header .header-btn {
+  width: auto;
+  min-width: unset;
+  height: auto;
+  min-height: 34px;
+  padding: 0.35rem 0.75rem;
+  box-sizing: border-box;
+  white-space: nowrap;
+}
 .landing-main {
   max-width: 40rem;
   margin: 2.5rem auto;
