@@ -1,0 +1,19 @@
+static/style.css
+  s_aa3a8c5ee08cab::t_eb26c0695863df 5857-5867
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.1",
+  "base_commit_sha": "fed71128ebb9ec295b26cb73d2d2b8d6ea348add",
+  "prompts": {},
+  "sessions": {
+    "s_aa3a8c5ee08cab": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "5b1eeed4-1366-467b-88ae-d64c4fcf8346",
+        "model": "composer-2"
+      },
+      "human_author": "abbiey <abbiey@example.com>"
+    }
+  }
+}
