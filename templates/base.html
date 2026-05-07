@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    {% include 'includes/theme_bootstrap.html' %}
     <title>{% block title %}abbieysearch{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=deploy_hash) }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/input-inner-reset.css', v=deploy_hash) }}">
@@ -41,21 +42,6 @@
     <meta name="apple-mobile-web-app-title" content="abbieysearch">
     <link rel="apple-touch-icon" href="/static/icon-192.png">
     <link rel="search" type="application/opensearchdescription+xml" title="abbieysearch" href="/opensearch.xml">
-    {# Apply saved theme + accent immediately to avoid flash #}
-    <script nonce="{{ csp_nonce }}">
-        (function() {
-            var t = localStorage.getItem('theme') || 'dark';
-            var d = localStorage.getItem('density') || 'default';
-            var a = localStorage.getItem('accent-color') || localStorage.getItem('accentColor');
-            var fs = localStorage.getItem('abbiey_font_size');
-            var ff = localStorage.getItem('abbiey_font_family');
-            document.documentElement.setAttribute('data-theme', t);
-            document.documentElement.setAttribute('data-density', d);
-            if (a) document.documentElement.style.setProperty('--accent', a);
-            if (fs) document.documentElement.setAttribute('data-font-size', fs);
-            if (ff) document.documentElement.setAttribute('data-font', ff);
-        })();
-    </script>
 </head>
 <body class="{% block body_class %}{% endblock %}">
 

@@ -1,8 +1,9 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="dark" data-density="default">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    {% include 'includes/theme_bootstrap.html' %}
     <title>abbieysearch — AI Chatbots</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=deploy_hash) }}">
     {% include 'includes/google_site_verification.html' %}
@@ -426,13 +427,7 @@
         var sendBtn      = document.getElementById('chatbot-send-btn');
         var backBtn      = document.getElementById('chatbot-back-btn');
 
-        // ── Theme sync ──
-        (function syncTheme() {
-            var t = localStorage.getItem('theme') || 'dark';
-            document.documentElement.setAttribute('data-theme', t);
-            var a = localStorage.getItem('accent-color') || localStorage.getItem('accentColor');
-            if (a) document.documentElement.style.setProperty('--accent', a);
-        })();
+        // ── Theme from head bootstrap (localStorage applied before paint) ──
 
         // ── Open a bot chat ──
         function openChat(botId, botName, botIcon) {

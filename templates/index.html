@@ -3,34 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    {% include 'includes/theme_bootstrap.html' %}
     <title>{% if query %}{{ query }} — {{ search_mode_title_suffix(search_type) }} — abbieysearch{% else %}abbieysearch — unfiltered answers with receipts{% endif %}</title>
-    <script nonce="{{ csp_nonce }}">
-        (function() {
-            var t  = localStorage.getItem('theme') || 'dark';
-            var d  = localStorage.getItem('density') || 'default';
-            var a  = localStorage.getItem('accent-color') || localStorage.getItem('accentColor');
-            var fs = localStorage.getItem('abbiey_font_size');
-            var ff = localStorage.getItem('abbiey_font_family');
-            var r  = localStorage.getItem('abbiey_radius');
-            var w  = localStorage.getItem('abbiey_width');
-            var m  = localStorage.getItem('abbiey_motion');
-            var us = localStorage.getItem('abbiey_url_style');
-            var ss = localStorage.getItem('abbiey_snippet_style');
-            var sb = localStorage.getItem('abbiey_searchbar');
-            var el = document.documentElement;
-            el.setAttribute('data-theme', t);
-            el.setAttribute('data-density', d);
-            if (a)  el.style.setProperty('--accent', a);
-            if (fs) el.setAttribute('data-font-size', fs);
-            if (ff) el.setAttribute('data-font', ff);
-            if (r)  el.setAttribute('data-radius', r);
-            if (w)  el.setAttribute('data-width', w);
-            if (m)  el.setAttribute('data-motion', m);
-            if (us) el.setAttribute('data-url-style', us);
-            if (ss) el.setAttribute('data-snippet-style', ss);
-            if (sb) el.setAttribute('data-searchbar', sb);
-        })();
-    </script>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=deploy_hash) }}">
     <meta name="deploy-hash" content="{{ deploy_hash }}">
     {% include 'includes/google_site_verification.html' %}

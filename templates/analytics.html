@@ -1,25 +1,16 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="dark" data-density="default">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="deploy-hash" content="{{ deploy_hash }}">
+    {% include 'includes/theme_bootstrap.html' %}
     <!-- Vercel Speed Insights -->
     <script nonce="{{ csp_nonce }}">
         window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
     </script>
     <script defer src="/_vercel/speed-insights/script.js"></script>
     <title>Analytics — abbiey.search</title>
-    <script nonce="{{ csp_nonce }}">
-        (function() {
-            var t = localStorage.getItem('theme') || 'dark';
-            var d = localStorage.getItem('density') || 'default';
-            var a = localStorage.getItem('accent-color') || localStorage.getItem('accentColor');
-            document.documentElement.setAttribute('data-theme', t);
-            document.documentElement.setAttribute('data-density', d);
-            if (a) document.documentElement.style.setProperty('--accent', a);
-        })();
-    </script>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=deploy_hash) }}">
     <style>
         body { padding: 2rem 1rem; max-width: 960px; margin: 0 auto; }
@@ -27,7 +18,7 @@
         .page-sub { color: var(--text-dim); font-size: .85rem; margin-bottom: 2rem; }
 
         .stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px,1fr)); gap: 1rem; margin-bottom: 2rem; }
-        .stat-card { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 10px; padding: 1rem 1.2rem; }
+        .stat-card { background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1rem 1.2rem; }
         .stat-value { font-size: 2rem; font-weight: 800; color: var(--accent); }
         .stat-label { font-size: .75rem; color: var(--text-dim); margin-top: .15rem; }
 
@@ -44,15 +35,15 @@
 
         /* Hourly heatmap */
         .hour-grid { display: grid; grid-template-columns: repeat(24,1fr); gap: 3px; margin-bottom: .5rem; }
-        .hour-cell { height: 36px; border-radius: 4px; background: var(--bg-hover); position: relative; cursor: default; transition: opacity .15s; }
+        .hour-cell { height: 36px; border-radius: var(--radius); background: var(--bg-hover); position: relative; cursor: default; transition: opacity var(--dur-fast) var(--ease-out); }
         .hour-cell:hover { opacity: .8; }
-        .hour-cell-fill { position: absolute; bottom: 0; left: 0; right: 0; background: var(--accent); border-radius: 4px; transition: height .3s ease; }
+        .hour-cell-fill { position: absolute; bottom: 0; left: 0; right: 0; background: var(--accent); border-radius: var(--radius); transition: height var(--dur-slow) var(--ease-out); }
         .hour-labels { display: grid; grid-template-columns: repeat(24,1fr); gap: 3px; }
         .hour-label { font-size: .58rem; color: var(--text-dim); text-align: center; }
 
         /* Daily chart */
         .daily-chart { display: flex; align-items: flex-end; gap: 3px; height: 80px; margin-bottom: .5rem; }
-        .day-bar { flex: 1; background: var(--accent); border-radius: 3px 3px 0 0; min-height: 2px; opacity: .7; transition: opacity .15s; cursor: default; position: relative; }
+        .day-bar { flex: 1; background: var(--accent); border-radius: 3px 3px 0 0; min-height: 2px; opacity: .7; transition: opacity var(--dur-fast) var(--ease-out); cursor: default; position: relative; }
         .day-bar:hover { opacity: 1; }
         .day-bar:hover::after { content: attr(data-tip); position: absolute; bottom: calc(100% + 4px); left: 50%; transform: translateX(-50%); background: var(--bg-surface); border: 1px solid var(--border); border-radius: 4px; padding: .2rem .4rem; font-size: .7rem; white-space: nowrap; color: var(--text); pointer-events: none; z-index: 10; }
 
@@ -70,8 +61,8 @@
         .region-pill span { color: var(--accent); font-weight: 600; margin-left: .35rem; }
 
         .error-msg { color: #f87171; padding: 1rem; background: rgba(248,113,113,.08); border-radius: 8px; font-size: .88rem; }
-        .back-link { font-size: .82rem; color: var(--accent); text-decoration: none; }
-        .back-link:hover { text-decoration: underline; }
+        .back-link { font-size: .82rem; color: var(--accent); text-decoration: none; transition: opacity var(--dur-fast) var(--ease-out); }
+        .back-link:hover { text-decoration: underline; opacity: 0.9; }
     </style>
 </head>
 <body>

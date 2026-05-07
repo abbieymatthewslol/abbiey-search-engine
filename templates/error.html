@@ -1,23 +1,16 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="dark" data-density="default">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="deploy-hash" content="{{ deploy_hash }}">
+    {% include 'includes/theme_bootstrap.html' %}
     <!-- Vercel Speed Insights -->
     <script nonce="{{ csp_nonce }}">
         window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
     </script>
     <script defer src="/_vercel/speed-insights/script.js"></script>
     <title>{{ code }} — abbieysearch</title>
-    <script nonce="{{ csp_nonce }}">
-        (function() {
-            var t = localStorage.getItem('theme') || 'dark';
-            var a = localStorage.getItem('accent-color') || localStorage.getItem('accentColor');
-            document.documentElement.setAttribute('data-theme', t);
-            if (a) document.documentElement.style.setProperty('--accent', a);
-        })();
-    </script>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=deploy_hash) }}">
     <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='icon-192.png', v=deploy_hash) }}">
     <link rel="shortcut icon" href="{{ url_for('favicon_ico') }}">

@@ -1,8 +1,9 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="dark" data-density="default">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    {% include 'includes/theme_bootstrap.html' %}
     <title>Hotels · abbieysearch</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=deploy_hash) }}">
     {% include 'includes/google_site_verification.html' %}
@@ -27,8 +28,8 @@
             min-height: 100vh;
             display: flex;
             flex-direction: column;
-            background: var(--bg, #0c0c0e);
-            color: var(--text, #e7e5e4);
+            background: var(--bg);
+            color: var(--text);
         }
         .hotels-stage {
             flex: 1;
@@ -102,7 +103,7 @@
         }
         .hotels-sub {
             font-size: .9rem;
-            color: var(--text-dim, #a8a29e);
+            color: var(--text-dim);
             margin: 0 0 1.5rem;
             line-height: 1.45;
         }
@@ -124,17 +125,20 @@
         .hotels-form select {
             width: 100%;
             box-sizing: border-box;
-            background: color-mix(in srgb, var(--bg-surface, #171717) 94%, transparent);
-            border: 1px solid var(--border, rgba(255,255,255,.12));
-            border-radius: 10px;
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
             padding: .65rem .85rem;
             font-size: 1rem;
             color: inherit;
+            transition: border-color var(--dur-fast) var(--ease-out),
+                        box-shadow var(--dur-fast) var(--ease-out);
         }
         .hotels-form input:focus,
         .hotels-form select:focus {
             outline: none;
-            border-color: var(--accent, #7c6cfc);
+            border-color: var(--border-strong);
+            box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 22%, transparent);
         }
         .hotels-dates-row {
             display: grid;
@@ -154,35 +158,41 @@
             list-style: none;
             max-height: 200px;
             overflow-y: auto;
-            border-radius: 10px;
+            border-radius: var(--radius-lg);
             border: 1px solid var(--border);
-            background: var(--bg-elevated, #1c1c1f);
+            background: var(--bg-elevated);
             z-index: 20;
             display: none;
         }
         .hotels-ac-list.open { display: block; }
         .hotels-ac-item {
             padding: .45rem .6rem;
-            border-radius: 7px;
+            border-radius: var(--radius);
             cursor: pointer;
             font-size: .9rem;
+            transition: background var(--dur-fast) var(--ease-out);
         }
-        .hotels-ac-item:hover { background: color-mix(in srgb, var(--accent, #7c6cfc) 14%, transparent); }
+        .hotels-ac-item:hover { background: var(--bg-hover); }
         .hotels-submit {
             margin-top: .25rem;
             padding: .75rem 1rem;
             font-size: 1rem;
             font-weight: 600;
             border: none;
-            border-radius: 10px;
-            background: var(--accent, #7c6cfc);
-            color: var(--bg, #fff);
+            border-radius: var(--radius-lg);
+            background: var(--search-button-bg);
+            color: var(--search-button-text);
             cursor: pointer;
+            box-shadow: var(--search-button-shadow);
+            transition: background var(--dur-fast) var(--ease-out),
+                        box-shadow var(--dur-fast) var(--ease-out),
+                        transform var(--dur-fast) var(--ease-out);
         }
-        html[data-theme="light"] .hotels-submit {
-            color: #fff;
+        .hotels-submit:hover {
+            background: var(--search-button-bg-hover);
+            box-shadow: var(--search-button-shadow-hover);
         }
-        .hotels-submit:hover { filter: brightness(1.08); }
+        .hotels-submit:active { transform: scale(0.99); }
         .hotels-quick {
             display: flex;
             flex-wrap: wrap;
@@ -197,15 +207,19 @@
             font: inherit;
             font-size: .78rem;
             padding: .2rem .5rem;
-            border-radius: 6px;
+            border-radius: var(--radius);
             border: 1px solid var(--border);
             background: transparent;
             color: var(--text-dim);
             cursor: pointer;
+            transition: border-color var(--dur-fast) var(--ease-out),
+                        color var(--dur-fast) var(--ease-out),
+                        background var(--dur-fast) var(--ease-out);
         }
         .hotels-quick button:hover {
             border-color: var(--accent);
             color: var(--text);
+            background: var(--bg-hover);
         }
         .hotels-jump {
             margin-top: .75rem;
@@ -216,8 +230,9 @@
             color: var(--accent);
             text-decoration: none;
             margin-right: .65rem;
+            transition: opacity var(--dur-fast) var(--ease-out);
         }
-        .hotels-jump a:hover { text-decoration: underline; }
+        .hotels-jump a:hover { text-decoration: underline; opacity: 0.92; }
         /* After search — book first */
         .hotels-book-block {
             margin: 2rem 0 1.5rem;
@@ -240,16 +255,19 @@
             align-items: center;
             gap: .35rem;
             padding: .5rem .85rem;
-            border-radius: 10px;
+            border-radius: var(--radius-lg);
             border: 1px solid var(--border);
-            background: color-mix(in srgb, var(--bg-surface) 90%, transparent);
+            background: var(--bg-surface);
             font-size: .88rem;
             font-weight: 600;
             color: inherit;
             text-decoration: none;
+            transition: border-color var(--dur-fast) var(--ease-out),
+                        background var(--dur-fast) var(--ease-out);
         }
         .hotels-book-row a:hover {
             border-color: var(--accent);
+            background: var(--bg-hover);
         }
         .hotels-results-line {
             font-size: .82rem;
@@ -274,8 +292,9 @@
         .hotel-result-title a {
             color: var(--accent);
             text-decoration: none;
+            transition: opacity var(--dur-fast) var(--ease-out);
         }
-        .hotel-result-title a:hover { text-decoration: underline; }
+        .hotel-result-title a:hover { text-decoration: underline; opacity: 0.92; }
         .hotel-result-source {
             font-size: .75rem;
             color: var(--text-muted);
@@ -286,6 +305,27 @@
             color: var(--text-dim);
             line-height: 1.5;
             margin: 0;
+        }
+        .hotel-result-price {
+            font-size: .88rem;
+            font-weight: 600;
+            color: var(--accent);
+            margin: .3rem 0 .2rem;
+        }
+        .hotels-price-banner {
+            background: color-mix(in srgb, var(--accent) 10%, var(--bg-surface));
+            border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+            border-radius: var(--radius-lg);
+            padding: .65rem .85rem;
+            margin: .75rem 0 1rem;
+            font-size: .88rem;
+            line-height: 1.45;
+        }
+        .hotels-price-note {
+            font-size: .78rem;
+            color: var(--text-muted);
+            margin: .4rem 0 0;
+            line-height: 1.35;
         }
         .hotels-none {
             text-align: center;
@@ -371,11 +411,25 @@
         {% endif %}
 
         {% if results %}
-        <p class="hotels-results-line">{{ results|length }} result{% if results|length != 1 %}s{% endif %} for {{ destination }}</p>
+        {% set cheapest_h = hotels_meta.get('cheapest') if hotels_meta else none %}
+        {% if cheapest_h and cheapest_h.get('price_display') %}
+        <div class="hotels-price-banner">
+            <strong>Lowest parsed nightly rate:</strong>
+            <a href="{{ cheapest_h.url }}" target="_blank" rel="noopener noreferrer">{{ cheapest_h.title }}</a>
+            — {{ cheapest_h.price_display }}
+            {% if hotels_meta and hotels_meta.get('disclaimer') %}
+            <p class="hotels-price-note">{{ hotels_meta.disclaimer }}</p>
+            {% endif %}
+        </div>
+        {% elif hotels_meta and hotels_meta.get('disclaimer') %}
+        <p class="hotels-price-note">{{ hotels_meta.disclaimer }}</p>
+        {% endif %}
+        <p class="hotels-results-line">{{ results|length }} result{% if results|length != 1 %}s{% endif %} for {{ destination }}, sorted with priced deals first</p>
         <ul class="hotel-result-list">
             {% for r in results %}
             <li class="hotel-result-item">
                 <p class="hotel-result-title"><a href="{{ r.url }}" target="_blank" rel="noopener noreferrer">{{ r.title }}</a></p>
+                {% if r.price_display %}<p class="hotel-result-price">{{ r.price_display }}</p>{% endif %}
                 {% if r.source %}<p class="hotel-result-source">{{ r.source }}</p>{% endif %}
                 {% if r.snippet %}<p class="hotel-result-snippet">{{ r.snippet }}</p>{% endif %}
             </li>

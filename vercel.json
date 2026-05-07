@@ -28,6 +28,7 @@
           "startup_checks.py",
           "unfiltered_engagement.py",
           "hotels_blueprint.py",
+          "hotels_pricing.py",
           "app.py"
         ]
       }

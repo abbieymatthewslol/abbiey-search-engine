@@ -1,26 +1,23 @@
 """Hotel finder — `/hotels`.
 
-Provides a hotel-search landing page and a JSON search endpoint that
-queries DuckDuckGo for hotels matching destination + optional dates.
-No external API key required; booking links are pre-built for Booking.com,
-Hotels.com, Expedia, and Google Hotels.
+Provides a hotel-search landing page and a JSON search endpoint that scrapes
+DuckDuckGo HTML plus the ddgs API, extracts nightly rate hints from result text,
+and sorts by lowest estimated price. Booking deep-links are pre-built for
+Booking.com, Hotels.com, Expedia, and Google Hotels (used to expand ad URLs).
 """
 
 from __future__ import annotations
 
 import logging
-from urllib.parse import quote_plus, urlparse
+from urllib.parse import quote_plus
 
-from ddgs import DDGS
 from flask import Blueprint, jsonify, render_template, request
+
+from hotels_pricing import search_hotels_with_prices
 
 logger = logging.getLogger(__name__)
 
 hotels_bp = Blueprint("hotels", __name__, url_prefix="/hotels")
-
-# Maximum results to surface in the API response
-_MAX_RESULTS = 12
-
 
 def _build_booking_links(destination: str, checkin: str, checkout: str, guests: int) -> list[dict]:
     """Build deep-link URLs for major booking platforms."""
@@ -69,40 +66,6 @@ def _build_booking_links(destination: str, checkin: str, checkout: str, guests: 
     return links
 
 
-def _ddg_hotel_search(destination: str, checkin: str, checkout: str, guests: int) -> list[dict]:
-    """Search DuckDuckGo for hotels matching the given parameters."""
-    date_hint = ""
-    if checkin and checkout:
-        date_hint = f" {checkin} to {checkout}"
-    elif checkin:
-        date_hint = f" from {checkin}"
-    query = f"hotels in {destination}{date_hint} {guests} guests book"
-
-    try:
-        results = []
-        with DDGS() as ddgs:
-            for r in ddgs.text(query, max_results=_MAX_RESULTS):
-                results.append(
-                    {
-                        "title": r.get("title", ""),
-                        "url": r.get("href", r.get("url", "")),
-                        "snippet": r.get("body", r.get("description", "")),
-                        "source": _domain_from_url(r.get("href", r.get("url", ""))),
-                    }
-                )
-        return results
-    except Exception:
-        logger.exception("hotels_ddg_search_failed destination=%s", destination)
-        return []
-
-
-def _domain_from_url(url: str) -> str:
-    try:
-        return urlparse(url).netloc.replace("www.", "")
-    except Exception:
-        return ""
-
-
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -118,12 +81,15 @@ def hotels_page():
 
     results: list[dict] = []
     booking_links: list[dict] = []
+    hotels_meta: dict = {}
     searched = False
 
     if destination:
         searched = True
-        results = _ddg_hotel_search(destination, checkin, checkout, guests)
         booking_links = _build_booking_links(destination, checkin, checkout, guests)
+        results, hotels_meta = search_hotels_with_prices(
+            destination, checkin, checkout, guests, booking_links
+        )
 
     return render_template(
         "hotels.html",
@@ -133,6 +99,7 @@ def hotels_page():
         guests=guests,
         results=results,
         booking_links=booking_links,
+        hotels_meta=hotels_meta,
         searched=searched,
     )
 
@@ -148,8 +115,10 @@ def hotels_api_search():
     checkout = request.args.get("checkout", "").strip()
     guests = max(1, min(20, _safe_int(request.args.get("guests", "2"), 2)))
 
-    results = _ddg_hotel_search(destination, checkin, checkout, guests)
     booking_links = _build_booking_links(destination, checkin, checkout, guests)
+    results, hotels_meta = search_hotels_with_prices(
+        destination, checkin, checkout, guests, booking_links
+    )
 
     return jsonify(
         {
@@ -159,6 +128,8 @@ def hotels_api_search():
             "guests": guests,
             "results": results,
             "booking_links": booking_links,
+            "cheapest": hotels_meta.get("cheapest"),
+            "disclaimer": hotels_meta.get("disclaimer"),
         }
     )
 

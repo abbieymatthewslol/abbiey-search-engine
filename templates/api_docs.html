@@ -1,23 +1,31 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="dark" data-density="default">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    {% include 'includes/theme_bootstrap.html' %}
     <title>API docs — abbieysearch</title>
     <meta name="description" content="Interactive API documentation for abbiey.search /api/v1 endpoints.">
     <link rel="canonical" href="{{ site_base_url }}/api/v1/docs">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=deploy_hash) }}">
     <style nonce="{{ csp_nonce }}">
-        body { margin: 0; background: #0a0a0a; color: #e7e5e4; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+        body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--font-sans); }
         #topbar {
             position: sticky; top: 0; z-index: 10;
             padding: .75rem 1.25rem;
-            background: rgba(10, 10, 10, .92);
-            border-bottom: 1px solid rgba(255,255,255,.08);
+            background: color-mix(in srgb, var(--bg-elevated) 92%, transparent);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border);
             display: flex; gap: 1rem; align-items: center; justify-content: space-between;
         }
-        #topbar a { color: var(--accent, #a78bfa); text-decoration: none; font-size: .92rem; }
-        #topbar a:hover { text-decoration: underline; }
-        #topbar .brand { font-weight: 700; color: #fafaf9; font-size: 1rem; }
+        #topbar a {
+            color: var(--accent);
+            text-decoration: none;
+            font-size: .92rem;
+            transition: opacity var(--dur-fast) var(--ease-out);
+        }
+        #topbar a:hover { text-decoration: underline; opacity: 0.9; }
+        #topbar .brand { font-weight: 700; color: var(--text); font-size: 1rem; }
     </style>
 </head>
 <body>
