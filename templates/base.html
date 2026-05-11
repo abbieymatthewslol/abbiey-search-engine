@@ -322,30 +322,7 @@
         </div>
     </div>
 
-    <div class="privacy-popover" id="privacy-popover">
-        <div class="privacy-popover-header">
-            <span>Unfiltered answers</span>
-            <button type="button" class="privacy-popover-close" id="privacy-popover-close" aria-label="Close">{% include 'includes/close_icon.html' %}</button>
-        </div>
-        <p class="positioning-popover-lead">
-            Unfiltered means direct, detailed, and honest &mdash; without marketing fluff. We try to separate evidence from interpretation, show tradeoffs, and keep the strongest counterpoint in view.
-        </p>
-        <div class="positioning-points">
-            <div class="positioning-point">
-                <span class="positioning-point-title">Depth by default</span>
-                <p class="positioning-point-copy">Explain the why, show the steps, and keep the context that typical search results flatten away.</p>
-            </div>
-            <div class="positioning-point">
-                <span class="positioning-point-title">Receipts and traceability</span>
-                <p class="positioning-point-copy">Call out what is evidence, what is interpretation, and link you back to the source material.</p>
-            </div>
-            <div class="positioning-point">
-                <span class="positioning-point-title">Settings you control</span>
-                <p class="positioning-point-copy">Tune appearance, AI summary, filters, and region from the gear menu &mdash; without losing the habit of one search bar.</p>
-            </div>
-        </div>
-        <p class="positioning-popover-note">Built for people who want the <em>why</em> &mdash; not just a link list.</p>
-    </div>
+    {% include 'includes/privacy_popover.html' %}
 
     {% block content %}{% endblock %}
 
