@@ -456,7 +456,8 @@
         </div>
     </div>
 
-    {# ===== POSITIONING POPOVER (REMOVED) ===== #}
+    {# ===== POSITIONING POPOVER ===== #}
+    {% include 'includes/privacy_popover.html' %}
 
     <div class="app-layout {% if query %}has-chat{% endif %}"{% if query %} data-query-intent="{{ query_ui.intent }}" data-query-local="{% if query_ui.local_intent %}1{% else %}0{% endif %}"{% endif %}>
     <main>
