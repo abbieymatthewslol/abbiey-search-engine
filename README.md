@@ -8,7 +8,7 @@ Fly.io, Railway, or self-hosted with one `docker compose up`.
 | ---------------------- | ------ |
 | Web / images / news / videos search   | Shipping |
 | Onion / Tor search (Ahmia + DDG)      | Shipping |
-| AI research assistant + chatbots      | Shipping |
+| AI research assistant (search results) | Shipping |
 | Custom crawl bots (per-user, chunked) | Shipping |
 | Reverse image search (URL + upload)   | Shipping |
 | Public `/api/v1` for developers       | Shipping |

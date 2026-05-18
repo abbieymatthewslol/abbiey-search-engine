@@ -7,6 +7,9 @@ Follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) conventions.
 
 ## [Unreleased]
 
+### Removed
+- **Hotels hub and Chatbots hub** — homepage shortcuts, `/hotels`, `/chatbots`, `/api/chatbot-chat`, and related templates/modules removed. The **Research Assistant** on search results (`/api/chat`, results-page panel) is unchanged.
+
 ### Added
 - **Developer CLI** — [`cli/`](cli/) ships `abbieysearch-cli` (global binary `abbiey`): builds `/search` URLs with depth/evidence/style flags, ImgOps shortcuts, `--json` / `--stdin` automation, shell completions, and `abbiey doctor`. Documented in [`cli/README.md`](cli/README.md).
 

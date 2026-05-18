@@ -152,7 +152,7 @@ def _req_log():
         device_id = hashlib.sha256(f"{ip}|{ua}".encode()).hexdigest()[:16]
 
         print({
-            "ts": datetime.utcnow().isoformat(),
+            "ts": datetime.now(timezone.utc).isoformat(),
             "ip": ip,
             "ua": ua,
             "path": path,
@@ -6315,7 +6315,7 @@ def admin_api_stats():
         data["per_minute"] = raw_min
 
         data["live_clients"] = len(_SSE_CLIENTS)
-        data["server_time"] = _dt.datetime.utcnow().isoformat() + "Z"
+        data["server_time"] = _dt.datetime.now(_dt.timezone.utc).isoformat().replace("+00:00", "Z")
 
     except Exception as exc:
         data["error"] = str(exc)

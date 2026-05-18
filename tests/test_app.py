@@ -314,7 +314,7 @@ class TestFeedbackAPI:
         data = resp.get_json()
         assert data and "ok" in data
 
-    def test_search_reranks_using_feedback(self, client, mock_ddg):
+    def test_search_reranks_using_feedback(self, client, mock_ddg, mock_httpx):
         mock_ddg.text.return_value = [
             {"title": "Example 1", "href": "https://example.com/1", "body": "Body 1"},
             {"title": "Other 2", "href": "https://other.com/2", "body": "Body 2"},
