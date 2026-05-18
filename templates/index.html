@@ -73,7 +73,7 @@
     }
     </script>
 </head>
-<body class="{% if query %}has-results page-search--{{ search_type }}{% endif %}">
+<body class="{% if query %}has-results page-search--{{ search_type }}{% endif %} has-site-bottom-nav">
     <noscript>
         <div class="noscript-banner" role="note">
             <strong>abbieysearch</strong> &mdash; direct, detailed search with receipts.
@@ -1705,7 +1705,7 @@
     </div>
 
     <footer>
-        <p class="footer-tagline"><strong>abbiey<span>.</span>search</strong> <span class="footer-tagline-em">&mdash; Real answers. Full context. No fluff.</span> <span class="footer-credit">by abbiey matthews</span></p>
+        <p class="footer-tagline"><a href="/about" class="footer-about-link"><strong>abbiey<span>.</span>search</strong></a> <span class="footer-tagline-em">&mdash; Real answers. Full context. No fluff.</span> <span class="footer-credit">by abbiey matthews</span></p>
         <p class="footer-links">
             <a href="/privacy">Privacy Policy</a>
             &nbsp;&middot;&nbsp;
@@ -1725,6 +1725,18 @@
         </p>
         {% endif %}
     </footer>
+
+    <nav class="site-bottom-nav" aria-label="Site links">
+        <a href="/about" class="site-bottom-nav-link">About</a>
+        <span class="site-bottom-nav-sep" aria-hidden="true">·</span>
+        <a href="/privacy" class="site-bottom-nav-link">Privacy</a>
+        <span class="site-bottom-nav-sep" aria-hidden="true">·</span>
+        <a href="/terms" class="site-bottom-nav-link">Terms</a>
+        {% if support_url %}
+        <span class="site-bottom-nav-sep" aria-hidden="true">·</span>
+        <a href="{{ support_url }}" class="site-bottom-nav-link" target="_blank" rel="noopener noreferrer">Support</a>
+        {% endif %}
+    </nav>
 
     <script nonce="{{ csp_nonce }}">
         window.__currentUser = {{ (({"id": current_user.id, "username": current_user.username} if current_user else none)) | tojson }};

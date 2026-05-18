@@ -2662,6 +2662,65 @@ body:not(.has-results) .reverse-image-url-entry { display: none; }
 .footer-tagline-em {
   font-weight: 400;
 }
+.footer-about-link {
+  color: inherit;
+  text-decoration: none;
+  border-radius: var(--radius-sm);
+  transition: color var(--dur-fast) var(--ease-out);
+}
+.footer-about-link:hover {
+  color: var(--accent);
+}
+.footer-about-link strong { font-weight: 700; }
+
+/* Persistent bottom site links — always reachable without scrolling */
+.site-bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 380;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.5rem;
+  min-height: var(--site-bottom-nav-height, 2.25rem);
+  padding: 0.35rem 0.75rem calc(0.35rem + env(safe-area-inset-bottom, 0px));
+  background: color-mix(in srgb, var(--bg-surface) 92%, transparent);
+  border-top: 1px solid var(--border-subtle);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+.site-bottom-nav-link {
+  color: var(--text-dim);
+  padding: 0.15rem 0.35rem;
+  border-radius: var(--radius-sm);
+  transition: color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+.site-bottom-nav-link:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+.site-bottom-nav-link[aria-current="page"] {
+  color: var(--accent);
+  font-weight: 600;
+}
+.site-bottom-nav-sep {
+  opacity: 0.45;
+  user-select: none;
+}
+body.has-site-bottom-nav {
+  padding-bottom: calc(var(--site-bottom-nav-height, 2.25rem) + env(safe-area-inset-bottom, 0px));
+}
+body.has-site-bottom-nav.has-results .chat-panel.open {
+  bottom: calc(var(--site-bottom-nav-height, 2.25rem) + env(safe-area-inset-bottom, 0px));
+}
+body.has-site-bottom-nav .chat-fab {
+  bottom: calc(1.5rem + var(--site-bottom-nav-height, 2.25rem) + env(safe-area-inset-bottom, 0px));
+}
 
 .trending-pill {
   display: inline-flex;
@@ -5989,6 +6048,7 @@ footer {
 }
 .about-main {
   max-width: 46rem;
+  padding-bottom: calc(3rem + var(--site-bottom-nav-height, 2.25rem) + env(safe-area-inset-bottom, 0px));
 }
 .about-principles {
   display: grid;

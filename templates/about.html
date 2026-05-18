@@ -23,7 +23,7 @@
     <meta name="twitter:title" content="abbieysearch — About">
     <meta name="twitter:description" content="Privacy-first search with a focus on evidence, depth, and optional sign-in for bookmarks and tools.">
 </head>
-<body>
+<body class="has-site-bottom-nav">
     <header class="landing-header">
         <a href="/search" class="logo">abbiey<span>search</span></a>
         <a href="/search" class="header-btn landing-cta">Open search</a>
@@ -71,6 +71,23 @@
             </ul>
         </section>
 
+        <section class="about-controls" aria-label="Research Assistant">
+            <h2>Research Assistant</h2>
+            <p class="landing-lead">
+                On any results page, open the Research panel to ask follow-ups grounded in your search results.
+                Attach images for visual questions, save conversations locally or to your account when signed in,
+                and pick up where you left off later.
+            </p>
+        </section>
+
+        <section class="about-controls" aria-label="Privacy">
+            <h2>Privacy by default</h2>
+            <p class="landing-lead">
+                No third-party ad trackers, no server-side query logging, and a privacy badge that shows what we do not collect.
+                Search works without an account; sign in only if you want bookmarks, synced history, saved research chats, or API access.
+            </p>
+        </section>
+
         <p><a href="/search" class="header-btn">Start searching</a></p>
     </main>
     <footer class="landing-footer">
@@ -78,6 +95,8 @@
             <a href="/privacy">Privacy Policy</a>
             &nbsp;&middot;&nbsp;
             <a href="/terms">Terms of Service</a>
+            &nbsp;&middot;&nbsp;
+            <a href="/about">About</a>
             &nbsp;&middot;&nbsp;
             <a href="/pricing">Pricing</a>
             &nbsp;&middot;&nbsp;
@@ -88,5 +107,14 @@
             <a href="/search">Search</a>
         </p>
     </footer>
+    <nav class="site-bottom-nav" aria-label="Site links">
+        <a href="/about" class="site-bottom-nav-link" aria-current="page">About</a>
+        <span class="site-bottom-nav-sep" aria-hidden="true">·</span>
+        <a href="/privacy" class="site-bottom-nav-link">Privacy</a>
+        <span class="site-bottom-nav-sep" aria-hidden="true">·</span>
+        <a href="/terms" class="site-bottom-nav-link">Terms</a>
+        <span class="site-bottom-nav-sep" aria-hidden="true">·</span>
+        <a href="/search" class="site-bottom-nav-link">Search</a>
+    </nav>
 </body>
 </html>

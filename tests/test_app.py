@@ -1240,6 +1240,12 @@ class TestPrivacyBadge:
         assert "✕" not in html
         assert 'class="close-icon"' in html
 
+    def test_search_page_has_bottom_about_link(self, client, mock_ddg):
+        resp = client.get("/search?q=test")
+        assert resp.status_code == 200
+        assert b"site-bottom-nav" in resp.data
+        assert b'href="/about"' in resp.data
+
     def test_search_page_has_accessible_close_controls_and_chat_input(self, client, mock_ddg):
         resp = client.get("/search?q=test")
         html = resp.data.decode("utf-8")
