@@ -2754,10 +2754,25 @@ document.addEventListener("DOMContentLoaded", () => {
   const chatMessages = document.getElementById("chat-messages");
   const chatWelcome = document.getElementById("chat-welcome");
   const chatBody = document.getElementById("chat-body");
+  const chatAttach = document.getElementById("chat-attach");
+  const chatImageInput = document.getElementById("chat-image-input");
+  const chatImagePreview = document.getElementById("chat-image-preview");
+  const chatImagePreviewImg = document.getElementById("chat-image-preview-img");
+  const chatImageRemove = document.getElementById("chat-image-remove");
+  const chatSaveBtn = document.getElementById("chat-save");
+  const chatSavedBtn = document.getElementById("chat-saved");
+  const chatSavedMenu = document.getElementById("chat-saved-menu");
+  const chatSavedList = document.getElementById("chat-saved-list");
 
   if (chatPanel && chatFab) {
     let chatHistory = [];
+    let chatPendingImage = null;
+    let chatActiveLocalId = null;
+    let chatServerSaveId = null;
+    let chatSavedOpen = false;
     const searchQuery = window.__searchQuery || "";
+    const LP_RESEARCH_CHATS = "abbiey_research_chats_v1";
+    const CHAT_MAX_IMAGE_BYTES = 4 * 1024 * 1024;
     let chatOpen = false;
     const chatPeek = document.getElementById("chat-peek");
     const LP_CHAT_W = "abbiey_chat_w";
@@ -2788,10 +2803,280 @@ document.addEventListener("DOMContentLoaded", () => {
     if (chatNew) {
       chatNew.addEventListener("click", (e) => {
         e.stopPropagation();
-        chatHistory = [];
-        chatMessages.innerHTML = "";
-        chatWelcome.style.display = "";
+        startNewChat();
       });
+    }
+
+    function chatIsLoggedIn() {
+      return !!document.querySelector(".user-avatar-chip");
+    }
+
+    function readLocalChatStore() {
+      try { return JSON.parse(localStorage.getItem(LP_RESEARCH_CHATS) || "{}"); } catch { return {}; }
+    }
+
+    function writeLocalChatStore(store) {
+      try { localStorage.setItem(LP_RESEARCH_CHATS, JSON.stringify(store)); } catch {}
+    }
+
+    function localChatsForQuery(q) {
+      const store = readLocalChatStore();
+      return Array.isArray(store[q]) ? store[q] : [];
+    }
+
+    function upsertLocalChat(q, entry) {
+      const store = readLocalChatStore();
+      const list = Array.isArray(store[q]) ? store[q] : [];
+      const idx = list.findIndex(c => c.id === entry.id);
+      if (idx >= 0) list[idx] = entry;
+      else list.unshift(entry);
+      store[q] = list.slice(0, 20);
+      writeLocalChatStore(store);
+    }
+
+    function removeLocalChat(q, localId) {
+      const store = readLocalChatStore();
+      const list = (store[q] || []).filter(c => c.id !== localId);
+      store[q] = list;
+      writeLocalChatStore(store);
+    }
+
+    function chatTitleFromHistory(messages) {
+      for (const m of messages) {
+        if (m.role === "user") {
+          const t = (m.content || "").trim();
+          if (t) return t.slice(0, 120);
+          if (m.image) return `Image · ${searchQuery}`.slice(0, 120);
+        }
+      }
+      return searchQuery.slice(0, 120) || "Research chat";
+    }
+
+    function clearPendingImage() {
+      chatPendingImage = null;
+      if (chatImagePreview) chatImagePreview.hidden = true;
+      if (chatImagePreviewImg) chatImagePreviewImg.removeAttribute("src");
+      if (chatAttach) chatAttach.classList.remove("has-image");
+      if (chatImageInput) chatImageInput.value = "";
+    }
+
+    function setPendingImage(dataUrl) {
+      chatPendingImage = dataUrl;
+      if (chatImagePreviewImg) chatImagePreviewImg.src = dataUrl;
+      if (chatImagePreview) chatImagePreview.hidden = false;
+      if (chatAttach) chatAttach.classList.add("has-image");
+    }
+
+    function readImageFile(file) {
+      return new Promise((resolve, reject) => {
+        if (!file || !file.type || !file.type.startsWith("image/")) {
+          reject(new Error("Please choose a JPEG, PNG, WebP, or GIF image."));
+          return;
+        }
+        if (file.size > CHAT_MAX_IMAGE_BYTES) {
+          reject(new Error("Image is too large. Please use a file under 4 MB."));
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(new Error("Could not read that image."));
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function renderChatHistory() {
+      chatMessages.innerHTML = "";
+      msgCounter = 0;
+      for (const m of chatHistory) {
+        appendMessage(m.role, m.content, m.image || null, { skipScroll: true, animate: false });
+      }
+      scrollChatIfFollowing(true);
+    }
+
+    function startNewChat() {
+      chatHistory = [];
+      chatActiveLocalId = null;
+      chatServerSaveId = null;
+      chatMessages.innerHTML = "";
+      chatWelcome.style.display = "";
+      clearPendingImage();
+      if (chatSaveBtn) chatSaveBtn.classList.remove("saved");
+      closeSavedMenu();
+    }
+
+    async function persistChat({ manual = false } = {}) {
+      if (!searchQuery || !chatHistory.length) {
+        if (manual && chatSaveBtn) {
+          const prev = chatSaveBtn.title;
+          chatSaveBtn.title = "Nothing to save yet";
+          setTimeout(() => { chatSaveBtn.title = prev || "Save this conversation"; }, 1800);
+        }
+        return;
+      }
+      const now = Date.now();
+      if (!chatActiveLocalId) chatActiveLocalId = `local-${now}-${Math.random().toString(36).slice(2, 8)}`;
+      const entry = {
+        id: chatActiveLocalId,
+        title: chatTitleFromHistory(chatHistory),
+        messages: chatHistory.map(m => ({ role: m.role, content: m.content, ...(m.image ? { image: m.image } : {}) })),
+        updatedAt: now,
+        serverId: chatServerSaveId,
+      };
+      upsertLocalChat(searchQuery, entry);
+      if (chatSaveBtn) chatSaveBtn.classList.add("saved");
+      if (!chatIsLoggedIn()) {
+        if (manual) flashChatSaved();
+        return;
+      }
+      try {
+        const r = await fetch("/api/research-chats", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: chatServerSaveId,
+            query: searchQuery,
+            title: entry.title,
+            messages: entry.messages,
+          }),
+        });
+        const data = await r.json();
+        if (r.ok && data.id) {
+          chatServerSaveId = data.id;
+          entry.serverId = data.id;
+          upsertLocalChat(searchQuery, entry);
+        }
+      } catch {}
+      if (manual) flashChatSaved();
+    }
+
+    function flashChatSaved() {
+      if (!chatSaveBtn) return;
+      chatSaveBtn.classList.add("saved");
+      const prev = chatSaveBtn.title;
+      chatSaveBtn.title = "Saved";
+      setTimeout(() => { chatSaveBtn.title = prev || "Save this conversation"; }, 1800);
+    }
+
+    function closeSavedMenu() {
+      chatSavedOpen = false;
+      if (chatSavedMenu) chatSavedMenu.hidden = true;
+      if (chatSavedBtn) chatSavedBtn.setAttribute("aria-expanded", "false");
+    }
+
+    function openSavedMenu() {
+      chatSavedOpen = true;
+      if (chatSavedMenu) chatSavedMenu.hidden = false;
+      if (chatSavedBtn) chatSavedBtn.setAttribute("aria-expanded", "true");
+      renderSavedChatsMenu();
+    }
+
+    async function renderSavedChatsMenu() {
+      if (!chatSavedList) return;
+      chatSavedList.innerHTML = `<div class="chat-saved-empty">Loading…</div>`;
+      const local = localChatsForQuery(searchQuery);
+      let server = [];
+      if (chatIsLoggedIn()) {
+        try {
+          const r = await fetch(`/api/research-chats?query=${encodeURIComponent(searchQuery)}`, { credentials: "same-origin" });
+          const data = await r.json();
+          if (r.ok && Array.isArray(data.chats)) server = data.chats;
+        } catch {}
+      }
+      const merged = [];
+      const seen = new Set();
+      for (const s of server) {
+        const key = `srv-${s.id}`;
+        seen.add(key);
+        merged.push({
+          key,
+          id: s.id,
+          localId: null,
+          title: s.title || searchQuery,
+          meta: `${s.message_count || 0} messages · account`,
+          server: true,
+        });
+      }
+      for (const l of local) {
+        const key = l.serverId ? `srv-${l.serverId}` : l.id;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        merged.push({
+          key: l.id,
+          id: l.serverId || null,
+          localId: l.id,
+          title: l.title || searchQuery,
+          meta: `${(l.messages || []).length} messages · this device`,
+          server: false,
+          messages: l.messages,
+        });
+      }
+      if (!merged.length) {
+        chatSavedList.innerHTML = `<div class="chat-saved-empty">No saved chats for this search yet. Your conversation auto-saves after each reply.</div>`;
+        return;
+      }
+      chatSavedList.innerHTML = merged.map(item =>
+        `<div class="chat-saved-item" role="menuitem">` +
+        `<button type="button" class="chat-saved-item-main" data-load-key="${esc(item.key)}" data-server-id="${item.id || ""}" data-local-id="${esc(item.localId || "")}">` +
+        `<span class="chat-saved-item-title">${esc(item.title)}</span>` +
+        `<span class="chat-saved-item-meta">${esc(item.meta)}</span>` +
+        `</button>` +
+        `<button type="button" class="chat-saved-item-del" data-del-key="${esc(item.key)}" data-server-id="${item.id || ""}" data-local-id="${esc(item.localId || "")}" aria-label="Delete saved chat">&#10005;</button>` +
+        `</div>`
+      ).join("");
+    }
+
+    async function loadSavedChat(serverId, localId) {
+      closeSavedMenu();
+      if (serverId && chatIsLoggedIn()) {
+        try {
+          const r = await fetch(`/api/research-chats/${serverId}`, { credentials: "same-origin" });
+          const data = await r.json();
+          if (r.ok && Array.isArray(data.messages)) {
+            chatHistory = data.messages;
+            chatServerSaveId = data.id;
+            chatActiveLocalId = localId || `local-srv-${data.id}`;
+            chatWelcome.style.display = "none";
+            renderChatHistory();
+            if (chatSaveBtn) chatSaveBtn.classList.add("saved");
+            return;
+          }
+        } catch {}
+      }
+      const local = localChatsForQuery(searchQuery).find(c => c.id === localId);
+      if (local && Array.isArray(local.messages)) {
+        chatHistory = local.messages;
+        chatActiveLocalId = local.id;
+        chatServerSaveId = local.serverId || null;
+        chatWelcome.style.display = "none";
+        renderChatHistory();
+        if (chatSaveBtn) chatSaveBtn.classList.add("saved");
+      }
+    }
+
+    async function deleteSavedChat(serverId, localId) {
+      if (localId) removeLocalChat(searchQuery, localId);
+      if (serverId && chatIsLoggedIn()) {
+        try {
+          await fetch(`/api/research-chats/${serverId}`, { method: "DELETE", credentials: "same-origin" });
+        } catch {}
+      }
+      if ((chatServerSaveId && String(chatServerSaveId) === String(serverId)) ||
+          (chatActiveLocalId && chatActiveLocalId === localId)) {
+        startNewChat();
+      }
+      renderSavedChatsMenu();
+    }
+
+    function restoreLatestLocalChat() {
+      const latest = localChatsForQuery(searchQuery)[0];
+      if (!latest || !Array.isArray(latest.messages) || !latest.messages.length) return;
+      chatHistory = latest.messages;
+      chatActiveLocalId = latest.id;
+      chatServerSaveId = latest.serverId || null;
+      chatWelcome.style.display = "none";
+      renderChatHistory();
+      if (chatSaveBtn) chatSaveBtn.classList.add("saved");
     }
 
     const resizeN = document.getElementById("chat-resize-n");
@@ -2920,33 +3205,142 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     }
 
+    const CHAT_SCROLL_THRESHOLD = 72;
+    const CHAT_TYPING_MIN_MS = 850;
+    const CHAT_TYPING_STAGES = [
+      "Reviewing your search results",
+      "Cross-checking sources",
+      "Composing an answer",
+    ];
+    let chatFollowBottom = true;
+    let typingStageTimer = null;
+
+    function isChatNearBottom() {
+      if (!chatBody) return true;
+      return chatBody.scrollHeight - chatBody.scrollTop - chatBody.clientHeight <= CHAT_SCROLL_THRESHOLD;
+    }
+
+    function scrollChatIfFollowing(force = false) {
+      if (!chatBody) return;
+      if (force || (chatFollowBottom && isChatNearBottom())) {
+        requestAnimationFrame(() => {
+          chatBody.scrollTop = chatBody.scrollHeight;
+        });
+      }
+    }
+
+    if (chatBody) {
+      chatBody.addEventListener("scroll", () => {
+        chatFollowBottom = isChatNearBottom();
+      }, { passive: true });
+    }
+
     function sendMessage() {
       const msg = chatInput.value.trim();
-      if (!msg) return;
+      const imageToSend = chatPendingImage;
+      if (!msg && !imageToSend) return;
       chatWelcome.style.display = "none";
-      appendMessage("user", msg);
+      appendMessage("user", msg, imageToSend);
       chatInput.value = "";
+      clearPendingImage();
       chatInput.disabled = true;
       chatSend.disabled = true;
+      if (chatAttach) chatAttach.disabled = true;
+      const typingStarted = Date.now();
       const typingId = appendTyping();
+      const payload = { query: searchQuery, message: msg, history: chatHistory };
+      if (imageToSend) payload.image = imageToSend;
 
       fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: searchQuery, message: msg, history: chatHistory }),
+        body: JSON.stringify(payload),
       })
         .then(r => r.json())
         .then(data => {
-          removeMessage(typingId);
-          if (data.error) appendMessage("assistant", userFacingChatError(data.error));
-          else { streamMessage("assistant", data.response); chatHistory.push({ role: "user", content: msg }); chatHistory.push({ role: "assistant", content: data.response }); }
+          const finish = () => {
+            removeMessage(typingId);
+            if (data.error) appendMessage("assistant", userFacingChatError(data.error));
+            else {
+              revealAssistantMessage(data.response);
+              const userEntry = { role: "user", content: msg };
+              if (imageToSend) userEntry.image = imageToSend;
+              chatHistory.push(userEntry);
+              chatHistory.push({ role: "assistant", content: data.response });
+              persistChat();
+            }
+          };
+          const wait = Math.max(0, CHAT_TYPING_MIN_MS - (Date.now() - typingStarted));
+          if (wait) setTimeout(finish, wait);
+          else finish();
         })
-        .catch(() => { removeMessage(typingId); appendMessage("assistant", "Connection error. Please try again."); })
-        .finally(() => { chatInput.disabled = false; chatSend.disabled = false; chatInput.focus(); });
+        .catch(() => {
+          removeMessage(typingId);
+          appendMessage("assistant", "Connection error. Please try again.");
+        })
+        .finally(() => {
+          chatInput.disabled = false;
+          chatSend.disabled = false;
+          if (chatAttach) chatAttach.disabled = false;
+          chatInput.focus();
+        });
     }
 
     if (chatSend) chatSend.addEventListener("click", sendMessage);
     if (chatInput) chatInput.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } });
+
+    if (chatAttach && chatImageInput) {
+      chatAttach.addEventListener("click", () => chatImageInput.click());
+      chatImageInput.addEventListener("change", () => {
+        const file = chatImageInput.files && chatImageInput.files[0];
+        if (!file) return;
+        readImageFile(file).then(setPendingImage).catch(err => {
+          appendMessage("assistant", err.message || "Could not attach that image.");
+        });
+      });
+    }
+    if (chatImageRemove) chatImageRemove.addEventListener("click", clearPendingImage);
+    if (chatInput) {
+      chatInput.addEventListener("paste", (e) => {
+        const items = e.clipboardData && e.clipboardData.items;
+        if (!items) return;
+        for (const item of items) {
+          if (item.type && item.type.startsWith("image/")) {
+            e.preventDefault();
+            const file = item.getAsFile();
+            if (file) readImageFile(file).then(setPendingImage).catch(() => {});
+            break;
+          }
+        }
+      });
+    }
+    if (chatSaveBtn) chatSaveBtn.addEventListener("click", (e) => { e.stopPropagation(); persistChat({ manual: true }); });
+    if (chatSavedBtn) {
+      chatSavedBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (chatSavedOpen) closeSavedMenu();
+        else openSavedMenu();
+      });
+    }
+    if (chatSavedList) {
+      chatSavedList.addEventListener("click", (e) => {
+        const del = e.target.closest("[data-del-key]");
+        if (del) {
+          e.stopPropagation();
+          deleteSavedChat(del.dataset.serverId || null, del.dataset.localId || null);
+          return;
+        }
+        const load = e.target.closest("[data-load-key]");
+        if (load) {
+          loadSavedChat(load.dataset.serverId || null, load.dataset.localId || null);
+        }
+      });
+    }
+    document.addEventListener("click", (e) => {
+      if (!chatSavedOpen) return;
+      if (e.target.closest("#chat-saved-menu") || e.target.closest("#chat-saved")) return;
+      closeSavedMenu();
+    });
 
     let msgCounter = 0;
 
@@ -2964,63 +3358,136 @@ document.addEventListener("DOMContentLoaded", () => {
       const div = document.createElement("div");
       div.className = "chat-message assistant typing";
       div.id = id;
-      div.innerHTML = `<div class="chat-msg-content">Researching <span class="typing-dots"><span></span><span></span><span></span></span></div>`;
+      div.innerHTML = `<div class="chat-msg-content"><span class="typing-status">${CHAT_TYPING_STAGES[0]}</span><span class="typing-dots"><span></span><span></span><span></span></span></div>`;
       chatMessages.appendChild(div);
-      chatBody.scrollTop = chatBody.scrollHeight;
+      scrollChatIfFollowing(true);
+      let stage = 0;
+      typingStageTimer = setInterval(() => {
+        stage = Math.min(stage + 1, CHAT_TYPING_STAGES.length - 1);
+        const status = div.querySelector(".typing-status");
+        if (status) status.textContent = CHAT_TYPING_STAGES[stage];
+      }, 2400);
       return id;
     }
 
-    function appendMessage(role, content) {
+    function appendMessage(role, content, imageUrl = null, opts = {}) {
       const id = `msg-${msgCounter++}`;
       const div = document.createElement("div");
       div.className = `chat-message ${role}`;
+      if (opts.animate === false) div.style.animation = "none";
       div.id = id;
-      div.innerHTML = `<div class="chat-msg-content">${formatChatContent(content)}</div>`;
+      const innerEl = document.createElement("div");
+      innerEl.className = "chat-msg-content";
+      if (imageUrl) {
+        const img = document.createElement("img");
+        img.className = "chat-msg-image";
+        img.src = imageUrl;
+        img.alt = "Attached image";
+        innerEl.appendChild(img);
+      }
+      if (content) {
+        const textWrap = document.createElement("div");
+        textWrap.innerHTML = formatChatContent(content);
+        innerEl.appendChild(textWrap);
+      }
+      div.appendChild(innerEl);
       chatMessages.appendChild(div);
-      chatBody.scrollTop = chatBody.scrollHeight;
+      if (!opts.skipScroll) scrollChatIfFollowing(role === "user");
       return id;
     }
 
-    // Word-by-word streaming reveal with speed ramp
-    function streamMessage(role, rawContent) {
-      if (!rawContent || rawContent.length < 30) { appendMessage(role, rawContent); return; }
+    function splitIntoRevealChunks(text) {
+      if (!text) return [];
+      const paragraphs = text.split(/(\n{2,})/);
+      const chunks = [];
+      let pendingBreak = "";
+      for (const part of paragraphs) {
+        if (/^\n{2,}$/.test(part)) {
+          pendingBreak = part;
+          continue;
+        }
+        if (!part.trim()) continue;
+        const sentences = part.match(/[^.!?…]+[.!?…]+(?:\s+|$)|[^.!?…]+$/g) || [part];
+        if (sentences.length <= 1 && part.length < 90) {
+          chunks.push(pendingBreak + part);
+          pendingBreak = "";
+          continue;
+        }
+        let batch = pendingBreak;
+        pendingBreak = "";
+        for (const sentence of sentences) {
+          batch += sentence;
+          if (batch.length >= 72 || /[.!?…]\s*$/.test(batch)) {
+            chunks.push(batch);
+            batch = "";
+          }
+        }
+        if (batch) chunks.push(batch);
+      }
+      return chunks.length ? chunks : [text];
+    }
+
+    function chunkRevealDelay(chunk) {
+      const len = (chunk || "").length;
+      return 110 + Math.min(len * 1.4, 180);
+    }
+
+    function revealAssistantMessage(rawContent) {
+      if (!rawContent || rawContent.length < 100) {
+        appendMessage("assistant", rawContent);
+        return;
+      }
+      const chunks = splitIntoRevealChunks(rawContent);
+      if (chunks.length <= 1) {
+        appendMessage("assistant", rawContent);
+        return;
+      }
+
       const id = `msg-${msgCounter++}`;
       const div = document.createElement("div");
-      div.className = `chat-message ${role}`;
+      div.className = "chat-message assistant streaming";
       div.id = id;
       const inner = document.createElement("div");
       inner.className = "chat-msg-content";
       div.appendChild(inner);
       chatMessages.appendChild(div);
+      scrollChatIfFollowing(true);
 
-      const tokens = rawContent.split(/(\s+)/);
       let buf = "";
       let idx = 0;
 
-      function tick() {
-        if (idx >= tokens.length) {
+      function revealNext() {
+        if (idx >= chunks.length) {
           inner.innerHTML = formatChatContent(buf);
-          chatBody.scrollTop = chatBody.scrollHeight;
+          div.classList.remove("streaming");
+          scrollChatIfFollowing();
           return;
         }
-        buf += tokens[idx++];
-        inner.innerHTML = formatChatContent(buf) + '<span class="chat-cursor"></span>';
-        chatBody.scrollTop = chatBody.scrollHeight;
-        const delay = idx <= 4 ? 68 : idx <= 12 ? 42 : 22;
-        setTimeout(tick, delay);
+        buf += chunks[idx++];
+        inner.innerHTML = formatChatContent(buf) + '<span class="chat-cursor" aria-hidden="true"></span>';
+        scrollChatIfFollowing();
+        setTimeout(revealNext, chunkRevealDelay(chunks[idx - 1]));
       }
-      tick();
+
+      setTimeout(revealNext, 320);
       return id;
     }
 
-    function removeMessage(id) { const el = document.getElementById(id); if (el) el.remove(); }
+    function removeMessage(id) {
+      if (typingStageTimer) {
+        clearInterval(typingStageTimer);
+        typingStageTimer = null;
+      }
+      const el = document.getElementById(id);
+      if (el) el.remove();
+    }
 
     // Auto-collapse to visible strip on results pages so the assistant is discoverable
     if (searchQuery) {
       chatOpen = true;
       chatPanel.classList.add("open", "collapsed");
       chatFab.classList.add("hidden");
-      // Pulse FAB once when panel collapses back (so user knows it's there)
+      restoreLatestLocalChat();
     }
 
     // Header click expands from collapsed state

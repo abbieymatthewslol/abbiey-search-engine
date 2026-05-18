@@ -65,6 +65,7 @@ from retrieval.pipeline import run_text_retrieval_pipeline_sync
 from retrieval.open_catalog_blend import fetch_open_knowledge_hits
 from reverse_image import fetch_reverse_hits_for_image_url, validate_client_image_url
 import reverse_image_storage as _reverse_image_storage
+import research_chat as _research_chat
 from search_bots import crawl_bot_pages, normalize_http_seed, parse_json_list
 import bot_crawler as _bot_crawler
 import billing as _billing
@@ -895,6 +896,17 @@ def _init_pg_tables():
             UNIQUE(bot_id, url)
         );
         CREATE INDEX IF NOT EXISTS idx_uspb_bot ON user_search_bot_pages(bot_id);
+
+        CREATE TABLE IF NOT EXISTS research_chats (
+            id            SERIAL PRIMARY KEY,
+            user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            search_query  TEXT NOT NULL,
+            title         TEXT DEFAULT '',
+            messages_json TEXT NOT NULL,
+            updated_at    TIMESTAMPTZ DEFAULT NOW(),
+            created_at    TIMESTAMPTZ DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_research_chats_user ON research_chats(user_id, updated_at DESC);
     """
     try:
         _pg_execute(ddl)
@@ -1227,6 +1239,17 @@ def _init_users_db():
                 UNIQUE(bot_id, url)
             );
             CREATE INDEX IF NOT EXISTS idx_uspb_bot ON user_search_bot_pages(bot_id);
+            CREATE TABLE IF NOT EXISTS research_chats (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id       INTEGER NOT NULL,
+                search_query  TEXT NOT NULL,
+                title         TEXT DEFAULT '',
+                messages_json TEXT NOT NULL,
+                updated_at    TEXT DEFAULT (datetime('now')),
+                created_at    TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_research_chats_user ON research_chats(user_id, updated_at);
         """)
 
 
@@ -5335,6 +5358,8 @@ def api_open_catalog():
 def _ollama_chat(messages, model=None, timeout=10.0):
     """AI chat using local Ollama instance."""
     _model = model or OLLAMA_MODEL
+    if _research_chat.messages_have_images(messages):
+        _model = _research_chat.vision_model_name() or _model
     ollama_url = f"{(OLLAMA_BASE_URL or 'http://localhost:11434').rstrip('/')}/api/chat"
     to = _httpx_effective_timeout(ollama_url, float(timeout))
     try:
@@ -5522,30 +5547,31 @@ def api_chat():
     query = data.get("query", "").strip()
     message = data.get("message", "").strip()
     history = data.get("history", [])
+    image_raw = data.get("image")
 
-    if not query or not message:
+    if not query:
+        return jsonify({"error": _CHAT_MSG_MISSING}), 400
+    image_b64, image_mime = None, None
+    if image_raw:
+        parsed_b64, parsed_second = _research_chat.parse_chat_image(image_raw)
+        if parsed_b64 is None:
+            if parsed_second:
+                return jsonify({"error": parsed_second}), 400
+        else:
+            image_b64, image_mime = parsed_b64, parsed_second
+    if not message and not image_b64:
         return jsonify({"error": _CHAT_MSG_MISSING}), 400
     if len(query) > MAX_QUERY_LENGTH:
         return jsonify({"error": _CHAT_MSG_QUERY_LONG}), 400
-    if len(message) > _MAX_CHAT_MESSAGE_LEN:
+    if message and len(message) > _MAX_CHAT_MESSAGE_LEN:
         return jsonify({"error": _CHAT_MSG_MESSAGE_LONG}), 400
-    if not isinstance(history, list):
+    history, hist_err = _research_chat.normalize_history(
+        history, max_turns=_MAX_CHAT_HISTORY_TURNS, max_message_len=_MAX_CHAT_MESSAGE_LEN
+    )
+    if hist_err:
         return jsonify({"error": _CHAT_MSG_HISTORY}), 400
-    if len(history) > _MAX_CHAT_HISTORY_TURNS * 2:
-        history = history[-(_MAX_CHAT_HISTORY_TURNS * 2) :]
-    for h in history:
-        if not isinstance(h, dict):
-            return jsonify({"error": _CHAT_MSG_HISTORY}), 400
-        role = h.get("role", "")
-        content = h.get("content", "")
-        if role not in ("user", "assistant"):
-            return jsonify({"error": _CHAT_MSG_HISTORY}), 400
-        if not isinstance(content, str) or len(content) > _MAX_CHAT_MESSAGE_LEN:
-            return jsonify({"error": _CHAT_MSG_HISTORY}), 400
 
-    # Fetch search results for context
     context_results = _fetch_results(query, 1, "text")
-    # Build context from top results
     context_lines = [f"Search results for '{query}':\n"]
     for i, r in enumerate(context_results["results"][:5], 1):
         context_lines.append(
@@ -5554,25 +5580,15 @@ def api_chat():
             f"   {r.get('body', '')}\n"
         )
     context = "\n".join(context_lines)
-
-    system_context = (
-        "You are a research assistant. Use the provided search results to answer questions. "
-        "Quote relevant passages and cite sources by number.\n\n"
-        + context
+    messages = _research_chat.build_ollama_messages(
+        query=query,
+        context=context,
+        history=history,
+        message=message,
+        image_b64=image_b64,
+        image_mime=image_mime,
     )
-    # Build messages list for the AI chat API
-    messages = [{"role": "system", "content": system_context}]
-    messages.append({"role": "assistant", "content": f"I've studied the search results about '{query}'. What would you like to know?"})
 
-    for h in history[-6:]:
-        role = h.get("role", "user")
-        content = h.get("content", "")
-        if role in ("user", "assistant"):
-            messages.append({"role": role, "content": content})
-
-    messages.append({"role": "user", "content": message})
-
-    # Try AI chat first, fall back to extractive research
     try:
         response = _ollama_chat(messages)
         if not response:
@@ -5581,9 +5597,12 @@ def api_chat():
     except Exception:
         logger.warning("AI chat unavailable, using extractive research fallback")
 
-    # Fallback: extractive research from search results
+    if image_b64:
+        return jsonify({
+            "error": "Image understanding requires the AI assistant. Text-only fallback cannot analyze images.",
+        }), 503
+
     try:
-        # For follow-up questions, also search for the specific question
         all_results = list(context_results["results"])
         if message.lower() != query.lower():
             extra = _fetch_results(f"{query} {message}", 1, "text")
@@ -5594,6 +5613,99 @@ def api_chat():
     except Exception:
         logger.exception("chat_fallback_failed")
         return jsonify({"error": _CHAT_MSG_UNAVAILABLE}), 503
+
+
+@app.route("/api/research-chats", methods=["GET"])
+@limiter.limit("120/minute")
+def api_research_chats_list():
+    uid, bearer_err = _api_auth_user()
+    if bearer_err:
+        return bearer_err
+    if not uid:
+        return jsonify({"chats": [], "authenticated": False})
+    q = (request.args.get("query") or "").strip()
+    try:
+        chats = _research_chat.list_saved_chats(int(uid), _users_execute, search_query=q)
+        return jsonify({"chats": chats, "authenticated": True})
+    except Exception:
+        logger.exception("research_chats_list_failed")
+        return jsonify({"error": "Could not load saved chats."}), 503
+
+
+@app.route("/api/research-chats/<int:cid>", methods=["GET"])
+@limiter.limit("120/minute")
+def api_research_chats_get(cid: int):
+    uid, bearer_err = _api_auth_user()
+    if bearer_err:
+        return bearer_err
+    if not uid:
+        return jsonify({"error": "Sign in to access saved research chats."}), 401
+    try:
+        chat = _research_chat.get_saved_chat(int(uid), cid, _users_execute)
+    except Exception:
+        logger.exception("research_chats_get_failed")
+        return jsonify({"error": "Could not load that chat."}), 503
+    if not chat:
+        return jsonify({"error": "Chat not found."}), 404
+    return jsonify(chat)
+
+
+@app.route("/api/research-chats", methods=["POST"])
+@limiter.limit("60/minute")
+def api_research_chats_save():
+    uid, bearer_err = _api_auth_user()
+    if bearer_err:
+        return bearer_err
+    if not uid:
+        return jsonify({"error": "Sign in to save research chats."}), 401
+    data = request.get_json(silent=True) or {}
+    search_query = (data.get("query") or "").strip()
+    messages = data.get("messages")
+    if not search_query or not isinstance(messages, list):
+        return jsonify({"error": "Query and messages are required."}), 400
+    chat_id = data.get("id")
+    title = (data.get("title") or "").strip()
+    try:
+        cid = int(chat_id) if chat_id is not None else None
+    except (TypeError, ValueError):
+        return jsonify({"error": "Invalid chat id."}), 400
+    try:
+        saved = _research_chat.save_chat(
+            int(uid), _users_execute,
+            search_query=search_query,
+            messages=messages,
+            chat_id=cid,
+            title=title,
+        )
+    except ValueError as exc:
+        code = str(exc)
+        if code == "query_required":
+            return jsonify({"error": "Query is required."}), 400
+        if code == "messages_required":
+            return jsonify({"error": "Nothing to save yet."}), 400
+        return jsonify({"error": "Could not save chat."}), 400
+    except Exception:
+        logger.exception("research_chats_save_failed")
+        return jsonify({"error": "Could not save chat."}), 503
+    return jsonify({"ok": True, **saved})
+
+
+@app.route("/api/research-chats/<int:cid>", methods=["DELETE"])
+@limiter.limit("60/minute")
+def api_research_chats_delete(cid: int):
+    uid, bearer_err = _api_auth_user()
+    if bearer_err:
+        return bearer_err
+    if not uid:
+        return jsonify({"error": "Sign in to delete saved chats."}), 401
+    try:
+        ok = _research_chat.delete_saved_chat(int(uid), cid, _users_execute)
+    except Exception:
+        logger.exception("research_chats_delete_failed")
+        return jsonify({"error": "Could not delete chat."}), 503
+    if not ok:
+        return jsonify({"error": "Chat not found."}), 404
+    return jsonify({"ok": True})
 
 
 @app.route("/api/answer-layer")
