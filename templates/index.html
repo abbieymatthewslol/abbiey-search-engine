@@ -567,16 +567,6 @@
             </form>
 
             {% if not query %}
-            <nav class="home-shortcuts-row" aria-label="Featured tools">
-                <a href="/hotels" class="home-shortcut-btn" aria-label="Find hotels and stays">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 21V7a2 2 0 012-2h14a2 2 0 012 2v14"/><path d="M3 10h18M9 21v-4M15 21v-4M9 7V5M15 7V5"/></svg>
-                    Hotels
-                </a>
-                <a href="/chatbots" class="home-shortcut-btn" aria-label="Open AI chatbots">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
-                    Chatbots
-                </a>
-            </nav>
             {# Hidden on landing to reduce noise. Tabs appear after a search (see .search-tabs below). Kept in DOM so JS that targets these modes still works. #}
             <nav class="home-search-modes" aria-label="What to search" hidden>
                 <span class="home-search-modes-label" id="home-search-modes-label">Search</span>
@@ -1098,12 +1088,6 @@
                 {% endif %}
             </div>
             {% endif %}
-            {% if primary_entity.type == 'place_category' and primary_entity.meta and primary_entity.meta.category_key in ('hotel', 'hostel') %}
-            <div class="platform-links">
-                <a href="/hotels" class="platform-link">Hotels</a>
-            </div>
-            {% endif %}
-
             {% if primary_entity.type == 'phone' and primary_entity.meta %}
             <div class="entity-details">
                 {% if primary_entity.meta.national %}

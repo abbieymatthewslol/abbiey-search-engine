@@ -13,7 +13,6 @@
           "osint/**",
           "retrieval/**",
           "api_v1.py",
-          "abbiey_product_knowledge.py",
           "billing.py",
           "cli/README.md",
           "bot_crawler.py",
@@ -27,8 +26,6 @@
           "search_protocol.py",
           "startup_checks.py",
           "unfiltered_engagement.py",
-          "hotels_blueprint.py",
-          "hotels_pricing.py",
           "app.py"
         ]
       }

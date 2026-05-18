@@ -33,7 +33,7 @@ check() {
 }
 
 check "/api/v1 handlers" "^(api_v1\.py|app\.py)$" "^(docs/API\.md)$" "docs/API.md"
-check "Bot crawler / chatbots" "^(bot_crawler\.py|search_bots\.py|templates/chatbots\.html)$" "^(docs/bots\.md|docs/API\.md|CHANGELOG\.md)$" "docs/bots.md, docs/API.md, or CHANGELOG.md"
+check "Bot crawler" "^(bot_crawler\.py|search_bots\.py)$" "^(docs/bots\.md|docs/API\.md|CHANGELOG\.md)$" "docs/bots.md, docs/API.md, or CHANGELOG.md"
 check "Self-host surface" "^(Dockerfile|docker-compose\.yml|render\.yaml|fly\.toml|vercel\.json)$" "^(docs/SELF-HOSTING\.md|CHANGELOG\.md|README\.md)$" "docs/SELF-HOSTING.md, CHANGELOG.md, or README.md"
 check "Onion / deep-web logic" "^(app\.py|templates/index\.html)$" "^(docs/deep-web\.md|CHANGELOG\.md)$" "docs/deep-web.md or CHANGELOG.md"
 check "Env matrix" "^\.env\.example$" "^(docs/SELF-HOSTING\.md|README\.md|CHANGELOG\.md)$" "docs/SELF-HOSTING.md, README.md, or CHANGELOG.md"

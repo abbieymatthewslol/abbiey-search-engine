@@ -2625,44 +2625,6 @@ html[data-theme="light"] .home-mode-btn[data-search-mode="onion"]:hover {
   text-align: center;
 }
 
-/* Homepage shortcuts — Hotels, Chatbots (below search bar) */
-.home-shortcuts-row {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  align-items: center;
-  gap: 0.55rem;
-  margin: 0.85rem 0 0;
-}
-.home-shortcut-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: .45rem;
-  padding: .45rem 1.1rem;
-  border-radius: 999px;
-  border: 1px solid var(--border, rgba(255,255,255,.14));
-  background: transparent;
-  color: inherit;
-  font-size: .9rem;
-  font-weight: 500;
-  text-decoration: none;
-  opacity: .85;
-  transition: opacity .15s, border-color .15s, background .15s;
-}
-.home-shortcut-btn:hover {
-  opacity: 1;
-  text-decoration: none;
-  border-color: var(--accent, #7c6cfc);
-  background: color-mix(in srgb, var(--accent, #7c6cfc) 8%, transparent);
-}
-.home-shortcut-btn:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 85%, transparent);
-  outline-offset: 2px;
-}
-.home-shortcut-btn svg {
-  flex-shrink: 0;
-}
-
 /* Landing-state search bar: reduce affordance noise. On the home state
    (body without .has-results) the image and voice buttons fade in only
    when the search box is hovered or focused; the "Paste image URL" text
@@ -2694,49 +2656,6 @@ body:not(.has-results) .reverse-image-url-entry { display: none; }
   font-weight: 400;
 }
 
-/* Homepage footer: feature links directly under brand line */
-.footer-feature-spotlight {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  align-items: center;
-  gap: 0.65rem;
-  margin: 0 0 0.75rem;
-}
-.footer-feature-link {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 7.25rem;
-  padding: 0.5rem 1.15rem;
-  font-size: 0.9375rem;
-  font-weight: 600;
-  letter-spacing: 0.015em;
-  color: var(--text);
-  text-decoration: none;
-  border-radius: var(--radius-sm, 8px);
-  border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent);
-  background: color-mix(in srgb, var(--accent) 20%, var(--bg-surface));
-  box-shadow: 0 1px 0 color-mix(in srgb, var(--accent) 12%, transparent);
-  transition:
-    transform var(--dur-fast) var(--ease-out),
-    border-color var(--dur-fast) var(--ease-out),
-    background var(--dur-fast) var(--ease-out),
-    box-shadow var(--dur-fast) var(--ease-out);
-}
-.footer-feature-link:hover {
-  text-decoration: none;
-  border-color: color-mix(in srgb, var(--accent) 75%, transparent);
-  background: color-mix(in srgb, var(--accent) 32%, var(--bg-surface));
-  box-shadow:
-    0 2px 10px color-mix(in srgb, var(--accent) 28%, transparent),
-    0 1px 0 color-mix(in srgb, var(--accent) 18%, transparent);
-  transform: translateY(-1px);
-}
-.footer-feature-link:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 85%, transparent);
-  outline-offset: 2px;
-}
 .footer-tagline {
   margin: 0 0 0.55rem;
 }
@@ -5778,11 +5697,6 @@ footer {
     padding-right: calc(1rem + env(safe-area-inset-right, 0px));
     padding-bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px));
     font-size: 0.78rem;
-  }
-  .footer-feature-link {
-    min-width: 6.75rem;
-    padding: 0.45rem 0.95rem;
-    font-size: 0.875rem;
   }
 }
 
