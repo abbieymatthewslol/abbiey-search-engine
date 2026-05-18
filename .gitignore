@@ -10,3 +10,7 @@ dist/
 .vercel/*
 !.vercel/project.json
 .env*.local
+
+# Vercel local env
+.env.local
+.env*.local

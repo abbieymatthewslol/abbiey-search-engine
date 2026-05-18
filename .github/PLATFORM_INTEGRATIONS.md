@@ -8,21 +8,23 @@ Production for **abbiey.search** is meant to be a **single Vercel project** serv
 | Setting                        | Value                                                                                                                                                                          |
 | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **Production domain**          | `abbieysearch.com` (canonical). Add `www.abbieysearch.com` only if it redirects to the apex host. |
-| **Git integration**            | Connect this repository; set **Production Branch** to `**main`** if you rely on Vercel’s Git deploys                                                                           |
-| **Project ID** (CLI / Actions) | `prj_hGdLqDsNtQK2A57hWyZNxdZKMi3b` — already referenced in `[.github/workflows/deploy.yml](workflows/deploy.yml)`                                                              |
+| **Git integration**            | Connect this repository; production is deployed by **GitHub Actions** (`[deploy.yml](workflows/deploy.yml)`). [Sync main from master](workflows/sync-main-from-master.yml) still updates `**main**` for a clean default branch. `[vercel.json](../vercel.json)` uses `ignoreCommand` to **skip** Vercel’s *Git* build for `**main**` (avoids a duplicate production build). |
+| **Project ID** (CLI / Actions) | `prj_hGdLqDsNtQK2A57hWyZNxdZKMi3b` — same id in `[.vercel/project.json](../.vercel/project.json)` and `[.github/workflows/deploy.yml](workflows/deploy.yml)` |
 
+## Local `push-and-notify.ps1` and Vercel
 
-## GitHub → Vercel
+`[scripts/push-and-notify.ps1](../scripts/push-and-notify.ps1)` polls the Vercel API with **`GET /v6/deployments?...&sha=<git HEAD>`** (see [List deployments](https://vercel.com/docs/rest-api/reference/endpoints/deployments/list-deployments)) so the post-push deploy (from **GitHub Actions** after tests) is found. Set **`VERCEL_TOKEN`** in your Windows user environment. Allow **a few minutes** for Actions to run `vercel deploy` before the new SHA appears in the API.
 
-Two patterns work; **pick one** for production to avoid duplicate deploys:
+## GitHub → Vercel (automatic production)
 
-1. **GitHub Actions (this repo’s default)** — On push to `**master`**, `[.github/workflows/deploy.yml](workflows/deploy.yml)` runs `vercel pull` → `vercel build` → `vercel deploy --prebuilt --prod`. Requires repository secret `**VERCEL_TOKEN**` ([Vercel → Account → Tokens](https://vercel.com/account/tokens)). `**VERCEL_ORG_ID**` and `**VERCEL_PROJECT_ID**` are set in the workflow file.
-2. **Vercel Git only** — Disable or delete the deploy workflow if you prefer Vercel to build from `**main`** after every push. Then rely on `[.github/workflows/sync-main-from-master.yml](workflows/sync-main-from-master.yml)`, which fast-forwards `**main**` from `**master**` on each push to `**master**`.
+- **On every push to `**master`**: `[.github/workflows/deploy.yml](workflows/deploy.yml)` runs `python scripts/run_tests_for_changes.py` (tests scoped to the pushed commit; set `RUN_FULL_TESTS=1` in the job to force a full `pytest tests/`), then `vercel build` and `vercel deploy --prebuilt --prod` (requires the repository secret **`VERCEL_TOKEN`**; same token as the Vercel CLI). No manual “Run workflow” is required to ship to production.
+- **Duplicate build guard** — [Sync main from master](workflows/sync-main-from-master.yml) still fast-forwards `**main**` to match `**master**`. Vercel’s *Git* hook would otherwise also build `main`. Root `[vercel.json](../vercel.json)` `ignoreCommand` **skips** the Git build when `VERCEL_GIT_COMMIT_REF=main` so there is a single production path (Actions + CLI). Preview deployments from other branches are unaffected.
+- **Optional** — you can still **Run workflow** on `Deploy to Vercel` to redeploy from the current default branch (e.g. after fixing secrets).
 
 ## GitHub → branch model
 
 - Day-to-day development: `**master**`.
-- `**main**` is kept equal to `**master**` by *Sync main from master* so Vercel (if tied to `main`) and Actions (if deploying from `master`) stay aligned.
+- `**main**` is kept equal to `**master**` by *Sync main from master* (cosmetic / integrations); production traffic is updated by the workflow above, not by Vercel’s Git build for `**main**`.
 
 ## Supabase → Vercel
 
@@ -95,7 +97,8 @@ To audit: `grep -rn "<script" templates/` — every `<script` line should be fol
 - GitHub repo linked to the Vercel project above (or `VERCEL_TOKEN` + IDs for Actions).
 - Domain **abbieysearch.com** assigned to that project. If `www.abbieysearch.com` is attached, it should redirect there.
 - Production env vars on Vercel include `**SUPABASE_DB_URL`** (or `**DATABASE_URL**`) and secrets above.
-- Either Actions deploy **or** automatic Vercel Git deploy — not both firing on every change unless intentional.
+- **GitHub** repository secret `**VERCEL_TOKEN**` is set (required for automatic production deploys on every push to `**master**`).
+- `**vercel.json**` `ignoreCommand` prevents Vercel from also building the `**main**` branch from Git, so you do not get two production builds (see *GitHub → Vercel* above).
 
 ## Automated checks
 

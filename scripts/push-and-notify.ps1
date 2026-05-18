@@ -27,6 +27,22 @@ $ErrorActionPreference = "Stop"
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 Set-Location $RepoRoot
 
+# Match .vercel/project.json (Vercel CLI) — single source of truth for API polling
+$projectId = "prj_hGdLqDsNtQK2A57hWyZNxdZKMi3b"
+$teamId = "team_YeguIG4NHm4Kp0Jf5AbOwgFN"
+$vercelProjectPath = Join-Path $RepoRoot ".vercel\project.json"
+if (Test-Path -LiteralPath $vercelProjectPath) {
+    try {
+        $vc = Get-Content -LiteralPath $vercelProjectPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        if ($vc.projectId) { $projectId = [string]$vc.projectId }
+        # Vercel stores team id as orgId in project.json; REST API uses teamId=
+        if ($vc.orgId) { $teamId = [string]$vc.orgId }
+    }
+    catch {
+        Write-Warning "Could not parse .vercel/project.json: $($_.Exception.Message)"
+    }
+}
+
 function Show-DeployNotification {
     param(
         [string] $Title,
@@ -67,9 +83,6 @@ function Show-DeployNotification {
     }
 }
 
-$teamId = "team_YeguIG4NHm4Kp0Jf5AbOwgFN"
-$projectId = "prj_hGdLqDsNtQK2A57hWyZNxdZKMi3b"
-
 if (-not $Branch) {
     $Branch = (git branch --show-current).Trim()
 }
@@ -103,10 +116,17 @@ if (-not $tok) {
 
 $headers = @{ Authorization = "Bearer $tok" }
 $deadline = (Get-Date).AddMinutes($MaxWaitMinutes)
-$uri = "https://api.vercel.com/v6/deployments?projectId=$projectId&teamId=$teamId&limit=25"
+# Vercel REST: filter by full git SHA (reliable; walking meta.githubCommitSha in list items was unreliable in PowerShell)
+$encSha = [System.Uri]::EscapeDataString($commitSha)
+# Production on abbieysearch.com: Git is usually on `main`; "Sync main from master" may delay the deploy by ~1 min after push
+$uri = "https://api.vercel.com/v6/deployments?projectId=$projectId&teamId=$teamId&sha=$encSha&limit=5"
+$shortSha = if ($commitSha.Length -ge 7) { $commitSha.Substring(0, 7) } else { $commitSha }
+Write-Host "Polling Vercel (project=$projectId, sha=$shortSha...)" -ForegroundColor DarkGray
 
+$poll = 0
 do {
     Start-Sleep -Seconds 10
+    $poll += 1
     try {
         $resp = Invoke-RestMethod -Uri $uri -Headers $headers -Method Get -TimeoutSec 40
     }
@@ -116,23 +136,24 @@ do {
     }
 
     $list = @($resp.deployments)
+    if ($list.Count -lt 1) {
+        if ($poll -eq 1) {
+            Write-Host "No deployment for this SHA yet. If you use Git: production is often on branch `main`; this repo fast-forwards `main` from `master` in GitHub Actions (one minute is normal)." -ForegroundColor DarkYellow
+        }
+        if ($poll % 3 -eq 0) {
+            Write-Host ("Still waiting for Vercel to register commit {0}... {1}" -f $shortSha, (Get-Date -Format "HH:mm:ss"))
+        }
+        continue
+    }
+
     $dep = $null
     foreach ($d in $list) {
-        $ds = $null
-        if ($d.meta -and ($d.meta | Get-Member -Name githubCommitSha -ErrorAction SilentlyContinue)) {
-            $ds = [string]$d.meta.githubCommitSha
-        }
-        if ($ds -eq $commitSha) {
+        if ($d.target -eq 'production') {
             $dep = $d
             break
         }
     }
-
-    if (-not $dep) {
-        Write-Host ("No deployment row for commit {0} yet... {1}" -f $commitSha, (Get-Date -Format "HH:mm:ss"))
-        continue
-    }
-
+    if (-not $dep) { $dep = $list[0] }
     $state = [string]$dep.readyState
     if ($state -eq "READY") {
         $deployUrl = "https://abbieysearch.com"

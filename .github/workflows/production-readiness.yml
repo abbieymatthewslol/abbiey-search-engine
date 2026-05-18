@@ -1,40 +1,56 @@
-# Automated checks you can run from GitHub Actions (no dashboard logins from here).
+# Automated checks and smoke tests that run on every push. The expensive
+# browser-based Playwright smoke tests are gated behind the optional
+# SITE_URL / ADMIN_TOKEN repo secrets so forks don't silently fail.
 #
 # Optional repository secrets (Settings → Secrets and variables → Actions):
-#   SITE_URL       Production origin, e.g. https://www.abbieysearch.com
-#   ADMIN_TOKEN    Same token as Vercel ADMIN_TOKEN — used only to call GET /admin/api/health
+#   SITE_URL          Production origin, e.g. https://abbieysearch.com
+#   ADMIN_TOKEN       Same token as Vercel ADMIN_TOKEN - used to call /admin/api/health
+#   API_TEST_KEY      A non-revoked abb_sk_live_* key used ONLY for the CI smoke test
+#                     (scope it to a throwaway sub-account; rotate freely)
 #
-# Vercel / Resend / Supabase credentials must still be set in the Vercel project dashboard
-# (or `vercel env pull`). This workflow cannot create them for you.
+# Secret-using jobs live in _production-readiness-*.yml (workflow_call) so the
+# Actions language service can validate secrets.* against declared workflow inputs.
+#
+# Required for deploy gating:
+#   This workflow *must* pass before any deploy runs. Protect main branch
+#   with the "Production readiness / smoke" status check.
 
 name: Production readiness
 
 on:
   push:
+  pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
-  verify:
+  verify-env:
+    uses: ./.github/workflows/_production-readiness-verify-env.yml
+    secrets: inherit
+
+  pytest:
+    name: Unit tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-
-      - run: pip install python-dotenv
-
-      - name: Advisory configuration check
-        run: python scripts/verify_production_env.py
-
-      - name: Live site health (optional)
+      - run: pip install -r requirements.txt pytest
+      - name: Unit tests (changed files only)
         env:
-          SITE_URL: ${{ secrets.SITE_URL }}
-          ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
-        run: |
-          if [ -z "${SITE_URL:-}" ] || [ -z "${ADMIN_TOKEN:-}" ]; then
-            echo "Skipping live ping: add SITE_URL and ADMIN_TOKEN as repository secrets to enable."
-            exit 0
-          fi
-          python scripts/verify_production_env.py --ping
+          DIFF_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          DIFF_HEAD: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: python scripts/run_tests_for_changes.py
+
+  smoke:
+    needs: [verify-env, pytest]
+    # Gate on SITE_URL so forks and PRs from branches without secrets still
+    # run the cheap checks without failing on the expensive one.
+    if: ${{ github.event_name != 'pull_request' || github.repository == 'abbieymatthewslol/abbiey-search-engine-2' }}
+    uses: ./.github/workflows/_production-readiness-smoke.yml
+    secrets: inherit

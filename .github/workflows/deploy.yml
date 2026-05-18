@@ -1,8 +1,9 @@
 name: Deploy to Vercel
 
-# Production deploys: Vercel Git integration (push to the branch set as Production in Vercel).
-# On push to master: run tests only. Full CLI deploy runs only when you manually start this workflow.
-# See .github/PLATFORM_INTEGRATIONS.md (Option B).
+# Automatic: every push to master runs tests, then `vercel build` + `vercel deploy --prebuilt --prod`.
+# Requires secret VERCEL_TOKEN. Manual re-run: Actions → this workflow → Run workflow.
+# Vercel Git builds on `main` are skipped (vercel.json ignoreCommand) so "sync main" + this workflow do not double-deploy.
+# See .github/PLATFORM_INTEGRATIONS.md
 on:
   push:
     branches:
@@ -24,6 +25,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
@@ -35,12 +38,13 @@ jobs:
           pip install pytest
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-      - name: Run tests
-        run: pytest tests/ -v --tb=short
+      - name: Run tests (changed files only)
+        env:
+          DIFF_BASE: ${{ github.event.before }}
+          DIFF_HEAD: ${{ github.sha }}
+        run: python scripts/run_tests_for_changes.py
 
   deploy:
-    # Avoid double-deploy: Vercel builds production from Git. Use this job only when dispatching manually.
-    if: github.event_name == 'workflow_dispatch'
     needs: test
     runs-on: ubuntu-latest
     steps:

@@ -6,7 +6,7 @@
     <h1 class="auth-title">Signing you in…</h1>
     <p class="auth-subtitle" id="status-msg">Please wait while we finish setting up your session.</p>
 </div>
-<div class="auth-errors" id="sb-error" role="alert" aria-live="polite" style="display:none"></div>
+<div class="auth-errors auth-errors--hidden" id="sb-error" role="alert" aria-live="polite"></div>
 {% endblock %}
 
 {% block extra_scripts %}
@@ -31,7 +31,8 @@
         sb = window.supabase.createClient(SB_URL, SB_KEY, {
             auth: {
                 flowType: 'pkce',
-                detectSessionInUrl: false,
+                // Parse ?code= / hash tokens from email confirmation + OAuth redirects.
+                detectSessionInUrl: true,
                 persistSession: true,
                 autoRefreshToken: true
             }
@@ -39,7 +40,7 @@
     } catch (e) {
         var _er = document.getElementById('sb-error');
         if (_er) {
-            _er.style.display = 'block';
+            _er.classList.remove('auth-errors--hidden');
             _er.innerHTML = '<p>Auth init failed. <a href="/login">Try again</a>.</p>';
         }
         return;
@@ -50,6 +51,7 @@
     /** True after redirect started, unrecoverable error shown, or success. */
     var finished = false;
     var syncInFlight = false;
+    var hangTimer = null;
 
     function emailFromUser(u) {
         if (!u) return '';
@@ -75,11 +77,19 @@
 
     function showErr(msg) {
         finished = true;
+        if (hangTimer) {
+            try {
+                clearTimeout(hangTimer);
+            } catch (_ht) { /* ignore */ }
+            hangTimer = null;
+        }
         try {
             sessionStorage.removeItem('abbiey_oauth_next');
         } catch (_sn) { /* ignore */ }
-        errEl.style.display = 'block';
-        errEl.innerHTML = '<p>' + msg + '</p>';
+        if (errEl) {
+            errEl.classList.remove('auth-errors--hidden');
+            errEl.innerHTML = '<p>' + msg + '</p>';
+        }
     }
 
     /**
@@ -89,7 +99,9 @@
     async function syncAndRedirect(session) {
         if (!session || syncInFlight || finished) return;
         syncInFlight = true;
-        statusEl.textContent = 'Almost there…';
+        if (statusEl) {
+            statusEl.textContent = 'Almost there…';
+        }
 
         try {
             var user = session.user;
@@ -132,6 +144,12 @@
 
             if (cb.ok && data && data.ok) {
                 finished = true;
+                if (hangTimer) {
+                    try {
+                        clearTimeout(hangTimer);
+                    } catch (_ht2) { /* ignore */ }
+                    hangTimer = null;
+                }
                 try {
                     sessionStorage.removeItem('abbiey_onboarding_phone');
                 } catch (_p1) { /* ignore */ }
@@ -188,22 +206,7 @@
                 return;
             }
 
-            var code = params.get('code');
-            if (code) {
-                // PKCE: pass the auth code only (not the full URL) — see supabase-js auth reference.
-                var ex = await sb.auth.exchangeCodeForSession(code);
-                if (ex.error) {
-                    showErr(escapeHtml(ex.error.message || 'Could not complete sign-in') + ' <a href="/login">Try again</a>.');
-                    return;
-                }
-                if (ex.data && ex.data.session && !finished) {
-                    await syncAndRedirect(ex.data.session);
-                    return;
-                }
-                showErr('No session after sign-in. <a href="/login">Try again</a>.');
-                return;
-            }
-
+            // PKCE / magic-link codes are exchanged automatically when detectSessionInUrl is true.
             sb.auth.onAuthStateChange(function (_event, session) {
                 if (session && !finished) {
                     void syncAndRedirect(session);
@@ -217,13 +220,27 @@
             }
             if (gs.data && gs.data.session && !finished) {
                 await syncAndRedirect(gs.data.session);
+            } else if (!finished) {
+                var code = params.get('code');
+                if (code) {
+                    var ex = await sb.auth.exchangeCodeForSession(code);
+                    if (ex.error) {
+                        showErr(escapeHtml(ex.error.message || 'Could not complete sign-in') + ' <a href="/login">Try again</a>.');
+                        return;
+                    }
+                    if (ex.data && ex.data.session && !finished) {
+                        await syncAndRedirect(ex.data.session);
+                    } else if (!finished) {
+                        showErr('No session after sign-in. <a href="/login">Try again</a>.');
+                    }
+                }
             }
         } catch (e) {
             showErr('Auth init failed. <a href="/login">Try again</a>.');
         }
     })();
 
-    setTimeout(function () {
+    hangTimer = setTimeout(function () {
         if (!finished) {
             showErr('Could not complete sign-in. <a href="/login">Try again</a>.');
         }

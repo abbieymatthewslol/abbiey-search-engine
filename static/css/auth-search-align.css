@@ -1,0 +1,156 @@
+/* Auth pages (login, signup, verify-email, etc.) — match §6 .search-box + .search-btn (style.css). */
+body.page-auth .auth-main {
+  animation: pageIn 180ms var(--ease-out) both;
+}
+
+body.page-auth .auth-panel {
+  animation: fadeInUp 0.4s var(--ease-out) both;
+}
+
+body.page-auth .auth-input-pill {
+  background: var(--search-surface);
+  border: 1px solid var(--search-border);
+  border-radius: 9999px;
+  padding: 0.55rem 0.55rem 0.55rem 1.05rem;
+  gap: 0.35rem;
+  box-shadow: var(--search-shadow);
+  min-height: 48px;
+  transition:
+    background var(--dur-base) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-base) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+
+body.page-auth .auth-input-pill:hover {
+  border-color: var(--search-border-hover);
+  transform: translateY(-1px);
+  box-shadow: var(--search-shadow-hover);
+}
+
+body.page-auth .auth-input-pill:focus-within {
+  background: var(--search-surface-focus);
+  border-color: var(--search-accent-focus, #4ade80);
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--search-accent-ring, rgba(74, 222, 128, 0.15)),
+    0 8px 30px rgba(0, 0, 0, 0.35);
+  transform: translateY(-1px);
+}
+
+body.page-auth .auth-input-pill:focus-within .auth-input-icon {
+  color: var(--search-accent-focus-icon, #86efac);
+}
+
+body.page-auth .auth-input-pill input {
+  font-size: 1.0625rem;
+  padding: 0.125rem 0.15rem;
+}
+
+body.page-auth .auth-input-pill input::placeholder {
+  color: var(--search-placeholder);
+  opacity: 0.95;
+}
+
+body.page-auth .auth-input-pill input:focus::placeholder {
+  opacity: 0.5;
+}
+
+body.page-auth .auth-back-search:focus-visible {
+  outline: 2px solid #4ade80;
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+body.page-auth .auth-divider-or {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin: 1.25rem 0;
+  color: var(--text-muted);
+}
+
+body.page-auth .auth-divider-line {
+  flex: 1;
+  border: none;
+  border-top: 1px solid var(--border);
+}
+
+body.page-auth .auth-divider-text {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+body.page-auth .auth-btn-google {
+  background: #4285f4;
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(66, 133, 244, 0.35);
+}
+
+body.page-auth .auth-btn-google:hover {
+  background: #3367d6;
+  color: #fff;
+  transform: scale(1.03);
+  box-shadow: 0 6px 18px rgba(66, 133, 244, 0.42);
+}
+
+body.page-auth .auth-btn-google:active {
+  transform: scale(0.98);
+  opacity: 0.96;
+}
+
+body.page-auth .auth-btn-google:focus-visible {
+  outline: 2px solid #4ade80;
+  outline-offset: 3px;
+}
+
+body.page-auth .auth-form {
+  gap: 1rem;
+}
+
+body.page-auth .auth-field {
+  gap: 0.5rem;
+}
+
+body.page-auth .search-btn.auth-submit:not(.auth-btn-google):active {
+  transform: scale(0.97);
+  opacity: 0.96;
+}
+
+body.page-auth .auth-google-mark {
+  vertical-align: middle;
+  margin-right: 6px;
+}
+
+/* Slightly wider panel on the full sign-up form */
+body.page-auth.page-signup .auth-layout {
+  max-width: 600px;
+}
+
+body.page-signup .auth-flash-hidden {
+  display: none !important;
+}
+
+body.page-signup #sb-success.auth-success {
+  margin-bottom: 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(34, 197, 94, 0.35);
+  color: inherit;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.page-auth .auth-main,
+  body.page-auth .auth-panel,
+  body.page-auth .auth-input-pill,
+  body.page-auth .search-btn {
+    animation: none !important;
+    transition: none !important;
+  }
+  body.page-auth .auth-input-pill:hover,
+  body.page-auth .auth-input-pill:focus-within {
+    transform: none;
+  }
+}

@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Community · abbieysearch{% endblock %}
+{% block content %}
+<main class="legal-page" style="max-width:720px;margin:0 auto;padding:2.5rem 1.25rem 4rem;line-height:1.65">
+    <h1 style="font-size:1.7rem;margin:0 0 1rem">Community &amp; support</h1>
+    <p style="opacity:.85">
+        abbiey.search is an open source project. Here is where you can reach the
+        maintainers, report issues, or just hang out with other users.
+    </p>
+
+    <section style="margin-top:2rem">
+        <h2 style="font-size:1.2rem;margin:0 0 .5rem">Real-time chat</h2>
+        {% if community_discord_url or community_matrix_url %}
+        <ul>
+            {% if community_discord_url %}
+            <li>
+                <a href="{{ community_discord_url }}" target="_blank" rel="noopener noreferrer">
+                    Join the Discord
+                </a>
+                &mdash; general chat, feature requests, early builds.
+            </li>
+            {% endif %}
+            {% if community_matrix_url %}
+            <li>
+                <a href="{{ community_matrix_url }}" target="_blank" rel="noopener noreferrer">
+                    Join the Matrix room
+                </a>
+                &mdash; end-to-end-encrypted, bridged to Discord.
+            </li>
+            {% endif %}
+        </ul>
+        {% else %}
+        <p style="opacity:.7">
+            Community chat links are not configured yet. Set <code>COMMUNITY_DISCORD_URL</code>
+            and/or <code>COMMUNITY_MATRIX_URL</code> as environment variables to enable them.
+        </p>
+        {% endif %}
+    </section>
+
+    <section style="margin-top:2rem">
+        <h2 style="font-size:1.2rem;margin:0 0 .5rem">Issues &amp; pull requests</h2>
+        <p>
+            File bugs and feature requests on
+            {% if community_github_url %}<a href="{{ community_github_url }}" target="_blank" rel="noopener noreferrer">GitHub</a>{% else %}GitHub{% endif %}.
+            PRs against the open source repo are welcome &mdash; see
+            <a href="/docs/self-hosting">docs/self-hosting.md</a> and
+            <a href="https://github.com/abbieymatthewslol/abbiey-search-engine-2/blob/main/AGENTS.md" target="_blank" rel="noopener noreferrer">AGENTS.md</a>.
+        </p>
+    </section>
+
+    <section style="margin-top:2rem">
+        <h2 style="font-size:1.2rem;margin:0 0 .5rem">Direct contact</h2>
+        <p>
+            Security issues: <a href="mailto:security@abbieysearch.com">security@abbieysearch.com</a>
+            (see <a href="/static/security.txt">/.well-known/security.txt</a>).
+        </p>
+        <p>
+            Refund requests: <a href="mailto:refunds@abbieysearch.com">refunds@abbieysearch.com</a> &mdash; see the
+            <a href="/refund">refund policy</a>.
+        </p>
+        <p>
+            Everything else: <a href="mailto:hello@abbieysearch.com">hello@abbieysearch.com</a>.
+        </p>
+    </section>
+
+    <section style="margin-top:2rem">
+        <h2 style="font-size:1.2rem;margin:0 0 .5rem">Status &amp; changelog</h2>
+        <p>
+            Live service health: <a href="/status">/status</a>.
+            Release notes: <a href="/changelog">/changelog</a>.
+        </p>
+    </section>
+</main>
+{% endblock %}

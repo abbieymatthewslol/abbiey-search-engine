@@ -83,7 +83,7 @@ def fetch_reverse_hits_for_image_url(image_url: str, *, client: httpx.Client) ->
             "https://www.bing.com/images/search",
             params={"q": "imgurl:" + image_url},
             headers={"User-Agent": BING_UA, "Accept-Language": "en-US,en;q=0.9"},
-            timeout=25.0,
+            timeout=10.0,
             follow_redirects=True,
         )
         r.raise_for_status()

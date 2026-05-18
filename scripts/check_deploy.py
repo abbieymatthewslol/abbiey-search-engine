@@ -18,7 +18,7 @@ import urllib.error
 import json
 
 LIVE_URL   = "https://www.abbieysearch.com"
-GITHUB_API = "https://api.github.com/repos/abbieymatthewslol/abbiey-search-engine/commits/master"
+GITHUB_API = "https://api.github.com/repos/abbieymatthewslol/abbiey-search-engine-2/commits/master"
 REPO_ROOT  = subprocess.check_output(
     ["git", "rev-parse", "--show-toplevel"]
 ).decode().strip()

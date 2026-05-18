@@ -21,8 +21,8 @@
             <li>We do <strong>not</strong> retain raw search query text in our application analytics tables.</li>
             <li>We do not build a profile of your interests, searches, or behaviour.</li>
             <li>We do not sell, rent, or share your personal data with advertisers.</li>
-            <li>We do not use third-party advertising networks.</li>
-            <li>We do not set persistent third-party tracking cookies.</li>
+            <li>We do not run first-party behavioural ad targeting from your search history.</li>
+            <li>Optional <strong>display ads</strong> (for example Google AdSense) may be shown when enabled on our deployment; those providers may use cookies or similar technologies under their own policies. You can use browser settings, opt-out tools, or ad blockers.</li>
         </ul>
 
         <h2>3. Data We Collect</h2>
@@ -62,7 +62,7 @@
             <li><code>session</code> — a signed, server-side session cookie that keeps you logged in. HttpOnly, Secure, SameSite=Lax. Expires when your browser session ends (or 7 days if you tick "remember me").</li>
             <li><code>abbiey_search_unlocked</code> — remembers whether you have unlocked unlimited search on this device. No personal data inside.</li>
         </ul>
-        <p>We do not set advertising or analytics cookies. Google Analytics is configured in "Basic" mode and only fires if you have not opted out via browser settings or an ad blocker.</p>
+        <p>Google Analytics is configured in "Basic" mode and only fires if you have not opted out via browser settings or an ad blocker. If <strong>Google AdSense</strong> is enabled, Google may set cookies or use identifiers for ad delivery and measurement as described in <a href="https://policies.google.com/technologies/ads" target="_blank" rel="noopener">Google&rsquo;s advertising policies</a>.</p>
 
         <h2>4. How We Use Your Data</h2>
         <table class="legal-table">
@@ -75,13 +75,31 @@
             </tbody>
         </table>
 
+        <h2 id="data-jurisdiction">4a. Data &amp; jurisdiction</h2>
+        <p>We are transparent about where your data physically lives and which legal regime applies.</p>
+        <ul>
+            <li><strong>Primary database (users, bookmarks, history, API keys):</strong> Supabase Postgres, region <code>{{ data_region_label }}</code>. Data at rest is encrypted by Supabase; access is restricted via Row Level Security. Cross-border transfers are subject to Supabase&rsquo;s <a href="https://supabase.com/legal/dpa" target="_blank" rel="noopener">DPA</a>.</li>
+            <li><strong>Request routing:</strong> Vercel Edge Network (global POPs). Your request terminates at the Vercel POP nearest to you and then talks to the primary DB region.</li>
+            <li><strong>Payments:</strong> Stripe (global, with US and Ireland entities depending on your location). We never store card numbers; Stripe handles PCI scope.</li>
+            <li><strong>Transactional email:</strong> Resend (US-based) when email verification or password reset is triggered. Leave the <code>RESEND_API_KEY</code> env var unset to disable.</li>
+            <li><strong>Reverse-image uploads:</strong> stored in a private Supabase Storage bucket for ~60 seconds, then deleted. A cron job sweeps anything older than 10 minutes as a safety net.</li>
+        </ul>
+        <p>
+            Self-hosters can surface their own region label by setting
+            <code>ABBIEY_DATA_REGION</code> (one of <code>sg</code>, <code>eu</code>, <code>us</code>,
+            <code>local</code>). <strong>EU data residency</strong> on the public-hosted instance is on
+            the <a href="/changelog">roadmap</a>; if you need it today, self-host into an
+            <code>eu-central-1</code> Supabase project &mdash; everything in the codebase supports it.
+        </p>
+
         <h2>5. Third-Party Services</h2>
         <p>We use the following sub-processors. Each has its own privacy policy.</p>
         <ul>
-            <li><strong>Supabase</strong> (supabase.com) — database and authentication. Data hosted in Singapore (ap-southeast-1). <a href="https://supabase.com/privacy" target="_blank" rel="noopener">Supabase Privacy Policy</a></li>
+            <li><strong>Supabase</strong> (supabase.com) — database, authentication, and private short-lived object storage for reverse-image uploads. Data hosted in the region shown in <a href="#data-jurisdiction">section 4a</a>. <a href="https://supabase.com/privacy" target="_blank" rel="noopener">Supabase Privacy Policy</a></li>
             <li><strong>Vercel</strong> (vercel.com) — web hosting and edge delivery. <a href="https://vercel.com/legal/privacy-policy" target="_blank" rel="noopener">Vercel Privacy Policy</a></li>
             <li><strong>Stripe</strong> (stripe.com) — payment processing. <a href="https://stripe.com/privacy" target="_blank" rel="noopener">Stripe Privacy Policy</a></li>
             <li><strong>Google Analytics</strong> (google.com/analytics) — aggregate, anonymised usage statistics. IP anonymisation enabled. <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google Privacy Policy</a></li>
+            <li><strong>Google AdSense</strong> (google.com/adsense) — optional display advertising when enabled in our configuration. <a href="https://policies.google.com/technologies/ads" target="_blank" rel="noopener">How Google uses cookies in advertising</a></li>
             <li><strong>DuckDuckGo</strong> (duckduckgo.com) — search results are proxied through our servers. Your IP is not sent to DuckDuckGo.</li>
             <li><strong>Cloudflare</strong> (cloudflare.com) — DNS-over-HTTPS resolver when you explicitly use <a href="#osint">Public signals (OSINT)</a>.</li>
             <li><strong>RDAP / registry operators</strong> — when you use OSINT, we follow redirects from <code>rdap.org</code> to the relevant registry or RIR; those operators process the domain or IP being looked up.</li>
