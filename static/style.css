@@ -6062,15 +6062,18 @@ footer {
 }
 
 /* ============================================================
-   Chatbots hub — homepage entry point
+   Homepage shortcuts — Hotels, Chatbots, etc.
    ============================================================ */
-.home-chatbots-row {
+.home-shortcuts-row {
   display: flex;
+  flex-wrap: wrap;
   justify-content: center;
-  margin: 1.1rem 0 .25rem;
+  align-items: center;
+  gap: 0.55rem;
+  margin: 0.85rem 0 0;
 }
 
-.home-chatbots-btn {
+.home-shortcut-btn {
   display: inline-flex;
   align-items: center;
   gap: .45rem;
@@ -6086,12 +6089,12 @@ footer {
   transition: opacity .15s, border-color .15s, background .15s;
 }
 
-.home-chatbots-btn:hover {
+.home-shortcut-btn:hover {
   opacity: 1;
   border-color: var(--accent, #7c6cfc);
   background: color-mix(in srgb, var(--accent, #7c6cfc) 8%, transparent);
 }
 
-.home-chatbots-btn svg {
+.home-shortcut-btn svg {
   flex-shrink: 0;
 }
