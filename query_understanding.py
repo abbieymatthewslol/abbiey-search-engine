@@ -11,6 +11,13 @@ import re
 from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
+# Import semantic parser for enhanced query understanding
+try:
+    from semantic_parser import enhance_query_understanding, rerank_results_by_semantic_relevance
+    SEMANTIC_PARSER_AVAILABLE = True
+except ImportError:
+    SEMANTIC_PARSER_AVAILABLE = False
+
 # --- Synonyms: informal / regional / slang → canonical English phrase (lowercase) ---
 SYNONYM_MAP: Dict[str, str] = {
     # Retail / places (AU/NZ/UK → neutral)
@@ -109,6 +116,7 @@ PLACE_CATEGORY_PHRASES: Dict[str, str] = {
     "grocery store": "grocery_store",
     "bakery": "bakery",
     "hotel": "hotel",
+    "hotels": "hotel",
     "hostel": "hostel",
     "library": "library",
     "museum": "museum",
@@ -149,9 +157,10 @@ class PreprocessedQuery:
     intent: str
     pattern: Optional[PatternParse]
     unknown_terms: List[str]
+    semantic_understanding: Optional[Dict[str, Any]] = None  # Enhanced semantic parse
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        d = {
             "original": self.original,
             "normalized": self.normalized,
             "synonyms_applied": [{"from": a, "to": b} for a, b in self.synonyms_applied],
@@ -159,6 +168,9 @@ class PreprocessedQuery:
             "pattern": self.pattern.to_dict() if self.pattern else None,
             "unknown_terms": self.unknown_terms,
         }
+        if self.semantic_understanding:
+            d["semantic_understanding"] = self.semantic_understanding
+        return d
 
 
 def normalize_synonyms(text: str) -> Tuple[str, List[Tuple[str, str]]]:
@@ -205,6 +217,17 @@ _NAV_HINTS = re.compile(
     r")\b",
     re.I,
 )
+_LEGAL_CRISIS_HINTS = re.compile(
+    r"\b("
+    r"ex\s+(?:steals?|stole|took|hide[sd]?|keep[s]?|refuses?)|"
+    r"landlord\s+(?:took|stole|refuses?|withh[oe]ld)|"
+    r"stolen\s+(?:dog|pet|cat|car|property)|"
+    r"custody|legal\s+help|lawyer|attorney|police|"
+    r"restraining\s+order|file\s+(?:charges|complaint)|"
+    r"report\s+(?:theft|stolen)|sue|rights|illegal"
+    r")\b",
+    re.I,
+)
 _SHORT_DOMAINISH = re.compile(
     r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$"
     r"|^[a-z0-9][a-z0-9.-]{1,40}\.(com|org|net|io|co|app|dev)$",
@@ -213,11 +236,13 @@ _SHORT_DOMAINISH = re.compile(
 
 
 def classify_intent(normalized: str, original: str) -> str:
-    """Rule-based intent: local_search | navigational | informational | transactional."""
+    """Rule-based intent: legal_crisis | local_search | navigational | informational | transactional."""
     s = (normalized or "").strip()
     o = (original or "").strip()
     if not s:
         return "informational"
+    if _LEGAL_CRISIS_HINTS.search(s) or _LEGAL_CRISIS_HINTS.search(o):
+        return "legal_crisis"
     if _TRANSACTIONAL_HINTS.search(s):
         return "transactional"
     compact = s.replace(" ", "")
@@ -441,12 +466,25 @@ def refine_query_for_search(raw: str) -> Tuple[str, List[str]]:
 
 
 def preprocess_query(query: str) -> PreprocessedQuery:
-    """Full pipeline: synonyms → intent → patterns → unknown hints."""
+    """Full pipeline: synonyms → intent → patterns → unknown hints → semantic parse."""
     original = query if query else ""
     normalized, synonyms_applied = normalize_synonyms(original.strip())
     intent = classify_intent(normalized, original)
     pattern = parse_query_patterns(normalized)
     unknown_terms = _collect_unknown_place_hints(normalized, pattern)
+    
+    # Enhanced semantic understanding
+    semantic_understanding = None
+    if SEMANTIC_PARSER_AVAILABLE:
+        try:
+            semantic_understanding = enhance_query_understanding(normalized or original)
+            # Override intent if semantic parser detects legal crisis
+            if semantic_understanding.get("intent_category") == "legal_crisis":
+                intent = "legal_crisis"
+        except Exception as e:
+            # Fail gracefully if semantic parser has issues
+            pass
+    
     return PreprocessedQuery(
         original=original.strip(),
         normalized=normalized.strip(),
@@ -454,6 +492,7 @@ def preprocess_query(query: str) -> PreprocessedQuery:
         intent=intent,
         pattern=pattern,
         unknown_terms=unknown_terms,
+        semantic_understanding=semantic_understanding,
     )
 
 
@@ -521,6 +560,8 @@ def _intent_summary_line(prep: PreprocessedQuery) -> str:
             return "Explanations · causes, context, and expert takes"
         if pk in ("closest", "near_me", "near_poi", "best_in"):
             return "Places & services · hours, maps, and options near you"
+    if prep.intent == "legal_crisis":
+        return "Legal resources · emergency help, legal aid, and next steps"
     if prep.intent == "navigational":
         return "Official pages · sign-in, homepage, and app entry points"
     if prep.intent == "transactional":

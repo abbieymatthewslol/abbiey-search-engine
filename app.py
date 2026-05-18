@@ -69,6 +69,7 @@ import bot_crawler as _bot_crawler
 import billing as _billing
 from api_v1 import api_v1 as _api_v1_bp
 import startup_checks as _startup_checks
+from hotels_blueprint import hotels_bp as _hotels_bp
 import digital_pet as _digital_pet
 from osint.service import enrich as _osint_enrich_run
 from osint.service import enrich_from_query as _osint_enrich_from_query
@@ -11720,6 +11721,7 @@ for _view_fn, _limit in _AUTH_RATE_LIMITS.items():
 app.register_blueprint(auth_bp)
 
 app.register_blueprint(admin_bp)
+app.register_blueprint(_hotels_bp)
 
 # Endpoint aliases: auth + admin routes are now exposed under their
 # blueprint-qualified names (e.g. `auth.login`, `admin.admin_api_stats`), but
