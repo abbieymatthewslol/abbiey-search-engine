@@ -1969,7 +1969,7 @@ class TestOfficialSitePromotion:
             "youtube", "netflix", "spotify", "linkedin", "reddit",
             "pinterest", "discord", "twitch", "x", "twitter",
             "gmail", "outlook", "chatgpt", "openai", "github",
-            "ebay", "walmart", "target", "uber", "airbnb",
+            "ebay", "walmart", "target", "uber", "salesforce",
             "paypal", "venmo", "stripe", "coinbase", "binance",
             "slack", "zoom", "notion", "canva", "figma",
             "wikipedia", "bbc", "cnn", "reuters", "nytimes",
@@ -1979,3 +1979,13 @@ class TestOfficialSitePromotion:
             entry = app._match_official_site_entry(name)
             assert entry is not None, f"expected {name!r} to be a known brand"
             assert entry["url"].startswith("https://"), f"{name!r} must have an https URL"
+
+    def test_lodging_ota_official_site_blocked_without_accommodation_context(self):
+        assert app._match_official_site_entry("booking") is None
+        assert app._match_official_site_entry("airbnb") is None
+        assert app._match_official_site_entry("expedia") is None
+
+    def test_lodging_ota_official_site_when_domain_or_strip_suffix(self):
+        assert app._match_official_site_entry("booking.com") is not None
+        assert app._match_official_site_entry("hotels.com") is not None
+        assert app._match_official_site_entry("booking.com login") is not None
