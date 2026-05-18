@@ -2625,6 +2625,44 @@ html[data-theme="light"] .home-mode-btn[data-search-mode="onion"]:hover {
   text-align: center;
 }
 
+/* Homepage shortcuts — Hotels, Chatbots (below search bar) */
+.home-shortcuts-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 0.55rem;
+  margin: 0.85rem 0 0;
+}
+.home-shortcut-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  padding: .45rem 1.1rem;
+  border-radius: 999px;
+  border: 1px solid var(--border, rgba(255,255,255,.14));
+  background: transparent;
+  color: inherit;
+  font-size: .9rem;
+  font-weight: 500;
+  text-decoration: none;
+  opacity: .85;
+  transition: opacity .15s, border-color .15s, background .15s;
+}
+.home-shortcut-btn:hover {
+  opacity: 1;
+  text-decoration: none;
+  border-color: var(--accent, #7c6cfc);
+  background: color-mix(in srgb, var(--accent, #7c6cfc) 8%, transparent);
+}
+.home-shortcut-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 85%, transparent);
+  outline-offset: 2px;
+}
+.home-shortcut-btn svg {
+  flex-shrink: 0;
+}
+
 /* Landing-state search bar: reduce affordance noise. On the home state
    (body without .has-results) the image and voice buttons fade in only
    when the search box is hovered or focused; the "Paste image URL" text
