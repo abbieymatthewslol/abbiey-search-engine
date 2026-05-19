@@ -46,6 +46,9 @@ class TestRoutes:
         resp = client.get("/about")
         assert resp.status_code == 200
         assert b"Structured deep dives" in resp.data
+        assert b"About me" in resp.data
+        assert b"abigailcherrywork@gmail.com" in resp.data
+        assert b"about-creator.png" in resp.data
 
     def test_homepage_no_longer_renders_depth_cards(self, client):
         resp = client.get("/search")
