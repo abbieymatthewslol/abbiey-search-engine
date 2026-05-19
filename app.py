@@ -826,7 +826,8 @@ def _init_pg_tables():
             verify_token  TEXT,
             verify_token_expires TIMESTAMPTZ,
             otp_code_hash TEXT,
-            otp_expires   TIMESTAMPTZ
+            otp_expires   TIMESTAMPTZ,
+            stripe_customer_id TEXT
         );
         CREATE INDEX IF NOT EXISTS idx_users_username ON users(LOWER(username));
         CREATE INDEX IF NOT EXISTS idx_users_email    ON users(LOWER(email));
@@ -863,6 +864,18 @@ def _init_pg_tables():
             revoked_at    TIMESTAMPTZ
         );
         CREATE INDEX IF NOT EXISTS idx_api_keys_user ON api_keys(user_id);
+
+        CREATE TABLE IF NOT EXISTS api_usage_events (
+            id              SERIAL PRIMARY KEY,
+            user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            endpoint        TEXT NOT NULL,
+            status_code     INTEGER NOT NULL,
+            latency_ms      INTEGER NOT NULL,
+            billable        INTEGER NOT NULL DEFAULT 1,
+            stripe_meter_id TEXT,
+            created_at      TIMESTAMPTZ DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_api_usage_user_month ON api_usage_events(user_id, created_at);
 
         CREATE TABLE IF NOT EXISTS waitlist (
             id         SERIAL PRIMARY KEY,
@@ -1181,9 +1194,22 @@ def _init_users_db():
                 email_verified INTEGER DEFAULT 1,
                 verify_token TEXT,
                 verify_token_expires TEXT,
-                otp_code_hash TEXT,
-                otp_expires TEXT
+            otp_code_hash TEXT,
+            otp_expires TEXT,
+            stripe_customer_id TEXT
+        );
+            CREATE TABLE IF NOT EXISTS api_usage_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                endpoint TEXT NOT NULL,
+                status_code INTEGER NOT NULL,
+                latency_ms INTEGER NOT NULL,
+                billable INTEGER NOT NULL DEFAULT 1,
+                stripe_meter_id TEXT,
+                created_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
             );
+            CREATE INDEX IF NOT EXISTS idx_api_usage_user_month ON api_usage_events(user_id, created_at);
             CREATE TABLE IF NOT EXISTS user_bookmarks (
                 id       INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id  INTEGER NOT NULL,
@@ -1310,6 +1336,58 @@ def _migrate_users_phone_column():
 
 
 _migrate_users_phone_column()
+
+
+def _migrate_billing_schema():
+    """API metering table + Stripe customer id on users (SQLite + Postgres)."""
+    if _SUPABASE_DB_URL and _SUPABASE_DB_READY:
+        for stmt in (
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT",
+            """
+            CREATE TABLE IF NOT EXISTS api_usage_events (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                endpoint TEXT NOT NULL,
+                status_code INTEGER NOT NULL,
+                latency_ms INTEGER NOT NULL,
+                billable INTEGER NOT NULL DEFAULT 1,
+                stripe_meter_id TEXT,
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            )
+            """,
+            "CREATE INDEX IF NOT EXISTS idx_api_usage_user_month ON api_usage_events(user_id, created_at)",
+        ):
+            try:
+                _pg_execute(stmt, [])
+            except Exception as exc:
+                logging.warning("PG billing schema migration: %s", exc)
+        return
+    sqlite_alters = (
+        "ALTER TABLE users ADD COLUMN stripe_customer_id TEXT",
+        """
+        CREATE TABLE IF NOT EXISTS api_usage_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            endpoint TEXT NOT NULL,
+            status_code INTEGER NOT NULL,
+            latency_ms INTEGER NOT NULL,
+            billable INTEGER NOT NULL DEFAULT 1,
+            stripe_meter_id TEXT,
+            created_at TEXT DEFAULT (datetime('now')),
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_api_usage_user_month ON api_usage_events(user_id, created_at)",
+    )
+    for stmt in sqlite_alters:
+        try:
+            with sqlite3.connect(_USERS_DB) as con:
+                con.execute(stmt)
+        except Exception:
+            pass
+
+
+_migrate_billing_schema()
 
 # Avatar column migration — SQLite only (PG schema already includes it)
 if not _SUPABASE_DB_READY:
@@ -3345,6 +3423,27 @@ ACCESS_RESOURCES_JSON = {
         "We stack multiple engines, publish open JSON helpers, and allow generous limits so research "
         "and access are not artificially cramped."
     ),
+    "developer_api": {
+        "docs": "/docs/api",
+        "openapi": "/openapi.json",
+        "interactive_docs": "/api/v1/docs",
+        "create_keys": "/developer",
+        "auth": "Authorization: Bearer abb_sk_live_…",
+        "v1": {
+            "health": "GET /api/v1/health",
+            "search": "GET /api/v1/search?q=…",
+            "bots": "GET /api/v1/bots",
+            "bot_query": "POST /api/v1/bots/{id}/query",
+            "reverse_image": "POST /api/v1/reverse-image",
+        },
+        "user_data_with_same_key": {
+            "me": "GET /api/user/me",
+            "bookmarks": "GET|POST /api/user/bookmarks",
+            "history": "GET|POST /api/user/history",
+            "recent_searches": "GET /api/user/recent-searches",
+            "search_bots": "GET|POST /api/user/search-bots",
+        },
+    },
     "this_site": {
         "search": "/search",
         "deep_web_tab": "/search?type=onion",
@@ -10983,6 +11082,17 @@ def _count_active_api_keys(uid: int) -> int:
     if not rows:
         return 0
     return int(rows[0].get("n") or 0)
+
+
+@app.route("/webhooks/stripe", methods=["POST"])
+@limiter.exempt
+def stripe_webhook():
+    """Stripe → link checkout customers to accounts for /api/v1 metered billing."""
+    payload, status = _billing.handle_stripe_webhook(
+        request.get_data(),
+        request.headers.get("Stripe-Signature", ""),
+    )
+    return jsonify(payload), status
 
 
 @app.route("/developer")

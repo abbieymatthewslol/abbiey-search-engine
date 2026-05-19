@@ -30,15 +30,21 @@
     </header>
     {% include 'includes/google_analytics.html' %}
     <main class="landing-main about-main">
-        <h1>Search for people who don&rsquo;t stop at the first link</h1>
+        <h1>About abbieysearch</h1>
         <p class="landing-lead">
-            I built <strong>abbieysearch</strong> for investigators, truth-seekers, and anyone who cross-checks before they trust.
-            You can use it without an account. Sign in only if you want bookmarks, synced history, or developer tools.
+            I built <strong>abbieysearch</strong> because most search tools either bury context or pretend uncertain answers are certain.
+            I wanted something that shows where information comes from, what&rsquo;s missing, and what the strongest counterargument is when a topic gets messy.
         </p>
         <p class="landing-lead">
-            I&rsquo;m aiming for direct answers, visible evidence, and honest tradeoffs — assumptions, edge cases, useful next steps,
-            and the strongest counterpoint when the answer is messy. Parts of it are still rough; that&rsquo;s me learning in public.
+            You can use it without an account. Sign in only if you want bookmarks, synced history, saved research chats, or API/dev tools.
         </p>
+        <p class="landing-lead">
+            The goal is pretty simple: direct answers, visible sources, fewer dead ends.
+        </p>
+        <p class="landing-lead">
+            Some parts are still rough. I&rsquo;m building it mostly by myself and figuring things out as I go, so things change fast.
+        </p>
+        <p class="about-signature">&mdash; Abbiey Matthews</p>
 
         <section class="about-creator" aria-label="About the creator">
             <div class="about-creator-media">
@@ -54,13 +60,18 @@
             <div class="about-creator-copy">
                 <h2>Who I am</h2>
                 <p>
-                    I&rsquo;m <strong>Abbiey Matthews</strong>, 21, from Melbourne, Australia. I work on abbieysearch solo —
-                    self-taught, and still teaching myself as I go. If something feels hazy or unfinished, that&rsquo;s usually
-                    honest progress, not indifference.
+                    I&rsquo;m <strong>Abbiey Matthews</strong>, 21, from Melbourne, Australia.
                 </p>
                 <p>
-                    Suggestions, bug reports, and &ldquo;hey, this would be useful&rdquo; notes are all welcome. I&rsquo;m one person
-                    behind the project, and I&rsquo;d genuinely enjoy hearing from you.
+                    I work on abbieysearch solo. I&rsquo;m self-taught, which mostly means a lot of testing things, breaking them,
+                    fixing them, and slowly getting better at building useful tools.
+                </p>
+                <p>
+                    If something feels unfinished, that&rsquo;s usually because I shipped it early instead of waiting until it looked perfect.
+                </p>
+                <p>
+                    If you find bugs, weird results, missing context, or just have ideas that would make the search better,
+                    I&rsquo;d genuinely like to hear them.
                 </p>
                 <p class="about-creator-contact">
                     <a href="mailto:privacy@abbieysearch.com?subject=abbieysearch%20feedback">privacy@abbieysearch.com</a>
@@ -68,71 +79,116 @@
             </div>
         </section>
 
-        <section class="about-principles" aria-label="Search approach">
+        <h2 class="about-block-title">What the search tries to do</h2>
+        <section class="about-principles" aria-label="What the search tries to do">
             <article class="about-principle">
-                <h2>Structured deep dives</h2>
-                <p>Summarize the consensus, then surface the strongest opposing view and where the evidence is thin.</p>
+                <h2>Show the disagreement, not just the summary</h2>
+                <p>Instead of flattening everything into one answer, abbieysearch tries to show:</p>
+                <ul>
+                    <li>what most sources agree on</li>
+                    <li>where the evidence is weak</li>
+                    <li>and what the strongest opposing view is</li>
+                </ul>
             </article>
             <article class="about-principle">
-                <h2>Actionable outputs</h2>
-                <p>Turn search into checklists, troubleshooting steps, templates, and concrete next moves.</p>
+                <h2>Turn searches into something usable</h2>
+                <p>Sometimes you don&rsquo;t just want links. You want:</p>
+                <ul>
+                    <li>steps</li>
+                    <li>checklists</li>
+                    <li>troubleshooting</li>
+                    <li>comparisons</li>
+                    <li>useful next actions</li>
+                </ul>
             </article>
             <article class="about-principle">
-                <h2>More context, fewer dead ends</h2>
-                <p>Explain assumptions, decode jargon, and call out the edge cases before they waste your time.</p>
+                <h2>Explain the missing context</h2>
+                <p>
+                    A lot of search frustration comes from hidden assumptions and unexplained jargon.
+                    The search tries to surface those before they waste your time.
+                </p>
             </article>
             <article class="about-principle">
-                <h2>Short or deep</h2>
-                <p>Same search — quick takeaway or enough raw material to judge for yourself.</p>
+                <h2>Quick answer or deep dive</h2>
+                <p>
+                    You can skim the short version or go deeper into sources, quotes, and competing viewpoints without changing tools.
+                </p>
             </article>
         </section>
 
-        <section class="about-controls" aria-label="Tools for repeat investigations">
-            <h2>Tools for repeat investigations</h2>
+        <section class="about-controls" aria-label="Built for repeat investigations">
+            <h2>Built for repeat investigations</h2>
             <p>
-                Built for people who run the same query twice with different depth — entity detection, optional public OSINT,
-                indexed <code>.onion</code> references, breach check, and adversarial answer modes.
+                Some people search once. Some people rerun the same query six different ways.
+                The tools are designed more for the second group.
+            </p>
+            <p>Features include:</p>
+            <ul class="landing-points about-points">
+                <li>entity detection</li>
+                <li>optional public OSINT enrichment</li>
+                <li>indexed <code>.onion</code> references</li>
+                <li>breach checking</li>
+                <li>adversarial answer modes</li>
+                <li>research memory and follow-ups</li>
+            </ul>
+
+            <h3>Entity bar</h3>
+            <p>Recognizes things like:</p>
+            <ul class="landing-points about-points">
+                <li>IPs</li>
+                <li>domains</li>
+                <li>emails</li>
+                <li>usernames</li>
+                <li>crypto wallets</li>
+                <li>coordinates</li>
+            </ul>
+            <p>&hellip;and builds structured context around them.</p>
+
+            <h3>Public OSINT tools</h3>
+            <p>
+                Optional RDAP, DNS, and other public metadata lookups.
+                No private intrusion stuff. Just public records gathered in one place
+                (<a href="/privacy#osint">how we handle OSINT</a>).
+            </p>
+
+            <h3>Onion/Tor references</h3>
+            <p>
+                Clearnet-indexed <code>.onion</code> references through Ahmia and DuckDuckGo.
+                Not a darknet crawler. No hidden indexing claims
+                (<a href="/docs/deep-web">scope &amp; limits</a>).
+            </p>
+
+            <h3>Breach check</h3>
+            <p>
+                Lets you check whether an email appeared in known public breaches.
+                No stored searches. No saved lookup history
+                (<a href="/breach-check">breach check</a>).
+            </p>
+
+            <h3>Research Assistant</h3>
+            <p>
+                Every results page includes a research panel for follow-up questions based on the sources you already opened.
+                You can:
             </p>
             <ul class="landing-points about-points">
-                <li><strong>Entity bar:</strong> IP, domain, email, username, crypto, coordinates, and more — one search, structured context.</li>
-                <li><strong>Public signals (OSINT):</strong> expand-on-demand RDAP, DNS, and related public metadata — lawful recon only (<a href="/privacy#osint">how we handle OSINT</a>).</li>
-                <li><strong>Onion / Tor tab:</strong> clearnet-indexed <code>.onion</code> references via Ahmia + DDG — not a dark-web crawl (<a href="/docs/deep-web">scope &amp; limits</a>).</li>
-                <li><strong>Breach check:</strong> <a href="/breach-check">private email exposure lookup</a> — no storage, no query logs.</li>
-                <li><strong>People finder:</strong> optional public-web hints before a focused <a href="/people/find">people search</a>.</li>
-                <li><strong>Research Assistant:</strong> follow-ups grounded in your results — save locally or to your account.</li>
+                <li>continue investigations</li>
+                <li>attach images</li>
+                <li>save chats locally</li>
+                <li>or sync them to your account</li>
             </ul>
-        </section>
-
-        <section class="about-controls" aria-label="Answer depth">
-            <h2>How much depth you want</h2>
-            <p>
-                Sometimes you want a fast answer. Sometimes you want the raw material, competing viewpoints, and receipts.
-                You can move between both on the same search — no switching tools.
-            </p>
-            <p>
-                Different questions need different kinds of answers. I put depth, evidence, and tone on the results page
-                instead of hiding everything behind one default response.
-            </p>
-            <ul class="landing-points about-points">
-                <li><strong>Depth:</strong> Quick, Standard, Deep, or Research.</li>
-                <li><strong>Evidence:</strong> Links only, key quotes, or fuller excerpts.</li>
-                <li><strong>Answer style:</strong> Direct, balanced, or adversarial.</li>
-            </ul>
-        </section>
-
-        <section class="about-controls" aria-label="Research Assistant">
-            <h2>Research Assistant</h2>
-            <p>
-                On any results page, open the Research panel for follow-ups grounded in what you already found.
-                Attach images for visual questions. Save chats locally, or to your account when signed in, and pick up later.
-            </p>
         </section>
 
         <section class="about-controls" aria-label="Privacy">
-            <h2>Privacy should not be a premium feature</h2>
+            <h2>Privacy</h2>
+            <p>Privacy should be normal, not a paid upgrade.</p>
+            <ul class="landing-points about-points">
+                <li>No third-party ad trackers.</li>
+                <li>No silent profiling.</li>
+                <li>No account required to search.</li>
+            </ul>
             <p>
-                No third-party ad trackers. No silent profiling. No server-side query logging tied to your searches.
-                You can search without an account — sign in only if you want bookmarks, synced history, saved research chats, or API access.
+                If you sign in, it&rsquo;s for features like saved research, synced history, bookmarks, or API access &mdash;
+                not because anonymous search is artificially restricted.
             </p>
         </section>
 

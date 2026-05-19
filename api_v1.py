@@ -71,6 +71,8 @@ def _auth_or_401():
 
 def _record_usage(user_id: int, endpoint: str, status_code: int, latency_ms: int) -> None:
     """Persist a usage row and enqueue a Stripe meter event (best effort)."""
+    if int(status_code) >= 500:
+        return
     try:
         import billing
 

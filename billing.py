@@ -57,28 +57,17 @@ def configure(execute_fn: Callable[..., list]) -> None:
 
 
 def ensure_schema() -> None:
-    """Create the usage table if missing. Idempotent; called lazily."""
+    """Verify the usage table exists (created in app DB migrations)."""
     global _schema_ready
     if _schema_ready or _exec is None:
         return
-    _exec(
-        """
-        CREATE TABLE IF NOT EXISTS api_usage_events (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            endpoint TEXT NOT NULL,
-            status_code INTEGER NOT NULL,
-            latency_ms INTEGER NOT NULL,
-            billable INTEGER NOT NULL DEFAULT 1,
-            stripe_meter_id TEXT,
-            created_at TEXT NOT NULL
+    try:
+        _exec("SELECT 1 AS ok FROM api_usage_events LIMIT 1", [])
+    except Exception:
+        logger.warning(
+            "api_usage_events table missing; /api/v1 usage metering disabled until migrations run"
         )
-        """
-    )
-    _exec(
-        "CREATE INDEX IF NOT EXISTS idx_api_usage_user_month "
-        "ON api_usage_events(user_id, created_at)"
-    )
+        return
     _schema_ready = True
 
 
@@ -106,8 +95,12 @@ def record_event(*, user_id: int, endpoint: str, status_code: int, latency_ms: i
     """Persist a single usage row and maybe flush to Stripe."""
     if _exec is None:
         return
+    if int(status_code) >= 500:
+        return
     try:
         ensure_schema()
+        if not _schema_ready:
+            return
         used_this_month = _count_user_events_this_month(user_id)
         billable = 0 if used_this_month < FREE_MONTHLY_CALLS else 1
         _exec(
@@ -219,6 +212,70 @@ def _stripe_customer_for_user(user_id: int) -> Optional[str]:
     if not cid:
         return None
     return str(cid)
+
+
+def link_stripe_customer_for_email(email: str, customer_id: str) -> bool:
+    """Attach a Stripe customer id to the account matching *email* (checkout webhook)."""
+    if _exec is None or not email or not customer_id:
+        return False
+    em = email.strip().lower()[:320]
+    cid = str(customer_id).strip()[:120]
+    if not em or not cid:
+        return False
+    try:
+        rows = _exec("SELECT id FROM users WHERE LOWER(email)=? LIMIT 1", [em])
+        if not rows:
+            logger.info("stripe_link: no user for checkout email")
+            return False
+        uid = int(rows[0]["id"])
+        _exec("UPDATE users SET stripe_customer_id=? WHERE id=?", [cid, uid])
+        return True
+    except Exception:
+        logger.exception("stripe_link_customer_failed")
+        return False
+
+
+def handle_stripe_webhook(raw_body: bytes, sig_header: str) -> tuple[dict, int]:
+    """Verify Stripe signature and link customers after API checkout."""
+    wh_secret = (os.environ.get("STRIPE_WEBHOOK_SECRET") or "").strip()
+    if not wh_secret:
+        return {"error": "webhook_not_configured"}, 503
+    api_key = (os.environ.get("STRIPE_SECRET_KEY") or "").strip()
+    if not api_key:
+        return {"error": "stripe_not_configured"}, 503
+    try:
+        import stripe
+
+        stripe.api_key = api_key
+        event = stripe.Webhook.construct_event(raw_body, sig_header or "", wh_secret)
+    except ValueError:
+        return {"error": "invalid_payload"}, 400
+    except Exception:
+        logger.exception("stripe_webhook_verify_failed")
+        return {"error": "invalid_signature"}, 400
+
+    etype = getattr(event, "type", None) or (event.get("type") if isinstance(event, dict) else "")
+    obj = getattr(event, "data", None)
+    data_obj = getattr(obj, "object", None) if obj is not None else None
+    if data_obj is None and isinstance(event, dict):
+        data_obj = (event.get("data") or {}).get("object") or {}
+
+    linked = False
+    if etype == "checkout.session.completed":
+        sess = data_obj if isinstance(data_obj, dict) else {}
+        cid = sess.get("customer")
+        details = sess.get("customer_details") or {}
+        email = details.get("email") or sess.get("customer_email")
+        if cid and email:
+            linked = link_stripe_customer_for_email(str(email), str(cid))
+    elif etype in ("customer.created", "customer.updated"):
+        cust = data_obj if isinstance(data_obj, dict) else {}
+        cid = cust.get("id")
+        email = cust.get("email")
+        if cid and email:
+            linked = link_stripe_customer_for_email(str(email), str(cid))
+
+    return {"ok": True, "linked": linked, "type": etype}, 200
 
 
 def monthly_usage_for_user(user_id: int) -> dict:

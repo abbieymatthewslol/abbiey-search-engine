@@ -6112,6 +6112,7 @@ footer {
   gap: 1.1rem 1.5rem;
   margin: 2rem 0 1.75rem;
 }
+.about-block-title,
 .about-principle h2,
 .about-controls h2 {
   margin: 0 0 0.35rem;
@@ -6119,6 +6120,34 @@ footer {
   font-weight: 600;
   letter-spacing: -0.01em;
   color: var(--text);
+}
+.about-block-title {
+  margin-top: 0.25rem;
+  margin-bottom: 1rem;
+  font-size: 1.125rem;
+}
+.about-principle h2,
+.about-controls h3 {
+  margin: 0 0 0.35rem;
+}
+.about-controls h3 {
+  margin-top: 1.25rem;
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.about-signature {
+  margin: -0.5rem 0 1.75rem;
+  color: var(--text-muted);
+  font-size: 0.9375rem;
+}
+.about-principle ul {
+  margin: 0.5rem 0 0;
+  padding-left: 1.25rem;
+  color: var(--text-dim);
+  line-height: 1.6;
+  font-size: 0.9375rem;
 }
 .about-principle p,
 .about-controls p {
