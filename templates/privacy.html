@@ -1,6 +1,7 @@
 {% extends "base.html" %}
-{% block title %}Privacy Policy — abbieysearch{% endblock %}
-{% block meta_description %}abbieysearch Privacy Policy — how we handle your data, what we collect, and what we never do.{% endblock %}
+{% set seo = get_seo('privacy') %}
+{% block title %}{{ seo.title }}{% endblock %}
+{% block meta_description %}{{ seo.description }}{% endblock %}
 
 {% block content %}
 <div class="legal-page">

@@ -24,16 +24,17 @@
     <!-- Vercel Web Analytics -->
     <script defer src="https://cdn.vercel-insights.com/v1/script.js"></script>
     <!-- SEO & PWA -->
-    <meta name="description" content="{% block meta_description %}abbieysearch — Privacy-first web search. No account required.{% endblock %}">
+    <meta name="description" content="{% block meta_description %}{{ get_seo('default').description }}{% endblock %}">
+    <meta name="keywords" content="{% block meta_keywords %}{{ get_seo('default').keywords }}{% endblock %}">
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="abbieysearch">
-    <meta property="og:title" content="{% block og_title %}abbieysearch{% endblock %}">
-    <meta property="og:description" content="{% block og_description %}Private search engine. No tracking. No profiling.{% endblock %}">
+    <meta property="og:title" content="{% block og_title %}{{ get_seo('default').og_title }}{% endblock %}">
+    <meta property="og:description" content="{% block og_description %}{{ get_seo('default').og_description }}{% endblock %}">
     <meta property="og:url" content="{% block og_url %}{{ site_base_url }}{{ request.path }}{% endblock %}">
     <meta property="og:image" content="{{ site_base_url }}/static/og-image.png">
     <meta name="twitter:card" content="summary">
-    <meta name="twitter:title" content="{% block tw_title %}abbieysearch{% endblock %}">
-    <meta name="twitter:description" content="{% block tw_description %}Private search engine. No tracking. No profiling.{% endblock %}">
+    <meta name="twitter:title" content="{% block tw_title %}{{ get_seo('default').tw_title }}{% endblock %}">
+    <meta name="twitter:description" content="{% block tw_description %}{{ get_seo('default').tw_description }}{% endblock %}">
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#000000">
     <meta name="mobile-web-app-capable" content="yes">

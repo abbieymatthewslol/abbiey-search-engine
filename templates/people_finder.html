@@ -1,6 +1,7 @@
 {% extends "auth_base.html" %}
-{% block title %}People finder · abbieysearch{% endblock %}
-{% block meta_description %}Optional questionnaire to narrow a people-focused search — public-web sources only.{% endblock %}
+{% set seo = get_seo('people_finder') %}
+{% block title %}{{ seo.title }}{% endblock %}
+{% block meta_description %}{{ seo.description }}{% endblock %}
 {% block canonical %}
 <link rel="canonical" href="{{ site_base_url }}{{ url_for('people_find') }}">
 {% endblock %}

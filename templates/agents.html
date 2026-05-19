@@ -1,10 +1,11 @@
 {% extends "base.html" %}
-{% block title %}AI agents · abbieysearch{% endblock %}
-{% block meta_description %}Set up search agents: custom crawls on your sites and specialist AI chat — plus what is coming for alerts and automation.{% endblock %}
-{% block og_title %}AI agents · abbieysearch{% endblock %}
-{% block og_description %}Build agents for focused search, AI tasks, and future notify-when automations. Free account to save your bots.{% endblock %}
-{% block tw_title %}AI agents · abbieysearch{% endblock %}
-{% block tw_description %}Build agents for focused search and AI workflows. Signed-in users configure custom bots and chat agents here.{% endblock %}
+{% set seo = get_seo('agents') %}
+{% block title %}{{ seo.title }}{% endblock %}
+{% block meta_description %}{{ seo.description }}{% endblock %}
+{% block og_title %}{{ seo.og_title }}{% endblock %}
+{% block og_description %}{{ seo.og_description }}{% endblock %}
+{% block tw_title %}{{ seo.tw_title }}{% endblock %}
+{% block tw_description %}{{ seo.tw_description }}{% endblock %}
 
 {% block content %}
 <main class="agents-hub" style="max-width:42rem;margin:0 auto;padding:1.5rem 1rem 3rem">

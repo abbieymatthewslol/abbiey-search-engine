@@ -1,10 +1,11 @@
 {% extends "base.html" %}
-{% block title %}Developer · abbieysearch{% endblock %}
-{% block meta_description %}abbieysearch developer portal — manage API keys, explore the REST API v1, and integrate private search into your applications.{% endblock %}
-{% block og_title %}Developer portal · abbieysearch{% endblock %}
-{% block og_description %}Manage API keys and explore the abbieysearch REST API. Build apps on private, unfiltered search.{% endblock %}
-{% block tw_title %}Developer portal · abbieysearch{% endblock %}
-{% block tw_description %}Manage API keys and explore the abbieysearch REST API. Build apps on private, unfiltered search.{% endblock %}
+{% set seo = get_seo('developer') %}
+{% block title %}{{ seo.title }}{% endblock %}
+{% block meta_description %}{{ seo.description }}{% endblock %}
+{% block og_title %}{{ seo.og_title }}{% endblock %}
+{% block og_description %}{{ seo.og_description }}{% endblock %}
+{% block tw_title %}{{ seo.tw_title }}{% endblock %}
+{% block tw_description %}{{ seo.tw_description }}{% endblock %}
 
 {% block content %}
 <main class="dev-page">

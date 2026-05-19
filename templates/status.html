@@ -1,10 +1,11 @@
 {% extends "base.html" %}
-{% block title %}Service status · abbieysearch{% endblock %}
-{% block meta_description %}Live abbieysearch service status — check uptime and health for search, AI summaries, OSINT, and deep web features.{% endblock %}
-{% block og_title %}Service status · abbieysearch{% endblock %}
-{% block og_description %}Live status of all abbieysearch features: search, AI, OSINT, deep web.{% endblock %}
-{% block tw_title %}Service status · abbieysearch{% endblock %}
-{% block tw_description %}Live status of all abbieysearch features: search, AI, OSINT, deep web.{% endblock %}
+{% set seo = get_seo('status') %}
+{% block title %}{{ seo.title }}{% endblock %}
+{% block meta_description %}{{ seo.description }}{% endblock %}
+{% block og_title %}{{ seo.og_title }}{% endblock %}
+{% block og_description %}{{ seo.og_description }}{% endblock %}
+{% block tw_title %}{{ seo.tw_title }}{% endblock %}
+{% block tw_description %}{{ seo.tw_description }}{% endblock %}
 {% block content %}
 <main class="legal-page" style="max-width:820px;margin:0 auto;padding:2.5rem 1.25rem 4rem;line-height:1.6">
     <h1 style="font-size:1.7rem;margin:0 0 .5rem">Service status</h1>

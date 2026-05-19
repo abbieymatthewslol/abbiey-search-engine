@@ -4,24 +4,24 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     {% include 'includes/theme_bootstrap.html' %}
-    <title>abbieysearch — Pricing</title>
+    <title>{{ get_seo('pricing').title }}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=deploy_hash) }}">
     {% include 'includes/google_site_verification.html' %}
     <script nonce="{{ csp_nonce }}">
         window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
     </script>
     <script defer src="/_vercel/speed-insights/script.js"></script>
-    <meta name="description" content="abbieysearch pricing: search free with a generous cap, optional paid search unlock for heavy use, and metered /api/v1 access billed through Stripe. No ads in results.">
+    <meta name="description" content="{{ get_seo('pricing').description }}">
     <link rel="canonical" href="{{ site_base_url }}/pricing">
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="abbieysearch">
-    <meta property="og:title" content="abbieysearch — Pricing">
-    <meta property="og:description" content="Free and paid options: generous anonymous search, optional unlock for high volume, and API metering for developers.">
+    <meta property="og:title" content="{{ get_seo('pricing').og_title }}">
+    <meta property="og:description" content="{{ get_seo('pricing').og_description }}">
     <meta property="og:image" content="{{ site_base_url }}/static/og-image.png">
     <meta property="og:url" content="{{ site_base_url }}/pricing">
     <meta name="twitter:card" content="summary">
-    <meta name="twitter:title" content="abbieysearch — Pricing">
-    <meta name="twitter:description" content="How free search, optional paid unlock, and API billing work on abbieysearch.">
+    <meta name="twitter:title" content="{{ get_seo('pricing').tw_title }}">
+    <meta name="twitter:description" content="{{ get_seo('pricing').tw_description }}">
 </head>
 <body>
     <header class="landing-header">

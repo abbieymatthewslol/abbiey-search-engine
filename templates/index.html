@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     {% include 'includes/theme_bootstrap.html' %}
-    <title>{% if query %}{{ query }} — {{ search_mode_title_suffix(search_type) }} — abbieysearch{% else %}abbieysearch — unfiltered answers with receipts{% endif %}</title>
+    <title>{% if query %}{{ query }} — {{ search_mode_title_suffix(search_type) }} — abbieysearch{% else %}{{ get_seo('search_home').title }}{% endif %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=deploy_hash) }}">
     <meta name="deploy-hash" content="{{ deploy_hash }}">
     {% include 'includes/google_site_verification.html' %}
@@ -22,12 +22,13 @@
     <meta property="og:url" content="{{ site_base_url }}{{ search_mode_href(search_type, query, region=region, time_filter=time_filter or '', cleanweb=cleanweb, open_knowledge=open_knowledge, onion_mode=(onion_mode if search_type == 'onion' else ''), img_scroll_extras=(img_scroll_extras if search_type == 'images' else ''), people_pf_extra=(people_pf_url_extra if search_type == 'people' else ''), mybot_id=(mybot_id if search_type == 'mybot' else none), search_type_saved=(search_type == 'saved')) }}">
     <link rel="canonical" href="{{ site_base_url }}{{ search_mode_href(search_type, query, region=region, time_filter=time_filter or '', cleanweb=cleanweb, open_knowledge=open_knowledge, onion_mode=(onion_mode if search_type == 'onion' else ''), img_scroll_extras=(img_scroll_extras if search_type == 'images' else ''), people_pf_extra=(people_pf_url_extra if search_type == 'people' else ''), mybot_id=(mybot_id if search_type == 'mybot' else none), search_type_saved=(search_type == 'saved')) }}">
     {% else %}
-    <meta name="description" content="Search the web on abbieysearch: no server-side query logs, AI summaries, deep web and image modes, and optional sign-in for bookmarks and the API.">
-    <meta property="og:title" content="abbieysearch — unfiltered answers with receipts">
-    <meta property="og:description" content="Private search with source-backed context, .onion search, and research tools. No mandatory account; generous free tier, optional paid unlock for heavy use.">
+    {% set _seo = get_seo('search_home') %}
+    <meta name="description" content="{{ _seo.description }}">
+    <meta property="og:title" content="{{ _seo.og_title }}">
+    <meta property="og:description" content="{{ _seo.og_description }}">
     <meta property="og:url" content="{{ site_base_url }}/search">
     {% endif %}
-    <meta name="keywords" content="deep search engine, sourced answers, research search, direct answers, full-context search">
+    <meta name="keywords" content="{{ get_seo('search_home').keywords }}">
     <meta name="author" content="abbieysearch">
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="abbieysearch">
@@ -37,8 +38,8 @@
     <meta name="twitter:title" content="{{ query }} — {{ search_mode_title_suffix(search_type) }} — abbieysearch">
     <meta name="twitter:description" content="Sourced results for “{{ query }}” on abbieysearch — private search, no server-side query logging.">
     {% else %}
-    <meta name="twitter:title" content="abbieysearch — unfiltered answers with receipts">
-    <meta name="twitter:description" content="Private search: AI summaries, deep web, and source-backed context. Free tier with optional paid unlock.">
+    <meta name="twitter:title" content="{{ get_seo('search_home').tw_title }}">
+    <meta name="twitter:description" content="{{ get_seo('search_home').tw_description }}">
     {% endif %}
     <meta name="twitter:image" content="{{ site_base_url }}/static/og-image.png">
     {% if not query %}<link rel="canonical" href="{{ site_base_url }}/search">{% endif %}
@@ -55,28 +56,16 @@
     <!-- OpenSearch -->
     <link rel="search" type="application/opensearchdescription+xml" title="abbieysearch" href="/opensearch.xml">
     <!-- JSON-LD -->
+    {% if not query %}
     <script type="application/ld+json">
-    {
-      "@context": "https://schema.org",
-      "@type": "WebSite",
-      "name": "abbieysearch",
-      "url": {{ (site_base_url + '/search')|tojson }},
-      "description": "abbieysearch delivers direct answers, deeper context, and source-backed receipts for people who want the why.",
-      "potentialAction": {
-        "@type": "SearchAction",
-        "target": {
-          "@type": "EntryPoint",
-          "urlTemplate": {{ (site_base_url + '/search?q={search_term_string}')|tojson }}
-        },
-        "query-input": "required name=search_term_string"
-      }
-    }
+    {{ seo_json_ld_webapp(site_base_url) | tojson }}
     </script>
+    {% endif %}
 </head>
 <body class="{% if query %}has-results page-search--{{ search_type }}{% endif %} has-site-bottom-nav">
     <noscript>
         <div class="noscript-banner" role="note">
-            <strong>abbieysearch</strong> &mdash; direct, detailed search with receipts.
+            <strong>abbieysearch</strong> &mdash; OSINT-friendly search with receipts.
             <a href="/privacy">Privacy Policy</a> &middot; <a href="/terms">Terms</a> &middot; <a href="/search">Search</a>
         </div>
     </noscript>
@@ -488,7 +477,7 @@
             {# ===== HOME: logo → headline → search → one supporting line ===== #}
             <div class="home-hero">
                 <h1 class="home-logo">abbiey.<span>search</span></h1>
-                <p class="home-hero-headline">Unfiltered answers.</p>
+                <p class="home-hero-headline">Built for people who verify.</p>
             </div>
             {% if search_type == 'people' and not query %}
             <aside class="people-find-banner landing-pf-banner" role="note">
@@ -581,7 +570,7 @@
                     <button type="button" class="home-mode-btn{% if search_type == 'onion' %} active{% endif %}" data-search-mode="onion" aria-pressed="{% if search_type == 'onion' %}true{% else %}false{% endif %}" title="Clearnet-indexed .onion sites via Ahmia + DDG">Onion / Tor</button>
                 </div>
             </nav>
-            <p class="home-message-sub" aria-label="Search positioning">Direct answers. Sources. No fluff.</p>
+            <p class="home-message-sub" aria-label="Search positioning">Entities, OSINT signals, .onion index, breach check — same search, deeper runs, receipts on the page.</p>
             <div class="home-recent-wrap">
                 <div id="recent-searches-home" class="recent-searches-home"></div>
             </div>
