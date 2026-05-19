@@ -1361,7 +1361,7 @@
                 {% for r in results %}
                     {% if search_type == 'images' %}
                     <div class="image-card" data-full="{{ r.image or r.thumbnail }}" data-title="{{ r.title }}" data-source="{{ r.source or '' }}" data-url="{{ r.url }}" data-license="{{ r.license or '' }}" role="button" tabindex="0" aria-label="Open image result: {{ r.title }}">
-                        <img src="{{ r.thumbnail or r.image }}" alt="{{ r.title }}" loading="lazy">
+                        <img src="{{ r.thumbnail or r.image }}" alt="{{ r.title }}" loading="lazy" referrerpolicy="no-referrer" decoding="async">
                         <div class="image-card-info">
                             <span class="image-title">{{ r.title }}</span>
                             {% if r.source %}<span class="image-source">{{ r.source }}</span>{% endif %}

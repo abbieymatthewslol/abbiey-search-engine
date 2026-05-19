@@ -2081,7 +2081,7 @@ document.addEventListener("DOMContentLoaded", () => {
             el.dataset.license = r.license || "";
             const lic = r.license ? `<span class="image-license" title="License">${esc(r.license)}</span>` : "";
             const desc = r.body ? `<p class="image-result-desc">${esc(r.body)}</p>` : "";
-            el.innerHTML = `<img src="${esc(r.thumbnail || r.image)}" alt="${esc(r.title)}" loading="lazy"><div class="image-card-info"><span class="image-title">${esc(r.title)}</span>${r.source ? `<span class="image-source">${esc(r.source)}</span>` : ""}${desc}${lic}</div>`;
+            el.innerHTML = `<img src="${esc(r.thumbnail || r.image)}" alt="${esc(r.title)}" loading="lazy" referrerpolicy="no-referrer" decoding="async"><div class="image-card-info"><span class="image-title">${esc(r.title)}</span>${r.source ? `<span class="image-source">${esc(r.source)}</span>` : ""}${desc}${lic}</div>`;
           } else if (type === "videos") {
             el.className = "result video-result";
             el.innerHTML = `${r.thumbnail ? `<a href="${esc(r.url)}" target="_blank" rel="noopener" class="video-thumb"><img src="${esc(r.thumbnail)}" alt="${esc(r.title)}" loading="lazy">${r.duration ? `<span class="duration">${esc(r.duration)}</span>` : ""}</a>` : ""}<div class="result-text"><a href="${esc(r.url)}" target="_blank" rel="noopener" class="result-title">${esc(r.title)}</a>${faviconImg(r.url)}<cite class="result-url">${esc(r.publisher || "")}</cite><p class="result-snippet">${esc(r.description || "")}</p><div class="result-actions" data-feedback="1"><button type="button" class="result-action-btn feedback-btn" data-rating="up">Helpful</button><button type="button" class="result-action-btn feedback-btn" data-rating="down">Not relevant</button></div></div>`;
@@ -2104,6 +2104,7 @@ document.addEventListener("DOMContentLoaded", () => {
           frag.appendChild(el);
         });
         container.appendChild(frag);
+        if (type === "images") bindImageCards(container);
         initBookmarkBtns(container);
         applySavedResultOrder(container);
         attachResultDragHandles(container);
@@ -2130,6 +2131,28 @@ document.addEventListener("DOMContentLoaded", () => {
   }, { rootMargin: "0px 0px 600px 0px" });
   observer.observe(sentinel);
   }
+
+  // ===== Image grid: hotlink-friendly thumbs + broken-thumb fallback =====
+  function bindImageCardImg(img) {
+    if (!img || img._imgBound) return;
+    img._imgBound = true;
+    img.referrerPolicy = "no-referrer";
+    img.decoding = "async";
+    img.addEventListener("error", function () {
+      const card = img.closest(".image-card");
+      const full = card && (card.dataset.full || "").trim();
+      if (full && img.src !== full) {
+        img.src = full;
+        return;
+      }
+      const wrap = img.closest(".image-card");
+      if (wrap) wrap.classList.add("image-card-broken");
+    }, { once: false });
+  }
+  function bindImageCards(root) {
+    (root || document).querySelectorAll(".image-card img").forEach(bindImageCardImg);
+  }
+  bindImageCards(document.getElementById("results"));
 
   // ===== Image lightbox =====
   const lightbox = document.getElementById("lightbox");

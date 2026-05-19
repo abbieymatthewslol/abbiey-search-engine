@@ -245,6 +245,22 @@ class TestRoutes:
         assert b"Advanced image search" in resp.data
         assert b"Openverse" in resp.data
 
+    def test_ddg_image_filters_from_advanced_opts(self, client, mock_ddg):
+        """Advanced size/aspect map to ddgs.images size/layout kwargs."""
+        client.get("/search?q=cats&type=images&img_adv=1&img_size=large&img_aspect=tall")
+        assert mock_ddg.images.called
+        kw = mock_ddg.images.call_args.kwargs
+        assert kw.get("size") == "Large"
+        assert kw.get("layout") == "Tall"
+
+    def test_filter_image_results_drops_invalid_urls(self):
+        from app import _filter_image_results
+
+        assert _filter_image_results([{"title": "x", "image": ""}]) == []
+        ok = _filter_image_results([{"title": "a", "thumbnail": "https://example.com/a.jpg"}])
+        assert len(ok) == 1
+        assert ok[0]["image"] == "https://example.com/a.jpg"
+
     def test_search_news(self, client, mock_ddg):
         resp = client.get("/search?q=tech&type=news")
         assert resp.status_code == 200

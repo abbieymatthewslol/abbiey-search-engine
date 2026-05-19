@@ -1908,6 +1908,7 @@ article.result.code-result { font-size: .9rem; }
   outline-offset: 3px;
 }
 .image-card img { width: 100%; height: 100%; object-fit: cover; }
+.image-card.image-card-broken { display: none; }
 .image-card:hover img { transform: none; }
 .image-card-info {
   position: absolute;

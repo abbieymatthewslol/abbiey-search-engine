@@ -6977,7 +6977,7 @@ def _abbiey_bot_fallback(msg: str, ctx: str = "") -> str:
 # ---- Layer 1: DDG multi-backend ----
     )
 
-def _try_ddg(query, max_results, search_type, region=None, time_filter=None, safesearch="off"):
+def _try_ddg(query, max_results, search_type, region=None, time_filter=None, safesearch="off", image_opts=None):
     """Primary: ddgs library with all backends enabled."""
     ddg = DDGS()
     kwargs = {"safesearch": safesearch or "off"}
@@ -6985,17 +6985,20 @@ def _try_ddg(query, max_results, search_type, region=None, time_filter=None, saf
         kwargs["region"] = region
 
     if search_type == "images":
+        kwargs.update(_ddg_image_kwargs(image_opts, time_filter))
         raw = list(ddg.images(query, max_results=max_results, **kwargs))
-        return [
-            {
-                "title": r.get("title", ""),
-                "url": r.get("url", ""),
-                "image": r.get("image", ""),
-                "thumbnail": r.get("thumbnail", ""),
-                "source": r.get("source", ""),
-            }
-            for r in raw
-        ]
+        return _filter_image_results(
+            [
+                {
+                    "title": r.get("title", ""),
+                    "url": r.get("url", ""),
+                    "image": r.get("image", ""),
+                    "thumbnail": r.get("thumbnail", ""),
+                    "source": r.get("source", ""),
+                }
+                for r in raw
+            ]
+        )
     elif search_type == "news":
         if time_filter and time_filter in {"d", "w", "m", "y"}:
             kwargs["timelimit"] = time_filter
@@ -7510,6 +7513,46 @@ def _inclusive_text_recovery_bridge(
 
 # ---- Image fallback layers ----
 
+_DDG_IMG_SIZE = {"small": "Small", "medium": "Medium", "large": "Large"}
+_DDG_IMG_LAYOUT = {"square": "Square", "tall": "Tall", "wide": "Wide"}
+
+
+def _ddg_image_kwargs(image_opts=None, time_filter=None) -> dict:
+    """Map UI / Openverse-style filters to ddgs.images() parameters."""
+    kw = {}
+    if time_filter and time_filter in {"d", "w", "m", "y"}:
+        kw["timelimit"] = time_filter
+    if not image_opts:
+        return kw
+    sz = _DDG_IMG_SIZE.get((image_opts.get("size") or "").lower())
+    if sz:
+        kw["size"] = sz
+    ly = _DDG_IMG_LAYOUT.get((image_opts.get("aspect") or "").lower())
+    if ly:
+        kw["layout"] = ly
+    return kw
+
+
+def _filter_image_results(rows: list) -> list:
+    """Drop rows without a usable HTTPS image URL; normalize thumb/full fields."""
+    out = []
+    for r in rows or []:
+        if not isinstance(r, dict):
+            continue
+        img = (r.get("image") or r.get("thumbnail") or "").strip()
+        if not img.startswith(("http://", "https://")):
+            continue
+        row = dict(r)
+        if not row.get("thumbnail"):
+            row["thumbnail"] = img
+        if not row.get("image"):
+            row["image"] = row["thumbnail"]
+        if not row.get("url"):
+            row["url"] = row["image"]
+        out.append(row)
+    return out
+
+
 def _try_openverse(query, max_results=20, filters=None):
     """Search Openverse (open catalogue, CC licenses). Optional filters: license, license_type, aspect_ratio, size, extension."""
     filters = filters or {}
@@ -7530,10 +7573,17 @@ def _try_openverse(query, max_results=20, filters=None):
             v = filters.get(src_key)
             if v:
                 params[api_key] = v
+        ov_headers = {
+            "User-Agent": "abbiey.search/1.0 (+https://www.abbieysearch.com; image search)",
+            "Accept": "application/json",
+        }
+        ov_key = (os.environ.get("OPENVERSE_API_KEY") or "").strip()
+        if ov_key:
+            ov_headers["Authorization"] = f"Bearer {ov_key}"
         resp = _get_http().get(
             "https://api.openverse.org/v1/images/",
             params=params,
-            headers={"User-Agent": "abbiey.search/1.0", "Accept": "application/json"},
+            headers=ov_headers,
             timeout=_EXTERNAL_HTTP_MAX_S,
         )
         resp.raise_for_status()
@@ -7621,7 +7671,14 @@ def _fetch_images_multi_source(
         futs = {}
         if "ddg" in sources:
             futs["ddg"] = _pool.submit(
-                _try_ddg, query, max_results, "images", region, time_filter, safesearch
+                _try_ddg,
+                query,
+                max_results,
+                "images",
+                region,
+                time_filter,
+                safesearch,
+                opts,
             )
         if "openverse" in sources:
             futs["openverse"] = _pool.submit(_try_openverse, query, min(40, max_results), ov_filters)
@@ -7637,10 +7694,12 @@ def _fetch_images_multi_source(
                 buckets[name] = []
 
     order = [k for k in ("ddg", "openverse", "commons", "archive") if k in sources]
-    merged = _interleave_image_buckets(buckets, order)
+    merged = _filter_image_results(_interleave_image_buckets(buckets, order))
     if not merged:
         try:
-            merged = _try_ddg(query, max_results, "images", region, time_filter, safesearch) or []
+            merged = _try_ddg(
+                query, max_results, "images", region, time_filter, safesearch, opts
+            ) or []
         except Exception:
             merged = []
     return merged
@@ -7734,6 +7793,11 @@ def _try_wikimedia_commons(query):
                 "iiurlwidth": "300",
                 "format": "json",
             },
+            headers={
+                "User-Agent": "abbiey.search/1.0 (+https://www.abbieysearch.com; image search)",
+                "Accept": "application/json",
+            },
+            timeout=_EXTERNAL_HTTP_MAX_S,
         )
         resp.raise_for_status()
         data = resp.json()
@@ -9882,9 +9946,10 @@ def _fetch_results(
     else:
         results = []
         skip_ddg = False
-        if search_type == "images" and image_opts:
+        if search_type == "images":
+            _img_opts = image_opts or {"sources": ["ddg", "openverse", "commons"]}
             results = _fetch_images_multi_source(
-                effective_query, max_results, region, time_filter, safesearch, image_opts
+                effective_query, max_results, region, time_filter, safesearch, _img_opts
             )
             skip_ddg = bool(results)
 
@@ -10001,23 +10066,17 @@ def _fetch_results(
             except Exception:
                 logger.debug("exa_news_blend_failed", exc_info=True)
 
-        # Image-specific fallbacks — parallel
+        # Image-specific fallbacks — open catalogues when fusion returned nothing
         if not results and search_type == "images":
-            logger.info("Image search empty, trying parallel fallbacks")
-            with ThreadPoolExecutor(max_workers=3) as _img_pool:
-                _img_futs = [
-                    _img_pool.submit(_try_openverse, query),
-                    _img_pool.submit(_try_wikimedia_commons, query),
-                    _img_pool.submit(_try_internet_archive_images, query, max_results),
-                ]
-                for fut in as_completed(_img_futs):
-                    try:
-                        r = fut.result(timeout=6)
-                        if r:
-                            results = r
-                            break
-                    except Exception:
-                        pass
+            logger.info("Image search empty, trying open-catalogue fallbacks")
+            results = _fetch_images_multi_source(
+                effective_query,
+                max_results,
+                region,
+                time_filter,
+                safesearch,
+                {"sources": ["openverse", "commons", "archive"]},
+            )
 
         # News-specific fallbacks — parallel
         if not results and search_type == "news":
