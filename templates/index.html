@@ -65,7 +65,7 @@
     </script>
     {% endif %}
 </head>
-<body class="{% if query %}has-results page-search--{{ search_type }}{% endif %}{% if search_type == 'images' %} visual-search-mode{% endif %} has-site-bottom-nav">
+<body class="{% if query %}has-results page-search--{{ search_type }}{% endif %}{% if search_type == 'images' and query %} visual-search-mode{% endif %} has-site-bottom-nav">
     <noscript>
         <div class="noscript-banner" role="note">
             <strong>abbieysearch</strong> &mdash; OSINT-friendly search with receipts.
@@ -1263,7 +1263,7 @@
             </aside>
             {% endif %}
 
-        {% if search_type == 'images' %}
+        {% if search_type == 'images' and query %}
         <section class="vis-hero" id="vis-hero" aria-label="Visual search">
             <div class="vis-hero-glow" aria-hidden="true"></div>
             <div class="vis-hero-inner">
@@ -1723,7 +1723,7 @@
 
     {# ===== VISUAL SEARCH MODAL (image results) ===== #}
     <div class="lightbox-overlay vis-modal" id="lightbox" role="dialog" aria-modal="true" aria-labelledby="lightbox-title" hidden>
-        <div class="vis-modal-backdrop" data-vis-modal-close aria-hidden="true"</div>
+        <div class="vis-modal-backdrop" data-vis-modal-close aria-hidden="true"></div>
         <div class="vis-modal-panel">
             <button type="button" class="lightbox-close vis-modal-close" id="lightbox-close" aria-label="Close">{% include 'includes/close_icon.html' %}</button>
             <div class="vis-modal-layout">
@@ -1753,7 +1753,7 @@
                     </div>
                     <div class="vis-tab-panel" id="vis-tab-similar" role="tabpanel" hidden>
                         <p class="vis-similar-lead">More like this</p>
-                        <div class="vis-similar-rail" id="vis-similar-rail"</div>
+                        <div class="vis-similar-rail" id="vis-similar-rail"></div>
                     </div>
                 </div>
             </div>

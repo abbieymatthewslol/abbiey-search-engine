@@ -6202,6 +6202,11 @@ footer {
   margin-top: .25rem;
   opacity: .7;
 }
+body:not(.has-results) .footer-links {
+  opacity: 1;
+  font-size: .8125rem;
+  margin-top: .5rem;
+}
 .footer-links a {
   color: var(--text-muted);
   text-decoration: none;
