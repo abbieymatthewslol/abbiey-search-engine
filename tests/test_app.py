@@ -45,9 +45,9 @@ class TestRoutes:
     def test_about_path_renders_marketing(self, client):
         resp = client.get("/about")
         assert resp.status_code == 200
-        assert b"Structured deep dives" in resp.data
-        assert b"About me" in resp.data
-        assert b"abigailcherrywork@gmail.com" in resp.data
+        assert b"Show the disagreement" in resp.data
+        assert b"Who I am" in resp.data
+        assert b"privacy@abbieysearch.com" in resp.data
         assert b"about-creator.png" in resp.data
 
     def test_homepage_no_longer_renders_depth_cards(self, client):
@@ -1234,7 +1234,7 @@ class TestPrivacyBadge:
 
     def test_image_tools_disclosure_on_search_page(self, client):
         resp = client.get("/search?q=")
-        assert b"ImgOps may fetch the remote image URL directly" in resp.data
+        assert b"may fetch the image URL directly" in resp.data
 
     def test_close_controls_use_svg_icons_not_literal_times(self, client):
         resp = client.get("/search?q=")

@@ -6,6 +6,9 @@
     {% include 'includes/theme_bootstrap.html' %}
     <title>{% if query %}{{ query }} — {{ search_mode_title_suffix(search_type) }} — abbieysearch{% else %}{{ get_seo('search_home').title }}{% endif %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=deploy_hash) }}">
+    {% if search_type == 'images' or not query %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='visual-search.css', v=deploy_hash) }}">
+    {% endif %}
     <meta name="deploy-hash" content="{{ deploy_hash }}">
     {% include 'includes/google_site_verification.html' %}
     {% include 'includes/google_adsense_head.html' %}
@@ -62,7 +65,7 @@
     </script>
     {% endif %}
 </head>
-<body class="{% if query %}has-results page-search--{{ search_type }}{% endif %} has-site-bottom-nav">
+<body class="{% if query %}has-results page-search--{{ search_type }}{% endif %}{% if search_type == 'images' %} visual-search-mode{% endif %} has-site-bottom-nav">
     <noscript>
         <div class="noscript-banner" role="note">
             <strong>abbieysearch</strong> &mdash; OSINT-friendly search with receipts.
@@ -1260,17 +1263,55 @@
             </aside>
             {% endif %}
 
-        {% if query and search_type == 'images' %}
-        <section class="media-search-section" aria-labelledby="media-images-title">
-            <div class="media-search-section-head">
-                <h2 id="media-images-title" class="media-section-title">Image search</h2>
-                <p class="media-section-lead">Visual results are blended from public indexes (DuckDuckGo plus optional open catalogues when you enable advanced image fusion). abbieysearch does not run a private crawl or store a separate image index; freshness and coverage follow those sources.</p>
+        {% if search_type == 'images' %}
+        <section class="vis-hero" id="vis-hero" aria-label="Visual search">
+            <div class="vis-hero-glow" aria-hidden="true"></div>
+            <div class="vis-hero-inner">
+                <p class="vis-hero-eyebrow">AI visual intelligence</p>
+                <h2 class="vis-hero-title">{% if img_rev_key %}Visual matches{% else %}Search by image{% endif %}</h2>
+                <p class="vis-hero-lead">Search visual matches across the web — upload a photo or paste an image URL.</p>
+                <div class="vis-hero-drop" id="vis-hero-drop">
+                    <input type="file" id="vis-hero-file" class="sr-only" accept="image/*" aria-label="Upload image for visual search">
+                    <button type="button" class="vis-hero-upload" id="vis-hero-upload">
+                        <span class="vis-hero-upload-icon" aria-hidden="true">
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+                        </span>
+                        <span class="vis-hero-upload-label">Upload image</span>
+                        <span class="vis-hero-upload-hint">or drag &amp; drop</span>
+                    </button>
+                    <div class="vis-hero-url-row">
+                        <label class="vis-hero-url-label" for="vis-hero-url">Image URL</label>
+                        <input type="url" id="vis-hero-url" class="vis-hero-url-input" inputmode="url" placeholder="https://…/photo.jpg" autocomplete="off">
+                        <button type="button" class="vis-hero-url-go" id="vis-hero-url-go">Search</button>
+                    </div>
+                </div>
             </div>
-            <ul class="media-source-list" role="list" aria-label="Typical sources">
-                <li>Web image index (DuckDuckGo)</li>
-                {% if image_search_advanced %}<li>Openverse, Wikimedia Commons, Internet Archive (when fusion is on)</li>{% else %}<li>Open catalogues available under <strong>Advanced image search</strong></li>{% endif %}
-            </ul>
         </section>
+        {% if query and results %}
+        <section class="vis-toolbar" id="vis-toolbar" aria-label="Visual search filters">
+            <div class="vis-filter-chips" id="vis-filter-chips" role="group" aria-label="Smart filters">
+                <button type="button" class="vis-chip active" data-vis-filter="all" aria-pressed="true">All</button>
+                <button type="button" class="vis-chip" data-vis-filter="people" aria-pressed="false">People</button>
+                <button type="button" class="vis-chip" data-vis-filter="fashion" aria-pressed="false">Fashion</button>
+                <button type="button" class="vis-chip" data-vis-filter="anime" aria-pressed="false">Anime</button>
+                <button type="button" class="vis-chip" data-vis-filter="products" aria-pressed="false">Products</button>
+                <button type="button" class="vis-chip" data-vis-filter="landmarks" aria-pressed="false">Landmarks</button>
+                <button type="button" class="vis-chip" data-vis-filter="art" aria-pressed="false">Art</button>
+                <button type="button" class="vis-chip" data-vis-filter="screenshots" aria-pressed="false">Screenshots</button>
+                <button type="button" class="vis-chip" data-vis-filter="ai" aria-pressed="false">AI-generated</button>
+            </div>
+            <label class="vis-similarity" id="vis-similarity-wrap">
+                <span class="vis-similarity-label">Similarity</span>
+                <span class="vis-similarity-ends" aria-hidden="true"><span>Strict</span><span>Broad</span></span>
+                <input type="range" id="vis-similarity" class="vis-similarity-range" min="0" max="100" value="35" aria-valuetext="Balanced">
+            </label>
+        </section>
+        <div class="vis-loading" id="vis-loading" hidden aria-live="polite" aria-busy="false">
+            <div class="vis-loading-beam" aria-hidden="true"></div>
+            <p class="vis-loading-title">Analyzing visual features…</p>
+            <p class="vis-loading-sub">Comparing embeddings across the index</p>
+        </div>
+        {% endif %}
         {% endif %}
         {% if query and search_type == 'videos' %}
         <section class="media-search-section media-search-section--video" aria-labelledby="media-videos-title">
@@ -1336,7 +1377,7 @@
             </ul>
         </section>
         {% endif %}
-        <div id="results" class="results-container" data-type="{{ search_type }}">
+        <div id="results" class="results-container{% if search_type == 'images' %} vis-masonry{% endif %}" data-type="{{ search_type }}">
             {% if search_type == 'saved' %}
                 <div id="saved-results-container">
                     <noscript><p class="no-results">Saved bookmarks require JavaScript.</p></noscript>
@@ -1349,13 +1390,18 @@
                 {% endif %}
                 {% for r in results %}
                     {% if search_type == 'images' %}
-                    <div class="image-card" data-full="{{ r.image or r.thumbnail }}" data-title="{{ r.title }}" data-source="{{ r.source or '' }}" data-url="{{ r.url }}" data-license="{{ r.license or '' }}" role="button" tabindex="0" aria-label="Open image result: {{ r.title }}">
-                        <img src="{{ r.thumbnail or r.image }}" alt="{{ r.title }}" loading="lazy">
-                        <div class="image-card-info">
-                            <span class="image-title">{{ r.title }}</span>
-                            {% if r.source %}<span class="image-source">{{ r.source }}</span>{% endif %}
-                            {% if r.license %}<span class="image-license" title="License">{{ r.license }}</span>{% endif %}
-                            {% if r.body %}<p class="image-result-desc">{{ r.body }}</p>{% endif %}
+                    <div class="image-card vis-card" data-full="{{ r.image or r.thumbnail }}" data-title="{{ r.title }}" data-source="{{ r.source or '' }}" data-url="{{ r.url }}" data-license="{{ r.license or '' }}" data-domain="{{ r.url|domain }}" role="button" tabindex="0" aria-label="Open image result: {{ r.title }}">
+                        <div class="vis-card-media">
+                            <img src="{{ r.thumbnail or r.image }}" alt="" loading="lazy" decoding="async">
+                            <span class="vis-sim-badge" hidden></span>
+                        </div>
+                        <div class="vis-card-meta">
+                            <span class="vis-card-source-row">
+                                <img class="vis-favicon" src="https://icons.duckduckgo.com/ip3/{{ r.url|domain }}/favicon.ico" alt="" width="14" height="14" loading="lazy" onerror="this.style.display='none'">
+                                <span class="vis-domain-pill">{{ r.source or r.url|domain }}</span>
+                                <span class="vis-sim-pill" hidden></span>
+                            </span>
+                            <span class="vis-card-title">{{ r.title }}</span>
                         </div>
                     </div>
                     {% elif search_type == 'videos' %}
@@ -1568,7 +1614,7 @@
     </main>
 
     {# ===== RESULT PREVIEW PANEL ===== #}
-    {% if query and search_type in ('text', 'news', 'code', 'onion', 'videos', 'images', 'saved', 'prices', 'alts', 'mybot', 'people', 'email', 'business') %}
+    {% if query and search_type in ('text', 'news', 'code', 'onion', 'videos', 'saved', 'prices', 'alts', 'mybot', 'people', 'email', 'business') %}
     <div class="layout-gutter-preview" id="layout-gutter-preview" role="separator" aria-orientation="vertical" aria-label="Resize preview panel" tabindex="0"></div>
     <aside class="preview-panel" id="preview-panel">
         <div class="preview-header">
@@ -1675,24 +1721,44 @@
     <button type="button" class="panel-restore-tab panel-restore-tab-preview" id="preview-restore-tab" hidden aria-label="Show preview column" title="Show preview column">&#8249;</button>
     {% endif %}
 
-    {# ===== IMAGE LIGHTBOX ===== #}
-    <div class="lightbox-overlay" id="lightbox">
-        <button class="lightbox-close" id="lightbox-close" aria-label="Close">{% include 'includes/close_icon.html' %}</button>
-        <div class="lightbox-content">
-            <img id="lightbox-img" src="" alt="">
-            <div class="lightbox-info">
-                <p class="lightbox-title" id="lightbox-title"></p>
-                <a class="lightbox-source" id="lightbox-source" href="" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">View source</a>
-                <a class="lightbox-tools" id="lightbox-tools" href="#" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">Image tools (reverse search &amp; metadata)</a>
-                <p class="lightbox-disclosure">Opens ImgOps in a new tab. ImgOps may fetch the remote image URL directly. No local upload or EXIF stripping happens here.</p>
-                {% if osint_enabled %}
-                <button type="button" class="lightbox-osint-btn" id="lightbox-osint-btn" hidden>Public signals (page host)</button>
-                <div class="lightbox-osint-results" id="lightbox-osint-results" hidden></div>
-                {% endif %}
+    {# ===== VISUAL SEARCH MODAL (image results) ===== #}
+    <div class="lightbox-overlay vis-modal" id="lightbox" role="dialog" aria-modal="true" aria-labelledby="lightbox-title" hidden>
+        <div class="vis-modal-backdrop" data-vis-modal-close aria-hidden="true"</div>
+        <div class="vis-modal-panel">
+            <button type="button" class="lightbox-close vis-modal-close" id="lightbox-close" aria-label="Close">{% include 'includes/close_icon.html' %}</button>
+            <div class="vis-modal-layout">
+                <div class="vis-modal-media-col">
+                    <img id="lightbox-img" class="vis-modal-img" src="" alt="">
+                </div>
+                <div class="vis-modal-side">
+                    <nav class="vis-modal-tabs" role="tablist" aria-label="Result details">
+                        <button type="button" class="vis-tab active" role="tab" aria-selected="true" data-vis-tab="details">Details</button>
+                        <button type="button" class="vis-tab" role="tab" aria-selected="false" data-vis-tab="match">Match</button>
+                        <button type="button" class="vis-tab" role="tab" aria-selected="false" data-vis-tab="similar">Similar</button>
+                    </nav>
+                    <div class="vis-tab-panel active" id="vis-tab-details" role="tabpanel">
+                        <h3 class="vis-modal-heading" id="lightbox-title"></h3>
+                        <p class="vis-modal-domain" id="vis-modal-domain"></p>
+                        <a class="vis-modal-cta lightbox-source" id="lightbox-source" href="" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">Open source</a>
+                        <a class="vis-modal-link lightbox-tools" id="lightbox-tools" href="#" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">Image tools</a>
+                        <p class="lightbox-disclosure vis-modal-disclosure">ImgOps opens in a new tab and may fetch the image URL directly.</p>
+                        {% if osint_enabled %}
+                        <button type="button" class="lightbox-osint-btn vis-modal-osint" id="lightbox-osint-btn" hidden>Public signals (page host)</button>
+                        <div class="lightbox-osint-results vis-modal-osint-results" id="lightbox-osint-results" hidden></div>
+                        {% endif %}
+                    </div>
+                    <div class="vis-tab-panel" id="vis-tab-match" role="tabpanel" hidden>
+                        <p class="vis-match-lead">Matched because:</p>
+                        <ul class="vis-match-list" id="vis-match-list"></ul>
+                    </div>
+                    <div class="vis-tab-panel" id="vis-tab-similar" role="tabpanel" hidden>
+                        <p class="vis-similar-lead">More like this</p>
+                        <div class="vis-similar-rail" id="vis-similar-rail"</div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
-
     <footer>
         <p class="footer-tagline"><a href="/about" class="footer-about-link"><strong>abbiey<span>.</span>search</strong></a> <span class="footer-tagline-em">&mdash; Real answers. Full context. No fluff.</span> <span class="footer-credit">by abbiey matthews</span></p>
         <p class="footer-links">
@@ -1833,6 +1899,7 @@
     {% endif %}
 
     <script src="{{ url_for('static', filename='script.js', v=deploy_hash) }}"></script>
+    <script src="{{ url_for('static', filename='visual-search.js', v=deploy_hash) }}" defer></script>
     {% if query and search_type == 'onion' %}
     <script src="{{ url_for('static', filename='onion-rewriter.js', v=deploy_hash) }}"></script>
     {% endif %}

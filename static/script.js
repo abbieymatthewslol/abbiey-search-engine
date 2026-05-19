@@ -2073,6 +2073,12 @@ document.addEventListener("DOMContentLoaded", () => {
           el.dataset.url = r.url || "";
           if (type !== "images") el.dataset.rank = String(idx);
 
+          if (type === "images" && typeof window.buildVisImageCard === "function") {
+            const card = window.buildVisImageCard(r);
+            card.style.animationDelay = `${delay}ms`;
+            frag.appendChild(card);
+            return;
+          }
           if (type === "images") {
             el.className = "image-card";
             el.dataset.full = r.image || r.thumbnail;
@@ -2104,6 +2110,9 @@ document.addEventListener("DOMContentLoaded", () => {
           frag.appendChild(el);
         });
         container.appendChild(frag);
+        if (type === "images" && typeof window.visRelayoutImages === "function") {
+          window.visRelayoutImages(container);
+        }
         initBookmarkBtns(container);
         applySavedResultOrder(container);
         attachResultDragHandles(container);
@@ -2142,7 +2151,8 @@ document.addEventListener("DOMContentLoaded", () => {
   let openLightbox = null;
   let lightboxReturnFocus = null;
   if (lightbox) {
-    lightbox.removeAttribute("hidden");
+    const lightboxIsVisModal = lightbox.classList.contains("vis-modal");
+    if (!lightboxIsVisModal) lightbox.removeAttribute("hidden");
     openLightbox = function(card) {
       lightboxReturnFocus = rememberFocus(card);
       function endLightboxLoad() {
@@ -2184,6 +2194,7 @@ document.addEventListener("DOMContentLoaded", () => {
       lightboxImg.onload = null;
       lightboxImg.onerror = null;
       lightbox.classList.remove("active");
+      if (lightboxIsVisModal) lightbox.hidden = true;
       document.body.style.overflow = "";
       afterMotion(250, () => {
         if (!lightbox.classList.contains("active")) lightboxImg.src = "";
