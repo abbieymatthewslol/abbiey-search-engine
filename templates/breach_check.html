@@ -1,16 +1,19 @@
 {% extends "base.html" %}
 
-{% block title %}Breach Check — abbieysearch{% endblock %}
-{% block meta_description %}Check if your email has been exposed in a data breach. Private, no logs.{% endblock %}
-{% block og_title %}Breach Check — abbieysearch{% endblock %}
-{% block og_description %}Check if your email has been exposed in a data breach. Private, no logs.{% endblock %}
+{% set seo = get_seo('breach_check') %}
+{% block title %}{{ seo.title }}{% endblock %}
+{% block meta_description %}{{ seo.description }}{% endblock %}
+{% block og_title %}{{ seo.og_title }}{% endblock %}
+{% block og_description %}{{ seo.og_description }}{% endblock %}
+{% block tw_title %}{{ seo.tw_title }}{% endblock %}
+{% block tw_description %}{{ seo.tw_description }}{% endblock %}
 
 {% block content %}
 <div class="breach-check-page" style="max-width:640px;margin:60px auto;padding:0 20px;">
-  <h1 style="font-size:1.6rem;margin-bottom:.4em;">Breach Check</h1>
+  <h1 style="font-size:1.6rem;margin-bottom:.4em;">Has this email been exposed?</h1>
   <p style="color:var(--text-secondary,#aaa);margin-bottom:1.4em;">
-    Check if your email address has appeared in known data breaches.
-    We do not store or log your email.
+    Check if your email address appeared in known public data breaches.
+    We do not store or log your email — useful for security hygiene and incident response.
   </p>
 
   <form id="breach-form" style="display:flex;gap:8px;margin-bottom:1.5em;">

@@ -88,6 +88,12 @@ from search_routing import (
     search_mode_href as _search_mode_href,
     search_mode_title_suffix as _search_mode_title_suffix,
 )
+from seo_copy import (
+    get_seo as _get_seo,
+    json_ld_webapp as _seo_json_ld_webapp,
+    manifest_description as _seo_manifest_description,
+    opensearch_tags as _seo_opensearch_tags,
+)
 from search_protocol import (
     ProtocolDepth,
     build_protocol_markdown,
@@ -1660,6 +1666,8 @@ def _inject_current_user():
         "site_base_url": _site_base_url(),
         "search_mode_href": _search_mode_href,
         "search_mode_title_suffix": _search_mode_title_suffix,
+        "get_seo": _get_seo,
+        "seo_json_ld_webapp": _seo_json_ld_webapp,
         "community_discord_url": os.environ.get("COMMUNITY_DISCORD_URL", "").strip() or None,
         "community_matrix_url": os.environ.get("COMMUNITY_MATRIX_URL", "").strip() or None,
         "community_github_url": os.environ.get(
@@ -11780,8 +11788,8 @@ def opensearch():
     xml = f'''<?xml version="1.0" encoding="UTF-8"?>
 <OpenSearchDescription xmlns="http://a9.com/-/spec/opensearch/1.1/">
   <ShortName>abbieysearch</ShortName>
-  <Description>Private, fast, no-tracking search engine</Description>
-  <Tags>privacy search private</Tags>
+  <Description>{_seo_manifest_description()}</Description>
+  <Tags>{_seo_opensearch_tags()}</Tags>
   <Contact>hello@abbieysearch.com</Contact>
   <Url type="text/html" template="{base}/search?q={{searchTerms}}"/>
   <Url type="application/opensearchdescription+xml" rel="self"
@@ -11798,7 +11806,7 @@ def manifest():
     return jsonify({
         "name": "abbieysearch",
         "short_name": "abbieysearch",
-        "description": "Privacy-first web search — no account required",
+        "description": _seo_manifest_description(),
         "start_url": "/search",
         "display": "standalone",
         "background_color": "#000000",
@@ -11808,11 +11816,11 @@ def manifest():
             {"src": "/static/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
             {"src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
         ],
-        "categories": ["search", "productivity", "utilities"],
+        "categories": ["search", "productivity", "utilities", "security"],
         "shortcuts": [
-            {"name": "Web Search", "url": "/search?type=text", "description": "Search the web privately"},
-            {"name": "Image Search", "url": "/search?type=images", "description": "Search images privately"},
-            {"name": "News Search", "url": "/search?type=news", "description": "Search news privately"}
+            {"name": "Web Search", "url": "/search?type=text", "description": "Investigate the open web with entity detection"},
+            {"name": "Onion Index", "url": "/search?type=onion", "description": "Search indexed .onion references"},
+            {"name": "Breach Check", "url": "/breach-check", "description": "Check email against public breach data"},
         ]
     })
 
@@ -11827,6 +11835,11 @@ Allow: /about
 Allow: /privacy
 Allow: /terms
 Allow: /breach-check
+Allow: /agents
+Allow: /people/find
+Allow: /blog
+Allow: /pricing
+Allow: /contact
 Allow: /developer
 Allow: /community
 Allow: /docs/
@@ -11861,12 +11874,18 @@ def sitemap():
         ("/signup",    "monthly", "0.80"),
         ("/login",     "monthly", "0.60"),
         ("/developer", "weekly",  "0.75"),
+        ("/agents",    "weekly",  "0.72"),
         ("/community", "weekly",  "0.75"),
-        ("/docs/cli",  "weekly",  "0.70"),
+        ("/docs/deep-web", "monthly", "0.78"),
         ("/docs/api",  "weekly",  "0.70"),
+        ("/docs/cli",  "weekly",  "0.70"),
         ("/changelog", "weekly",  "0.70"),
+        ("/blog",      "weekly",  "0.68"),
+        ("/pricing",   "monthly", "0.65"),
+        ("/contact",   "monthly", "0.60"),
         ("/status",    "hourly",  "0.65"),
-        ("/breach-check", "monthly", "0.70"),
+        ("/breach-check", "monthly", "0.72"),
+        ("/people/find", "monthly", "0.68"),
     ]
     urls = "\n".join(
         f"  <url>\n"

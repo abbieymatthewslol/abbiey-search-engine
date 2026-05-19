@@ -89,18 +89,18 @@ def search_mode_href(
 def search_mode_title_suffix(search_type: str) -> str:
     """Human label for `<title>` on result pages."""
     m = {
-        "text": "Web",
-        "images": "Images",
-        "news": "News",
-        "videos": "Videos",
-        "code": "Code",
-        "people": "People",
-        "email": "Email",
-        "business": "Business",
-        "onion": "Onion / Tor",
-        "saved": "Saved",
-        "mybot": "Custom bot",
-        "prices": "Prices",
-        "alts": "Alternatives",
+        "text": "Web search",
+        "images": "Image search",
+        "news": "News search",
+        "videos": "Video search",
+        "code": "Code search",
+        "people": "People OSINT search",
+        "email": "Email search",
+        "business": "Business search",
+        "onion": ".onion index search",
+        "saved": "Saved searches",
+        "mybot": "Custom bot search",
+        "prices": "Price search",
+        "alts": "Alternatives search",
     }
     return m.get((search_type or "text").strip().lower(), "Search")

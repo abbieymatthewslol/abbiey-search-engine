@@ -4,24 +4,24 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     {% include 'includes/theme_bootstrap.html' %}
-    <title>abbieysearch — About</title>
+    <title>{{ get_seo('about').title }}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=deploy_hash) }}">
     {% include 'includes/google_site_verification.html' %}
     <script nonce="{{ csp_nonce }}">
         window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
     </script>
     <script defer src="/_vercel/speed-insights/script.js"></script>
-    <meta name="description" content="What abbieysearch is: a privacy-first search engine focused on direct answers, visible evidence, and user-controlled depth — no account required to search.">
+    <meta name="description" content="{{ get_seo('about').description }}">
     <link rel="canonical" href="{{ site_base_url }}/about">
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="abbieysearch">
-    <meta property="og:title" content="abbieysearch — About">
-    <meta property="og:description" content="Our approach to depth, evidence, and answer controls — and why we built a search product without mandatory sign-in.">
+    <meta property="og:title" content="{{ get_seo('about').og_title }}">
+    <meta property="og:description" content="{{ get_seo('about').og_description }}">
     <meta property="og:image" content="{{ site_base_url }}/static/og-image.png">
     <meta property="og:url" content="{{ site_base_url }}/about">
     <meta name="twitter:card" content="summary">
-    <meta name="twitter:title" content="abbieysearch — About">
-    <meta name="twitter:description" content="Privacy-first search with a focus on evidence, depth, and optional sign-in for bookmarks and tools.">
+    <meta name="twitter:title" content="{{ get_seo('about').tw_title }}">
+    <meta name="twitter:description" content="{{ get_seo('about').tw_description }}">
 </head>
 <body class="has-site-bottom-nav">
     <header class="landing-header">
@@ -30,14 +30,14 @@
     </header>
     {% include 'includes/google_analytics.html' %}
     <main class="landing-main about-main">
-        <h1>About abbieysearch</h1>
+        <h1>Search for people who don&rsquo;t stop at the first link</h1>
         <p class="landing-lead">
-            <strong>abbieysearch</strong> is a privacy-first search engine built for people who want the why, not just the link list.
-            Search works immediately without an account. Sign in is optional for bookmarks, synced history, and developer tools.
+            I built <strong>abbieysearch</strong> for investigators, truth-seekers, and anyone who cross-checks before they trust.
+            You can use it without an account. Sign in only if you want bookmarks, synced history, or developer tools.
         </p>
         <p class="landing-lead">
-            We aim for direct answers, visible evidence, and clearer tradeoffs. That means surfacing what most search pages flatten away:
-            assumptions, edge cases, next moves, and the strongest counterpoint when the answer is messy.
+            I&rsquo;m aiming for direct answers, visible evidence, and honest tradeoffs — assumptions, edge cases, useful next steps,
+            and the strongest counterpoint when the answer is messy. Parts of it are still rough; that&rsquo;s me learning in public.
         </p>
 
         <section class="about-creator" aria-label="About the creator">
@@ -52,11 +52,11 @@
                 >
             </div>
             <div class="about-creator-copy">
-                <h2>About me</h2>
+                <h2>Who I am</h2>
                 <p>
-                    I&rsquo;m <strong>Abbiey Matthews</strong>, 21, from Melbourne, Australia. I built abbieysearch solo —
-                    self-taught, and still teaching myself as I go. If something feels hazy or unfinished, that&rsquo;s the honest
-                    pace of learning in public, not indifference.
+                    I&rsquo;m <strong>Abbiey Matthews</strong>, 21, from Melbourne, Australia. I work on abbieysearch solo —
+                    self-taught, and still teaching myself as I go. If something feels hazy or unfinished, that&rsquo;s usually
+                    honest progress, not indifference.
                 </p>
                 <p>
                     Suggestions, bug reports, and &ldquo;hey, this would be useful&rdquo; notes are all welcome. I&rsquo;m one person
@@ -82,15 +82,36 @@
                 <p>Explain assumptions, decode jargon, and call out the edge cases before they waste your time.</p>
             </article>
             <article class="about-principle">
-                <h2>User-controlled verbosity</h2>
-                <p>Move between quick takeaways and research mode depending on how much raw material you want to inspect.</p>
+                <h2>Short or deep</h2>
+                <p>Same search — quick takeaway or enough raw material to judge for yourself.</p>
             </article>
         </section>
 
-        <section class="about-controls" aria-label="Answer controls">
-            <h2>Answer controls</h2>
-            <p class="landing-lead">
-                Depth, evidence, and answer style controls are being surfaced so you can choose how much detail you want from the same search.
+        <section class="about-controls" aria-label="Tools for repeat investigations">
+            <h2>Tools for repeat investigations</h2>
+            <p>
+                Built for people who run the same query twice with different depth — entity detection, optional public OSINT,
+                indexed <code>.onion</code> references, breach check, and adversarial answer modes.
+            </p>
+            <ul class="landing-points about-points">
+                <li><strong>Entity bar:</strong> IP, domain, email, username, crypto, coordinates, and more — one search, structured context.</li>
+                <li><strong>Public signals (OSINT):</strong> expand-on-demand RDAP, DNS, and related public metadata — lawful recon only (<a href="/privacy#osint">how we handle OSINT</a>).</li>
+                <li><strong>Onion / Tor tab:</strong> clearnet-indexed <code>.onion</code> references via Ahmia + DDG — not a dark-web crawl (<a href="/docs/deep-web">scope &amp; limits</a>).</li>
+                <li><strong>Breach check:</strong> <a href="/breach-check">private email exposure lookup</a> — no storage, no query logs.</li>
+                <li><strong>People finder:</strong> optional public-web hints before a focused <a href="/people/find">people search</a>.</li>
+                <li><strong>Research Assistant:</strong> follow-ups grounded in your results — save locally or to your account.</li>
+            </ul>
+        </section>
+
+        <section class="about-controls" aria-label="Answer depth">
+            <h2>How much depth you want</h2>
+            <p>
+                Sometimes you want a fast answer. Sometimes you want the raw material, competing viewpoints, and receipts.
+                You can move between both on the same search — no switching tools.
+            </p>
+            <p>
+                Different questions need different kinds of answers. I put depth, evidence, and tone on the results page
+                instead of hiding everything behind one default response.
             </p>
             <ul class="landing-points about-points">
                 <li><strong>Depth:</strong> Quick, Standard, Deep, or Research.</li>
@@ -101,18 +122,17 @@
 
         <section class="about-controls" aria-label="Research Assistant">
             <h2>Research Assistant</h2>
-            <p class="landing-lead">
-                On any results page, open the Research panel to ask follow-ups grounded in your search results.
-                Attach images for visual questions, save conversations locally or to your account when signed in,
-                and pick up where you left off later.
+            <p>
+                On any results page, open the Research panel for follow-ups grounded in what you already found.
+                Attach images for visual questions. Save chats locally, or to your account when signed in, and pick up later.
             </p>
         </section>
 
         <section class="about-controls" aria-label="Privacy">
-            <h2>Privacy by default</h2>
-            <p class="landing-lead">
-                No third-party ad trackers, no server-side query logging, and a privacy badge that shows what we do not collect.
-                Search works without an account; sign in only if you want bookmarks, synced history, saved research chats, or API access.
+            <h2>Privacy should not be a premium feature</h2>
+            <p>
+                No third-party ad trackers. No silent profiling. No server-side query logging tied to your searches.
+                You can search without an account — sign in only if you want bookmarks, synced history, saved research chats, or API access.
             </p>
         </section>
 

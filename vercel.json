@@ -23,6 +23,7 @@
           "reverse_image_storage.py",
           "research_chat.py",
           "search_routing.py",
+          "seo_copy.py",
           "search_bots.py",
           "search_protocol.py",
           "startup_checks.py",

@@ -1548,7 +1548,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // ===== Stable placeholder copy =====
   const rotatingInput = document.querySelector("[data-placeholder-rotate]");
   if (rotatingInput && !rotatingInput.value) {
-    rotatingInput.setAttribute("placeholder", "Search web, images, news, code, people, or .onion references…");
+    rotatingInput.setAttribute("placeholder", "Try: site:example.com · 8.8.8.8 · user@domain · BTC address · .onion index…");
   }
 
   // ===== Operator chip removal =====

@@ -1,10 +1,11 @@
 {% extends "auth_base.html" %}
-{% block title %}Welcome to abbieysearch{% endblock %}
-{% block meta_description %}Welcome to abbieysearch — private, unfiltered search with no tracking, no profiling, and no mandatory sign-in.{% endblock %}
-{% block og_title %}Welcome to abbieysearch{% endblock %}
-{% block og_description %}Private, unfiltered search. No tracking, no ads, no profiling.{% endblock %}
-{% block tw_title %}Welcome to abbieysearch{% endblock %}
-{% block tw_description %}Private, unfiltered search. No tracking, no ads, no profiling.{% endblock %}
+{% set seo = get_seo('welcome') %}
+{% block title %}{{ seo.title }}{% endblock %}
+{% block meta_description %}{{ seo.description }}{% endblock %}
+{% block og_title %}{{ seo.og_title }}{% endblock %}
+{% block og_description %}{{ seo.og_description }}{% endblock %}
+{% block tw_title %}{{ seo.tw_title }}{% endblock %}
+{% block tw_description %}{{ seo.tw_description }}{% endblock %}
 
 {% block auth_back_href %}{{ url_for('welcome_dismiss') }}{% endblock %}
 {% block auth_back_text %}Skip to search{% endblock %}
@@ -12,7 +13,7 @@
 {% block auth_content %}
         <div class="auth-heading" id="welcome-title">
             <h1 class="auth-title">Welcome to abbiey.search</h1>
-            <p class="auth-subtitle">Private search with no query logging. Create an account in two steps, or skip and search right away.</p>
+            <p class="auth-subtitle">OSINT-friendly search with no query logging. Create an account in two steps, or skip and investigate right away.</p>
         </div>
 
         <ol class="welcome-steps" aria-labelledby="welcome-title">
