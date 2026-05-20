@@ -9,6 +9,9 @@ from reverse_image import (
     _reverse_hits_from_openwebninja_json,
     fetch_reverse_hits_for_image_url,
     parse_bing_reverse_html,
+    rev_session_hits,
+    rev_session_pack,
+    rev_session_source_view,
     validate_client_image_url,
 )
 
@@ -153,6 +156,16 @@ def test_parse_bing_reverse_html_extracts_rows():
     assert "Nice cat photo" in hits[0]["body"]
 
 
+def test_rev_session_pack_and_preview_view():
+    hits = [{"title": "A", "url": "https://x.test/", "image": "https://x.test/i.jpg"}]
+    session = rev_session_pack(hits, filename="cat.png", image_bytes=b"raw", mime="image/png")
+    assert rev_session_hits(session) == hits
+    view = rev_session_source_view(session, "tok123", preview_route="/api/reverse-image/preview")
+    assert view["filename"] == "cat.png"
+    assert view["count"] == 1
+    assert view["url"].endswith("/tok123")
+
+
 def test_api_reverse_image_missing_url(client):
     resp = client.post("/api/reverse-image", json={})
     assert resp.status_code == 400
@@ -194,8 +207,14 @@ def test_search_images_with_rev_key_serves_cached_hits(client):
         }
     ]
     tok = "revtesttokentwentyfourcharsxx"
+    session = rev_session_pack(
+        fake_hits,
+        filename="sample.png",
+        image_bytes=b"\x89PNG\r\n\x1a\n",
+        mime="image/png",
+    )
     with app_module._reverse_image_hits_lock:
-        app_module._reverse_image_hits_cache[tok] = fake_hits
+        app_module._reverse_image_hits_cache[tok] = session
     try:
         resp = client.get(
             f"/search?q=Visual+matches&type=images&img_rev_key={tok}",
@@ -206,3 +225,5 @@ def test_search_images_with_rev_key_serves_cached_hits(client):
     assert resp.status_code == 200
     assert b"Cached" in resp.data
     assert b"desc" in resp.data
+    assert b"vis-source-session" in resp.data
+    assert b"sample.png" in resp.data

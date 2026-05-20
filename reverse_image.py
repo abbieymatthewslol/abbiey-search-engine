@@ -187,3 +187,62 @@ def validate_client_image_url(url: str) -> tuple[bool, str]:
     if "/image" in path or "format=jpg" in u.lower():
         return True, ""
     return True, ""
+
+
+def rev_session_pack(
+    hits: list,
+    *,
+    filename: str = "",
+    image_url: str = "",
+    image_bytes: bytes | None = None,
+    mime: str = "",
+) -> dict:
+    """Cache hits plus source image metadata for the results session UI."""
+    url = (image_url or "").strip()
+    name = (filename or "").strip() or ("Image link" if url else "Uploaded image")
+    out: dict = {
+        "hits": hits,
+        "source": {"filename": name, "image_url": url},
+    }
+    if image_bytes:
+        out["body"] = image_bytes
+        out["mime"] = (mime or "").strip() or "image/jpeg"
+    return out
+
+
+def rev_session_hits(entry) -> list:
+    if entry is None:
+        return []
+    if isinstance(entry, list):
+        return entry
+    if isinstance(entry, dict):
+        hits = entry.get("hits")
+        return hits if isinstance(hits, list) else []
+    return []
+
+
+def rev_session_source_view(entry, rev_key: str, *, preview_route: str) -> dict | None:
+    """Build template context for the pinned source image on results."""
+    if not rev_key:
+        return None
+    hits = rev_session_hits(entry)
+    src = {}
+    body = None
+    mime = "image/jpeg"
+    if isinstance(entry, dict):
+        src = entry.get("source") if isinstance(entry.get("source"), dict) else {}
+        body = entry.get("body")
+        mime = entry.get("mime") or mime
+    ext_url = (src.get("image_url") or "").strip()
+    if ext_url:
+        display_url = ext_url
+    elif body:
+        display_url = f"{preview_route.rstrip('/')}/{rev_key}"
+    else:
+        return None
+    return {
+        "url": display_url,
+        "filename": src.get("filename") or "Uploaded image",
+        "count": len(hits),
+        "mime": mime,
+    }

@@ -362,72 +362,319 @@
       const firstTab = document.querySelector('.vis-tab[data-vis-tab="details"]');
       firstTab?.click();
       lightbox.hidden = false;
-      origOpen(card);
+      document.body.style.overflow = "hidden";
+      requestAnimationFrame(() => {
+        lightbox.classList.add("active");
+        origOpen(card);
+      });
     };
 
     window.__closeVisModal = function () {
       lightbox.classList.remove("active", "lightbox-loading");
       lightbox.removeAttribute("aria-busy");
-      lightbox.hidden = true;
       document.body.style.overflow = "";
+      window.setTimeout(() => {
+        if (!lightbox.classList.contains("active")) lightbox.hidden = true;
+      }, 260);
     };
 
     window.openLightbox = window.__openVisModal;
     lightbox.dataset.visWrapped = "1";
   }
 
-  function showLoading(on) {
-    const el = document.getElementById("vis-loading");
-    if (!el) return;
-    el.hidden = !on;
-    el.setAttribute("aria-busy", on ? "true" : "false");
-    document.body.classList.toggle("vis-is-searching", on);
+  let _previewObjectUrl = null;
+
+  function visNotify(message, kind = "error") {
+    if (typeof window.showToast === "function") {
+      window.showToast(message, kind === "success" ? "success" : "error");
+    }
   }
 
-  function hookReverseImageLoading() {
-    const heroGo = document.getElementById("vis-hero-url-go");
-    const heroFile = document.getElementById("vis-hero-file");
+  function shakeEl(el) {
+    if (!el) return;
+    el.classList.remove("vis-shake");
+    void el.offsetWidth;
+    el.classList.add("vis-shake");
+    el.addEventListener("animationend", () => el.classList.remove("vis-shake"), { once: true });
+  }
 
-    async function runFromHero() {
-      const urlInput = document.getElementById("vis-hero-url") || document.getElementById("reverse-image-url");
-      const fileInput = document.getElementById("reverse-image-file");
-      const url = (urlInput?.value || "").trim();
-      const file = heroFile?.files?.[0] || fileInput?.files?.[0];
+  function validateImageUrl(url) {
+    const raw = (url || "").trim();
+    if (!raw) {
+      return { ok: false, message: "Paste a direct image URL or upload a photo." };
+    }
+    try {
+      const u = new URL(raw);
+      if (u.protocol !== "https:") {
+        return { ok: false, message: "Use an HTTPS image link (.jpg, .png, .webp)." };
+      }
+    } catch {
+      return { ok: false, message: "Enter a direct image URL (.jpg, .png, .webp)." };
+    }
+    if (!/\.(jpe?g|png|gif|webp|avif|bmp|svg)(\?|#|$)/i.test(raw) && !/image|photo|media|cdn|upload/i.test(raw)) {
+      return { ok: false, message: "Enter a direct image URL (.jpg, .png, .webp)." };
+    }
+    return { ok: true };
+  }
+
+  function showFieldError(el, message) {
+    if (!el) return;
+    if (!message) {
+      el.hidden = true;
+      el.textContent = "";
+      el.classList.remove("is-visible");
+      return;
+    }
+    el.textContent = message;
+    el.hidden = false;
+    requestAnimationFrame(() => el.classList.add("is-visible"));
+  }
+
+  function setUrlInputState(input, valid) {
+    if (!input) return;
+    input.classList.toggle("is-invalid", valid === false);
+    input.classList.toggle("is-valid", valid === true);
+    const go = input.closest(".vis-hero-url-row")?.querySelector(".vis-hero-url-go")
+      || document.getElementById("reverse-image-submit");
+    go?.classList.toggle("is-ready", valid === true);
+  }
+
+  function showStatusBanner(id, message, kind) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (!message) {
+      el.hidden = true;
+      el.textContent = "";
+      el.className = "vis-status-banner";
+      return;
+    }
+    el.textContent = message;
+    el.className = `vis-status-banner vis-status-banner--${kind || "info"}`;
+    el.hidden = false;
+  }
+
+  function revokePreviewUrl() {
+    if (_previewObjectUrl) {
+      URL.revokeObjectURL(_previewObjectUrl);
+      _previewObjectUrl = null;
+    }
+  }
+
+  function showUploadPreview(opts) {
+    const { previewId, imgId, labelId, file, imageUrl, dropId } = opts;
+    const wrap = document.getElementById(previewId);
+    const img = document.getElementById(imgId);
+    const label = document.getElementById(labelId);
+    const drop = dropId ? document.getElementById(dropId) : null;
+    if (!wrap || !img) return;
+    revokePreviewUrl();
+    if (file) {
+      _previewObjectUrl = URL.createObjectURL(file);
+      img.src = _previewObjectUrl;
+    } else if (imageUrl) {
+      img.src = imageUrl;
+    }
+    if (label) label.textContent = "Searching similar images…";
+    wrap.hidden = false;
+    requestAnimationFrame(() => wrap.classList.add("is-visible"));
+    drop?.classList.add("has-preview");
+    document.getElementById("vis-upload-stage")?.classList.add("has-preview");
+    document.body.classList.add("vis-has-query-image");
+  }
+
+  function showSkeletons(container) {
+    if (!container) return;
+    container.innerHTML = "";
+    const host = document.createElement("div");
+    host.className = "vis-skeleton-grid";
+    host.setAttribute("aria-hidden", "true");
+    for (let i = 0; i < 8; i++) {
+      const sk = document.createElement("div");
+      sk.className = "vis-skeleton-card";
+      host.appendChild(sk);
+    }
+    container.appendChild(host);
+  }
+
+  function showLoading(on) {
+    const el = document.getElementById("vis-loading");
+    if (el) {
+      el.hidden = !on;
+      el.setAttribute("aria-busy", on ? "true" : "false");
+    }
+    document.body.classList.toggle("vis-is-searching", on);
+    const results = document.getElementById("results");
+    if (on && results && results.dataset.type === "images") {
+      showSkeletons(results);
+    }
+  }
+
+  function initReverseImageUX() {
+    let busy = false;
+
+    function getContext(source) {
+      if (source === "hero") {
+        return {
+          urlInput: document.getElementById("vis-hero-url"),
+          fileInput: document.getElementById("vis-hero-file"),
+          errorEl: document.getElementById("vis-hero-url-error"),
+          statusId: "vis-status-banner",
+          preview: {
+            previewId: "vis-sticky-thumb",
+            imgId: "vis-preview-img",
+            labelId: "vis-preview-label",
+            dropId: "vis-hero-drop",
+          },
+          capInput: null,
+        };
+      }
+      return {
+        urlInput: document.getElementById("reverse-image-url"),
+        fileInput: document.getElementById("reverse-image-file"),
+        errorEl: document.getElementById("reverse-image-url-error"),
+        statusId: null,
+        preview: {
+          previewId: "reverse-image-preview",
+          imgId: "reverse-image-preview-img",
+          labelId: "reverse-image-preview-label",
+          dropId: null,
+        },
+        capInput: document.getElementById("reverse-image-caption"),
+      };
+    }
+
+    async function submitReverseImage(opts = {}) {
+      if (busy) return;
+      const source = opts.source || "hero";
+      const ctx = getContext(source);
+      const url = (opts.url ?? ctx.urlInput?.value ?? "").trim();
+      const file = opts.file ?? ctx.fileInput?.files?.[0];
+      const cap = (opts.caption ?? ctx.capInput?.value ?? "").trim();
+
+      showFieldError(ctx.errorEl, "");
+      setUrlInputState(ctx.urlInput, null);
+
       if (!file && !url) {
-        window.alert("Add an HTTPS image link or choose a photo.");
+        showFieldError(ctx.errorEl, "Paste a direct image URL or upload a photo.");
+        shakeEl(ctx.urlInput || ctx.errorEl);
         return;
       }
+      if (!file) {
+        const check = validateImageUrl(url);
+        if (!check.ok) {
+          showFieldError(ctx.errorEl, check.message);
+          setUrlInputState(ctx.urlInput, false);
+          shakeEl(ctx.urlInput);
+          return;
+        }
+        setUrlInputState(ctx.urlInput, true);
+        showUploadPreview({ ...ctx.preview, imageUrl: url });
+      } else {
+        showUploadPreview({ ...ctx.preview, file });
+      }
+      if (ctx.statusId) showStatusBanner(ctx.statusId, "Analyzing image…", "info");
       showLoading(true);
+      busy = true;
+      document.body.classList.add("vis-is-searching");
+
       try {
         let resp;
         if (file) {
           const fd = new FormData();
           fd.append("image", file);
+          if (cap) fd.append("caption", cap);
           resp = await fetch("/api/reverse-image", { method: "POST", body: fd });
         } else {
           resp = await fetch("/api/reverse-image", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ image_url: url }),
+            body: JSON.stringify({ image_url: url, caption: cap || undefined }),
           });
         }
         const data = await resp.json().catch(() => ({}));
         if (!resp.ok || !data.ok) {
-          window.alert(data.message || data.error || "Could not look up that image.");
+          const msg = data.message || data.error || "Could not look up that image.";
+          showFieldError(ctx.errorEl, msg);
+          if (ctx.statusId) showStatusBanner(ctx.statusId, "", "");
+          if (!ctx.errorEl) visNotify(msg);
+          if (ctx.fileInput) ctx.fileInput.value = "";
+          const label = document.getElementById(ctx.preview.labelId);
+          if (label) label.textContent = "Could not analyze image";
           return;
         }
         if (data.redirect) window.location.href = data.redirect;
       } finally {
+        busy = false;
         showLoading(false);
+        document.body.classList.remove("vis-is-searching");
       }
     }
 
-    heroGo?.addEventListener("click", runFromHero);
-    heroFile?.addEventListener("change", () => {
-      if (heroFile.files?.[0]) runFromHero();
+    window.visSubmitReverseImage = submitReverseImage;
+
+    window.visHandleReverseFile = function (file, source) {
+      if (!file) return;
+      const ctx = getContext(source === "panel" ? "panel" : "hero");
+      if (ctx.fileInput) {
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        ctx.fileInput.files = dt.files;
+      }
+      const hint = document.getElementById("reverse-image-file-hint");
+      if (hint) hint.textContent = file.name || "Selected";
+      showUploadPreview({ ...ctx.preview, file });
+      window.setTimeout(() => submitReverseImage({ source: source === "panel" ? "panel" : "hero", file }), 520);
+    };
+
+    function bindUrlValidation(input, errorEl) {
+      if (!input) return;
+      let debounce = null;
+      input.addEventListener("input", () => {
+        window.clearTimeout(debounce);
+        const v = (input.value || "").trim();
+        if (!v) {
+          showFieldError(errorEl, "");
+          setUrlInputState(input, null);
+          return;
+        }
+        debounce = window.setTimeout(() => {
+          const check = validateImageUrl(v);
+          if (check.ok) {
+            showFieldError(errorEl, "");
+            setUrlInputState(input, true);
+          } else {
+            showFieldError(errorEl, check.message);
+            setUrlInputState(input, false);
+          }
+        }, 280);
+      });
+    }
+
+    function bindSubmitOnEnter(input, source) {
+      input?.addEventListener("keydown", (e) => {
+        if (e.key !== "Enter") return;
+        e.preventDefault();
+        submitReverseImage({ source });
+      });
+    }
+
+    bindUrlValidation(document.getElementById("vis-hero-url"), document.getElementById("vis-hero-url-error"));
+    bindUrlValidation(document.getElementById("reverse-image-url"), document.getElementById("reverse-image-url-error"));
+    bindSubmitOnEnter(document.getElementById("vis-hero-url"), "hero");
+    bindSubmitOnEnter(document.getElementById("reverse-image-url"), "panel");
+
+    document.getElementById("vis-hero-url-go")?.addEventListener("click", () => {
+      submitReverseImage({ source: "hero" });
     });
 
-    document.getElementById("vis-hero-upload")?.addEventListener("click", () => heroFile?.click());
+    document.getElementById("vis-hero-upload")?.addEventListener("click", () => {
+      document.getElementById("vis-hero-file")?.click();
+    });
+
+    document.getElementById("vis-hero-file")?.addEventListener("change", (e) => {
+      const f = e.target.files?.[0];
+      if (f) window.visHandleReverseFile(f, "hero");
+    });
 
     const drop = document.getElementById("vis-hero-drop");
     if (drop) {
@@ -440,10 +687,10 @@
       ["dragleave", "drop"].forEach((ev) => {
         drop.addEventListener(ev, (e) => {
           e.preventDefault();
+          if (ev === "dragleave" && e.currentTarget.contains(e.relatedTarget)) return;
           drop.classList.remove("is-dragover");
-          if (ev === "drop" && e.dataTransfer?.files?.[0] && heroFile) {
-            heroFile.files = e.dataTransfer.files;
-            runFromHero();
+          if (ev === "drop" && e.dataTransfer?.files?.[0]) {
+            window.visHandleReverseFile(e.dataTransfer.files[0], "hero");
           }
         });
       });
@@ -451,12 +698,20 @@
   }
 
   function init() {
+    initReverseImageUX();
+    showLoading(false);
+    document.getElementById("vis-status-banner") &&
+      showStatusBanner("vis-status-banner", "", "");
+
     const isVisual =
       document.body.classList.contains("visual-search-mode") ||
       window.__searchType === "images";
     if (!isVisual) return;
 
     document.body.classList.add("visual-search-mode");
+    if (document.getElementById("vis-source-session")) {
+      document.body.classList.add("vis-active-session");
+    }
 
     const container = document.getElementById("results");
     if (container && container.dataset.type === "images") {
@@ -467,7 +722,6 @@
     }
 
     initModalTabs();
-    hookReverseImageLoading();
     wrapLightbox();
 
     const mo = new MutationObserver(() => {

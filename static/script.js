@@ -87,6 +87,7 @@ document.addEventListener("DOMContentLoaded", () => {
     document.body.appendChild(toast);
     window.setTimeout(() => toast.remove(), 3200);
   }
+  window.showToast = showToast;
   async function fetchJson(url, options = {}) {
     const opts = {
       credentials: "same-origin",
@@ -4256,19 +4257,38 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function setBusy(on) {
       busy = on;
-      btn.disabled = on;
-      submitBtn && (submitBtn.disabled = on);
-      pickBtn && (pickBtn.disabled = on);
       btn.setAttribute("aria-busy", on ? "true" : "false");
+      submitBtn?.setAttribute("aria-busy", on ? "true" : "false");
     }
 
     async function runReverseImageSubmit() {
       if (busy) return;
+      if (typeof window.visSubmitReverseImage === "function") {
+        setBusy(true);
+        try {
+          await window.visSubmitReverseImage({
+            source: "panel",
+            url: (urlInput?.value || "").trim(),
+            file: fileInput.files?.[0],
+            caption: (capInput?.value || "").trim(),
+          });
+        } finally {
+          setBusy(false);
+        }
+        return;
+      }
       const cap = (capInput?.value || "").trim();
       const file = fileInput.files && fileInput.files[0];
       const url = (urlInput?.value || "").trim();
       if (!file && !url) {
-        window.alert("Add an HTTPS image link or choose a photo from your device.");
+        const errEl = document.getElementById("reverse-image-url-error");
+        if (errEl) {
+          errEl.textContent = "Paste a direct image URL or upload a photo.";
+          errEl.hidden = false;
+          errEl.classList.add("is-visible");
+        } else if (typeof window.showToast === "function") {
+          window.showToast("Paste a direct image URL or upload a photo.", "error");
+        }
         return;
       }
       if (fileHint) fileHint.textContent = file ? "Searching…" : "";
@@ -4289,7 +4309,9 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         const data = await resp.json().catch(() => ({}));
         if (!resp.ok || !data.ok) {
-          window.alert(data.message || data.error || "Could not look up that image.");
+          if (typeof window.showToast === "function") {
+            window.showToast(data.message || data.error || "Could not look up that image.", "error");
+          }
           fileInput.value = "";
           if (fileHint) fileHint.textContent = "";
           return;
@@ -4333,6 +4355,10 @@ document.addEventListener("DOMContentLoaded", () => {
     fileInput.addEventListener("change", () => {
       const f = fileInput.files && fileInput.files[0];
       if (!f) return;
+      if (typeof window.visHandleReverseFile === "function") {
+        window.visHandleReverseFile(f, "panel");
+        return;
+      }
       if (fileHint) fileHint.textContent = f.name || "Selected";
       runReverseImageSubmit();
     });

@@ -63,7 +63,13 @@ from query_understanding import (
 )
 from retrieval.pipeline import run_text_retrieval_pipeline_sync
 from retrieval.open_catalog_blend import fetch_open_knowledge_hits
-from reverse_image import fetch_reverse_hits_for_image_url, validate_client_image_url
+from reverse_image import (
+    fetch_reverse_hits_for_image_url,
+    rev_session_hits,
+    rev_session_pack,
+    rev_session_source_view,
+    validate_client_image_url,
+)
 import reverse_image_storage as _reverse_image_storage
 import research_chat as _research_chat
 from search_bots import crawl_bot_pages, normalize_http_seed, parse_json_list
@@ -3098,6 +3104,7 @@ _TEMPLATE_DEFAULTS = dict(
     img_src_checked=["ddg", "openverse", "commons"],
     img_scroll_extras="",
     img_rev_key="",
+    img_rev_source=None,
     query_ui={
         "intent": "informational",
         "interrogative_or_explanatory": False,
@@ -4635,6 +4642,13 @@ def search(stype=None):
         query_ui = {**query_ui, "show_ai_summary": False}
 
     _people_pf_qs = people_pf_params_only_fragment(people_finder_pf or {})
+    img_rev_source = None
+    if search_type == "images" and img_rev_key:
+        with _reverse_image_hits_lock:
+            _rev_entry = _reverse_image_hits_cache.get(img_rev_key)
+        img_rev_source = rev_session_source_view(
+            _rev_entry, img_rev_key, preview_route="/api/reverse-image/preview"
+        )
     return render_template(
         "index.html",
         query=query,
@@ -4682,6 +4696,7 @@ def search(stype=None):
         mybot_id=mybot_id,
         mybot_name=mybot_name,
         img_rev_key=img_rev_key,
+        img_rev_source=img_rev_source,
         people_finder=pf_ctx,
         people_finder_pf=people_finder_pf or {},
         people_pf_url_extra=_people_pf_qs,
@@ -4917,11 +4932,17 @@ def api_reverse_image_preview(token: str):
     """Ephemeral URL so Bing can retrieve an uploaded image once during lookup."""
     if not re.fullmatch(r"[A-Za-z0-9_-]{16,128}", token or ""):
         return Response("Not found", status=404)
-    with _reverse_image_preview_lock:
-        row = _reverse_image_preview_cache.get(token)
-    if not row:
-        return Response("Not found", status=404)
-    body, content_type = row[0], row[1]
+    with _reverse_image_hits_lock:
+        session = _reverse_image_hits_cache.get(token)
+    if isinstance(session, dict) and session.get("body"):
+        body = session["body"]
+        content_type = session.get("mime") or "image/jpeg"
+    else:
+        with _reverse_image_preview_lock:
+            row = _reverse_image_preview_cache.get(token)
+        if not row:
+            return Response("Not found", status=404)
+        body, content_type = row[0], row[1]
     return Response(
         body,
         mimetype=content_type or "application/octet-stream",
@@ -4951,6 +4972,10 @@ def api_reverse_image():
 
     ct = (request.content_type or "").lower()
     hits: list = []
+    upload_raw: bytes | None = None
+    upload_mime = ""
+    upload_name = ""
+    source_url = ""
 
     if "multipart/form-data" in ct:
         f = request.files.get("image")
@@ -4963,6 +4988,7 @@ def api_reverse_image():
         mime = sniffed or (f.mimetype or "") or "application/octet-stream"
         if sniffed is None and mime not in {"image/jpeg", "image/png", "image/webp", "image/gif", "image/avif"}:
             return jsonify({"ok": False, "error": "unsupported_type"}), 400
+        upload_raw, upload_mime, upload_name = raw, mime, (f.filename or "").strip()
 
         storage_uploaded = _reverse_image_storage.put_object(raw, mime)
         if storage_uploaded is not None:
@@ -5012,6 +5038,7 @@ def api_reverse_image():
         ok_u, _why = validate_client_image_url(image_url)
         if not ok_u:
             return jsonify({"ok": False, "error": "bad_image_url"}), 400
+        source_url = image_url
         hits = _hits_with_client(image_url)
         cap = (data.get("caption") or "").strip()
 
@@ -5029,8 +5056,15 @@ def api_reverse_image():
 
     q_label = cap[:200] if cap else caption_default
     result_tok = secrets.token_urlsafe(24)
+    session = rev_session_pack(
+        hits,
+        filename=upload_name,
+        image_url=source_url,
+        image_bytes=upload_raw,
+        mime=upload_mime,
+    )
     with _reverse_image_hits_lock:
-        _reverse_image_hits_cache[result_tok] = hits
+        _reverse_image_hits_cache[result_tok] = session
 
     q_enc = quote_plus(q_label)
     return jsonify(
@@ -5038,6 +5072,7 @@ def api_reverse_image():
             "ok": True,
             "redirect": f"/search?q={q_enc}&type=images&img_rev_key={result_tok}",
             "count": len(hits),
+            "img_rev_key": result_tok,
         }
     )
 
@@ -9737,14 +9772,15 @@ def _fetch_results(
     """Fetch results with caching. Returns paginated slice."""
     if search_type == "images" and img_rev_key:
         with _reverse_image_hits_lock:
-            full_hits = _reverse_image_hits_cache.get(img_rev_key)
-        if full_hits is None:
+            entry = _reverse_image_hits_cache.get(img_rev_key)
+        if entry is None:
             return {
                 "results": [],
                 "has_more": False,
                 "page": page,
                 "notice": "That image match session expired or was invalid. Open the photo button and try again.",
             }
+        full_hits = rev_session_hits(entry)
         start = RESULTS_PER_PAGE * (page - 1)
         page_results = full_hits[start : start + RESULTS_PER_PAGE]
         has_more = len(full_hits) > start + RESULTS_PER_PAGE

@@ -65,7 +65,7 @@
     </script>
     {% endif %}
 </head>
-<body class="{% if query %}has-results page-search--{{ search_type }}{% endif %}{% if search_type == 'images' and query %} visual-search-mode{% endif %} has-site-bottom-nav">
+<body class="{% if query %}has-results page-search--{{ search_type }}{% endif %}{% if search_type == 'images' %} visual-search-mode{% endif %}{% if img_rev_key and img_rev_source %} vis-active-session{% endif %} has-site-bottom-nav">
     <noscript>
         <div class="noscript-banner" role="note">
             <strong>abbieysearch</strong> &mdash; OSINT-friendly search with receipts.
@@ -526,11 +526,16 @@
                     <div class="ac-dropdown" id="ac-dropdown"></div>
                     <input type="file" id="reverse-image-file" class="sr-only" accept="image/*" aria-label="Image file for reverse search">
                     <button type="button" class="reverse-image-url-entry" id="reverse-image-url-entry" aria-expanded="false" aria-controls="reverse-image-panel">Paste image URL</button>
-                    <div id="reverse-image-panel" class="reverse-image-panel" hidden role="dialog" aria-label="Search by image with a link" aria-modal="true">
+                    <div id="reverse-image-panel" class="reverse-image-panel vis-glass-panel" hidden role="dialog" aria-label="Search by image with a link" aria-modal="true">
                     <p class="reverse-image-lead">Find similar images across the web. Paste a direct <strong>HTTPS</strong> image link, or use <strong>Choose photo</strong> to pick from this device. Uploads are hosted privately for ~60&nbsp;seconds while the lookup runs and then wiped.</p>
                     <label class="reverse-image-field"><span class="reverse-image-label">Image URL</span>
-                        <input type="url" id="reverse-image-url" inputmode="url" autocomplete="off" placeholder="https://…/photo.jpg" class="reverse-image-input">
+                        <input type="url" id="reverse-image-url" inputmode="url" autocomplete="off" placeholder="Paste image URL…" class="reverse-image-input vis-url-input">
+                        <p class="vis-field-error" id="reverse-image-url-error" role="alert" hidden></p>
                     </label>
+                    <div class="vis-upload-preview" id="reverse-image-preview" hidden aria-live="polite">
+                        <img id="reverse-image-preview-img" alt="" width="120" height="120">
+                        <p class="vis-upload-preview-label" id="reverse-image-preview-label">Searching similar images…</p>
+                    </div>
                     <div class="reverse-image-field reverse-image-device-row">
                         <span class="reverse-image-label">From device</span>
                         <button type="button" class="reverse-image-pick-btn" id="reverse-image-pick-btn">Choose photo</button>
@@ -1263,14 +1268,41 @@
             </aside>
             {% endif %}
 
-        {% if search_type == 'images' and query %}
+        {% if search_type == 'images' %}
+        {% if img_rev_key and img_rev_source %}
+        <section class="vis-source-session" id="vis-source-session" aria-label="Source image for this visual search">
+            <div class="vis-source-card">
+                <div class="vis-source-thumb-wrap">
+                    <img class="vis-source-thumb" id="vis-source-thumb" src="{{ img_rev_source.url }}" alt="Source image for visual matches" width="120" height="120" loading="eager" decoding="async">
+                </div>
+                <div class="vis-source-meta-col">
+                    <h2 class="vis-source-title">Visual matches</h2>
+                    <p class="vis-source-filename" id="vis-source-filename">{{ img_rev_source.filename }}</p>
+                    <p class="vis-source-count">Found {{ img_rev_source.count }} similar image{{ 's' if img_rev_source.count != 1 else '' }}</p>
+                    <div class="vis-source-actions">
+                        <a class="vis-source-action" href="/search?type=images" id="vis-change-image">Change image</a>
+                        <a class="vis-source-action vis-source-action--primary" href="{{ img_rev_source.url }}" target="_blank" rel="noopener noreferrer">Open full size</a>
+                    </div>
+                </div>
+            </div>
+        </section>
+        {% else %}
         <section class="vis-hero" id="vis-hero" aria-label="Visual search">
             <div class="vis-hero-glow" aria-hidden="true"></div>
             <div class="vis-hero-inner">
                 <p class="vis-hero-eyebrow">AI visual intelligence</p>
-                <h2 class="vis-hero-title">{% if img_rev_key %}Visual matches{% else %}Search by image{% endif %}</h2>
+                <h2 class="vis-hero-title">Search by image</h2>
                 <p class="vis-hero-lead">Search visual matches across the web — upload a photo or paste an image URL.</p>
-                <div class="vis-hero-drop" id="vis-hero-drop">
+                <div class="vis-upload-stage" id="vis-upload-stage">
+                    <aside class="vis-sticky-thumb" id="vis-sticky-thumb" hidden aria-live="polite">
+                        <div class="vis-sticky-thumb-frame">
+                            <img id="vis-preview-img" alt="" width="140" height="140">
+                            <span class="vis-sticky-scan" aria-hidden="true"></span>
+                        </div>
+                        <p class="vis-upload-preview-label" id="vis-preview-label">Searching similar images…</p>
+                    </aside>
+                    <div class="vis-stage-main">
+                    <div class="vis-hero-drop" id="vis-hero-drop">
                     <input type="file" id="vis-hero-file" class="sr-only" accept="image/*" aria-label="Upload image for visual search">
                     <button type="button" class="vis-hero-upload" id="vis-hero-upload">
                         <span class="vis-hero-upload-icon" aria-hidden="true">
@@ -1281,14 +1313,19 @@
                     </button>
                     <div class="vis-hero-url-row">
                         <label class="vis-hero-url-label" for="vis-hero-url">Image URL</label>
-                        <input type="url" id="vis-hero-url" class="vis-hero-url-input" inputmode="url" placeholder="https://…/photo.jpg" autocomplete="off">
-                        <button type="button" class="vis-hero-url-go" id="vis-hero-url-go">Search</button>
+                        <input type="url" id="vis-hero-url" class="vis-hero-url-input vis-url-input" inputmode="url" placeholder="Paste image URL…" autocomplete="off">
+                        <p class="vis-field-error" id="vis-hero-url-error" role="alert" hidden></p>
+                        <button type="button" class="vis-hero-url-go" id="vis-hero-url-go">Find similar images</button>
+                    </div>
+                    </div>
+                    <p class="vis-status-banner" id="vis-status-banner" role="status" hidden></p>
                     </div>
                 </div>
             </div>
         </section>
+        {% endif %}
         {% if query and results %}
-        <section class="vis-toolbar" id="vis-toolbar" aria-label="Visual search filters">
+        <section class="vis-toolbar vis-toolbar-row" id="vis-toolbar" aria-label="Visual search filters">
             <div class="vis-filter-chips" id="vis-filter-chips" role="group" aria-label="Smart filters">
                 <button type="button" class="vis-chip active" data-vis-filter="all" aria-pressed="true">All</button>
                 <button type="button" class="vis-chip" data-vis-filter="people" aria-pressed="false">People</button>
@@ -1300,10 +1337,10 @@
                 <button type="button" class="vis-chip" data-vis-filter="screenshots" aria-pressed="false">Screenshots</button>
                 <button type="button" class="vis-chip" data-vis-filter="ai" aria-pressed="false">AI-generated</button>
             </div>
-            <label class="vis-similarity" id="vis-similarity-wrap">
+            <label class="vis-similarity vis-similarity-inline" id="vis-similarity-wrap">
                 <span class="vis-similarity-label">Similarity</span>
-                <span class="vis-similarity-ends" aria-hidden="true"><span>Strict</span><span>Broad</span></span>
                 <input type="range" id="vis-similarity" class="vis-similarity-range" min="0" max="100" value="35" aria-valuetext="Balanced">
+                <span class="vis-similarity-ends" aria-hidden="true"><span>Strict</span><span>Broad</span></span>
             </label>
         </section>
         <div class="vis-loading" id="vis-loading" hidden aria-live="polite" aria-busy="false">
