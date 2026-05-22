@@ -343,6 +343,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Generate a darker variant
     const dim = adjustBrightness(color, -30);
     html.style.setProperty("--accent-dim", dim);
+    html.style.setProperty("--accent-contrast", getContrastTextColor(color));
     localStorage.setItem("accent-color", color);
     // Mark active swatch
     document.querySelectorAll(".color-swatch").forEach(s => {
@@ -403,6 +404,16 @@ document.addEventListener("DOMContentLoaded", () => {
     const g = Math.max(0, Math.min(255, parseInt(hex.slice(2, 4), 16) + amount));
     const b = Math.max(0, Math.min(255, parseInt(hex.slice(4, 6), 16) + amount));
     return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
+  }
+
+  function getContrastTextColor(hex) {
+    const clean = String(hex || "").replace("#", "");
+    if (clean.length !== 6) return "#ffffff";
+    const r = parseInt(clean.slice(0, 2), 16);
+    const g = parseInt(clean.slice(2, 4), 16);
+    const b = parseInt(clean.slice(4, 6), 16);
+    const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+    return luminance > 0.6 ? "#111111" : "#ffffff";
   }
 
   // Wrap URL paths in a span so CSS can hide just the path, leaving the domain visible
