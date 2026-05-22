@@ -34,11 +34,11 @@
   --search-shadow: 0 6px 20px rgba(0,0,0,.16);
   --search-shadow-hover: 0 9px 24px rgba(0,0,0,.2);
   --search-placeholder: rgba(255,255,255,0.35);
-  --search-button-bg: #4ade80;
-  --search-button-bg-hover: #22c55e;
-  --search-button-text: #052e16;
-  --search-button-shadow: 0 6px 18px rgba(74, 222, 128, 0.22);
-  --search-button-shadow-hover: 0 10px 24px rgba(34, 197, 94, 0.28);
+  --search-button-bg: var(--accent);
+  --search-button-bg-hover: var(--accent-dim);
+  --search-button-text: var(--accent-contrast, #000000);
+  --search-button-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 28%, transparent);
+  --search-button-shadow-hover: 0 10px 24px color-mix(in srgb, var(--accent-dim) 34%, transparent);
   --radius-sm:     4px;
   --radius:        6px;
   --radius-lg:     8px;
@@ -76,11 +76,11 @@
   --search-shadow: 0 4px 16px rgba(28,25,23,.08);
   --search-shadow-hover: 0 7px 20px rgba(28,25,23,.1);
   --search-placeholder: rgba(28,25,23,0.38);
-  --search-button-bg: #4ade80;
-  --search-button-bg-hover: #22c55e;
-  --search-button-text: #052e16;
-  --search-button-shadow: 0 6px 18px rgba(74, 222, 128, 0.22);
-  --search-button-shadow-hover: 0 10px 24px rgba(34, 197, 94, 0.28);
+  --search-button-bg: var(--accent);
+  --search-button-bg-hover: var(--accent-dim);
+  --search-button-text: var(--accent-contrast, #ffffff);
+  --search-button-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 28%, transparent);
+  --search-button-shadow-hover: 0 10px 24px color-mix(in srgb, var(--accent-dim) 34%, transparent);
   --radius-sm:     4px;
   --radius:        6px;
   --radius-lg:     8px;
@@ -664,10 +664,10 @@ body:not(.has-results) .search-box {
 }
 .search-box:focus-within {
   background: var(--search-surface-focus);
-  border-color: var(--search-accent-focus, #4ade80);
+  border-color: var(--search-accent-focus, var(--accent));
   outline: none;
   box-shadow:
-    0 0 0 2px var(--search-accent-ring, rgba(74, 222, 128, 0.12));
+    0 0 0 2px var(--search-accent-ring, color-mix(in srgb, var(--accent) 24%, transparent));
   transform: none;
 }
 
@@ -677,7 +677,7 @@ body:not(.has-results) .search-box {
   height: 1.25rem;
   display: block;
 }
-.search-box:focus-within .search-icon { color: var(--search-accent-focus-icon, #86efac); }
+.search-box:focus-within .search-icon { color: var(--search-accent-focus-icon, var(--accent)); }
 
 /* Shared line-art magnifier (input, autocomplete, recent header) — currentColor, theme-safe */
 .icon-search-glass {
@@ -6465,4 +6465,3 @@ body:not(.has-results) .footer-links {
   .profile-avatar { width: 44px; height: 44px; font-size: 1.15rem; }
   .profile-name { font-size: 1rem; }
 }
-
