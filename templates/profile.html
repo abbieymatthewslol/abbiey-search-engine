@@ -81,6 +81,7 @@
                     <label for="profile-phone">Phone <span class="form-hint">(optional)</span></label>
                     <div class="auth-input-pill">
                         <input type="tel" id="profile-phone" name="phone" value="{{ user.phone or '' }}"
+                               data-phone-placeholder-localize="true"
                                placeholder="+1 555 123 4567" autocomplete="tel" inputmode="tel" maxlength="32">
                     </div>
                     <span class="form-hint">International format with country code. Clear the field to remove.</span>

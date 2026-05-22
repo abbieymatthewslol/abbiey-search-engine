@@ -1739,6 +1739,8 @@ def _send_signup_verification_email(
 
 @app.context_processor
 def _inject_current_user():
+    detected_country_code = _detected_country_code()
+    detected_search_region = _search_region_for_country(detected_country_code)
     ctx = {
         "deploy_hash": DEPLOY_HASH,
         "google_site_verification": _GOOGLE_SITE_VERIFICATION,
@@ -1762,6 +1764,8 @@ def _inject_current_user():
         "supabase_url": _SUPABASE_URL if _SUPABASE_AUTH_ENABLED else "",
         "supabase_anon_key": _SUPABASE_ANON_KEY if _SUPABASE_AUTH_ENABLED else "",
         "csp_nonce": getattr(g, "csp_nonce", ""),
+        "detected_country_code": detected_country_code,
+        "detected_search_region": detected_search_region,
     }
     try:
         uid = _session_user_id_int(session.get("user_id"))
@@ -4236,6 +4240,11 @@ def search(stype=None):
     mybot_id = request.args.get("bot_id", type=int)
     region = request.args.get("region", "").strip() or None
     lang = request.args.get("lang", "").strip() or None
+    detected_search_region = _search_region_for_country(_detected_country_code()) or None
+    if not region and detected_search_region:
+        region = detected_search_region
+    if region and not lang:
+        lang = _search_lang_for_region(region) or None
     time_filter = request.args.get("df", "").strip()
     if time_filter not in {"d", "w", "m", "y"}:
         time_filter = ""
@@ -4439,6 +4448,8 @@ def search(stype=None):
 
     prep = preprocess_query(clean_query)
     query_ui = query_ui_hints(prep, refinement_notes=query_refinement_notes)
+    if region and not lang:
+        lang = _search_lang_for_region(region) or None
 
     pf_ctx = (
         people_finder_banner_context(query, people_finder_pf) if people_finder_pf else None
@@ -11214,6 +11225,72 @@ def developer_api_key_revoke(key_id):
 _PROFILE_BOOKMARKS_LIMIT = 150
 
 
+_REQUEST_COUNTRY_HEADER_KEYS = (
+    "x-vercel-ip-country",
+    "cf-ipcountry",
+    "cloudfront-viewer-country",
+    "x-country-code",
+)
+_COUNTRY_TO_SEARCH_REGION = {
+    "AU": "au-en",
+    "BR": "br-pt",
+    "CA": "ca-en",
+    "DE": "de-de",
+    "ES": "es-es",
+    "FR": "fr-fr",
+    "GB": "uk-en",
+    "IE": "uk-en",
+    "IN": "in-en",
+    "IT": "it-it",
+    "JP": "jp-jp",
+    "NZ": "au-en",
+    "US": "us-en",
+}
+
+
+def _normalize_country_code(raw):
+    code = re.sub(r"[^A-Za-z]", "", str(raw or "")).upper()
+    if len(code) == 2 and code not in {"XX", "ZZ"}:
+        return code
+    return ""
+
+
+def _country_from_accept_language(header_value):
+    for raw_part in str(header_value or "").split(","):
+        lang_tag = raw_part.split(";", 1)[0].strip()
+        if not lang_tag:
+            continue
+        normalized = lang_tag.replace("_", "-")
+        parts = [part for part in normalized.split("-") if part]
+        if len(parts) < 2:
+            continue
+        region = _normalize_country_code(parts[-1])
+        if region:
+            return region
+    return ""
+
+
+def _detected_country_code():
+    if not has_request_context():
+        return ""
+    for header_name in _REQUEST_COUNTRY_HEADER_KEYS:
+        country = _normalize_country_code(request.headers.get(header_name, ""))
+        if country:
+            return country
+    return _country_from_accept_language(request.headers.get("Accept-Language", ""))
+
+
+def _search_region_for_country(country_code):
+    return _COUNTRY_TO_SEARCH_REGION.get(_normalize_country_code(country_code), "")
+
+
+def _search_lang_for_region(region):
+    value = (region or "").strip().lower()
+    if not value or "-" not in value:
+        return ""
+    return value.split("-", 1)[1]
+
+
 @app.route("/profile")
 def profile():
     redir = _require_login()
@@ -12176,4 +12253,3 @@ if __name__ == "__main__":
 @app.route('/api/healthz')
 def healthz_api():
     return healthz()
-

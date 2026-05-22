@@ -44,7 +44,7 @@
     <link rel="apple-touch-icon" href="/static/icon-192.png">
     <link rel="search" type="application/opensearchdescription+xml" title="abbieysearch" href="/opensearch.xml">
 </head>
-<body class="{% block body_class %}{% endblock %}">
+<body class="{% block body_class %}{% endblock %}" data-detected-country="{{ detected_country_code or '' }}" data-detected-search-region="{{ detected_search_region or '' }}">
 
     <header>
     <div class="header-brand-top">

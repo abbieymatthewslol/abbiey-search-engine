@@ -8,6 +8,70 @@
  */
 document.addEventListener("DOMContentLoaded", () => {
   const html = document.documentElement;
+  const PHONE_PLACEHOLDER_BY_COUNTRY = Object.freeze({
+    AU: "+61 412 345 678",
+    BR: "+55 11 91234-5678",
+    CA: "+1 416 555 0123",
+    DE: "+49 1512 3456789",
+    ES: "+34 612 34 56 78",
+    FR: "+33 6 12 34 56 78",
+    GB: "+44 7700 900123",
+    IE: "+353 85 123 4567",
+    IN: "+91 98765 43210",
+    IT: "+39 312 345 6789",
+    JP: "+81 90-1234-5678",
+    MX: "+52 55 1234 5678",
+    NL: "+31 6 12345678",
+    NZ: "+64 21 123 4567",
+    SG: "+65 9123 4567",
+    US: "+1 555 123 4567",
+    ZA: "+27 71 123 4567",
+  });
+  const SEARCH_REGION_BY_COUNTRY = Object.freeze({
+    AU: "au-en",
+    BR: "br-pt",
+    CA: "ca-en",
+    DE: "de-de",
+    ES: "es-es",
+    FR: "fr-fr",
+    GB: "uk-en",
+    IE: "uk-en",
+    IN: "in-en",
+    IT: "it-it",
+    JP: "jp-jp",
+    NZ: "au-en",
+    US: "us-en",
+  });
+  const TIMEZONE_COUNTRY_BY_EXACT = Object.freeze({
+    "Europe/Dublin": "IE",
+    "Europe/London": "GB",
+    "Pacific/Auckland": "NZ",
+  });
+  const TIMEZONE_COUNTRY_BY_PREFIX = Object.freeze({
+    "Africa/Johannesburg": "ZA",
+    "America/Chicago": "US",
+    "America/Denver": "US",
+    "America/Edmonton": "CA",
+    "America/Halifax": "CA",
+    "America/Los_Angeles": "US",
+    "America/Mexico_City": "MX",
+    "America/New_York": "US",
+    "America/Phoenix": "US",
+    "America/Sao_Paulo": "BR",
+    "America/Toronto": "CA",
+    "America/Vancouver": "CA",
+    "America/Winnipeg": "CA",
+    "Asia/Kolkata": "IN",
+    "Asia/Singapore": "SG",
+    "Asia/Tokyo": "JP",
+    "Australia/": "AU",
+    "Europe/Amsterdam": "NL",
+    "Europe/Berlin": "DE",
+    "Europe/Madrid": "ES",
+    "Europe/Paris": "FR",
+    "Europe/Rome": "IT",
+    "Pacific/Honolulu": "US",
+  });
 
   /** Line-art search glass: tilted lens, NW highlight arc, rounded handle (suggestions + recent + inline reuse). */
   const ICON_SEARCH_GLASS_SVG =
@@ -23,6 +87,86 @@ document.addEventListener("DOMContentLoaded", () => {
     '<path d="M15 5L5 15" stroke="currentColor" stroke-width="1.85" stroke-linecap="round"/>' +
     "</svg>";
   const reducedMotionQuery = window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
+
+  function bodyDatasetValue(name) {
+    const body = document.body;
+    if (!body || !body.dataset) return "";
+    const value = body.dataset[name];
+    return typeof value === "string" ? value.trim() : "";
+  }
+
+  function normalizeCountryCode(raw) {
+    const value = String(raw || "").replace(/[^a-z]/gi, "").toUpperCase();
+    if (value.length === 2 && value !== "XX" && value !== "ZZ") return value;
+    return "";
+  }
+
+  function countryCodeFromLocaleTag(localeTag) {
+    const normalized = String(localeTag || "").trim().replace(/_/g, "-");
+    if (!normalized) return "";
+    const parts = normalized.split("-").filter(Boolean);
+    if (parts.length < 2) return "";
+    return normalizeCountryCode(parts[parts.length - 1]);
+  }
+
+  function countryCodeFromTimeZone(timeZone) {
+    const zone = String(timeZone || "").trim();
+    if (!zone) return "";
+    if (TIMEZONE_COUNTRY_BY_EXACT[zone]) return TIMEZONE_COUNTRY_BY_EXACT[zone];
+    const prefixes = Object.keys(TIMEZONE_COUNTRY_BY_PREFIX);
+    for (let i = 0; i < prefixes.length; i += 1) {
+      if (zone === prefixes[i] || zone.startsWith(prefixes[i])) {
+        return TIMEZONE_COUNTRY_BY_PREFIX[prefixes[i]];
+      }
+    }
+    return "";
+  }
+
+  function detectUserCountryCode() {
+    const serverCountry = normalizeCountryCode(bodyDatasetValue("detectedCountry"));
+    if (serverCountry) return serverCountry;
+    const languages = Array.isArray(navigator.languages) && navigator.languages.length
+      ? navigator.languages
+      : [navigator.language || ""];
+    for (let i = 0; i < languages.length; i += 1) {
+      const localeCountry = countryCodeFromLocaleTag(languages[i]);
+      if (localeCountry) return localeCountry;
+    }
+    try {
+      const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+      const timeZoneCountry = countryCodeFromTimeZone(timeZone);
+      if (timeZoneCountry) return timeZoneCountry;
+    } catch (_) {
+      /* ignore */
+    }
+    return "";
+  }
+
+  function detectSearchRegion() {
+    const serverRegion = bodyDatasetValue("detectedSearchRegion").toLowerCase();
+    if (serverRegion) return serverRegion;
+    const country = detectUserCountryCode();
+    return SEARCH_REGION_BY_COUNTRY[country] || "";
+  }
+
+  function searchLangForRegion(region) {
+    const value = String(region || "").trim().toLowerCase();
+    if (!value) return "";
+    const parts = value.split("-");
+    return parts.length > 1 ? parts[1] : "";
+  }
+
+  function localizePhonePlaceholders() {
+    const country = detectUserCountryCode() || "US";
+    const placeholder = PHONE_PLACEHOLDER_BY_COUNTRY[country] || PHONE_PLACEHOLDER_BY_COUNTRY.US;
+    document.querySelectorAll("[data-phone-placeholder-localize]").forEach((input) => {
+      if (!(input instanceof HTMLInputElement)) return;
+      input.placeholder = placeholder;
+      if (country) input.dataset.phoneCountry = country;
+    });
+  }
+
+  localizePhonePlaceholders();
 
   /** Append &lat=&lon= for local ranking when browser or prior search shared coordinates. */
   function geoQuerySuffix() {
@@ -544,6 +688,21 @@ document.addEventListener("DOMContentLoaded", () => {
       if (savedReg && rInput && !rInput.value) {
         rInput.value = savedReg;
         if (rSelect) rSelect.value = savedReg;
+      }
+    } else {
+      const detectedRegion = detectSearchRegion();
+      const detectedLang = searchLangForRegion(detectedRegion);
+      const rInput = document.getElementById("region-input");
+      const rSelect = document.getElementById("region-select");
+      const langInput = document.getElementById("lang-input");
+      if (detectedRegion && rInput && !rInput.value) {
+        rInput.value = detectedRegion;
+      }
+      if (detectedRegion && rSelect && !rSelect.value) {
+        rSelect.value = detectedRegion;
+      }
+      if (detectedLang && langInput && !langInput.value) {
+        langInput.value = detectedLang;
       }
     }
 
@@ -4571,5 +4730,3 @@ function resultDomainRow(url, sourceType, sourceLabel) {
   const src = sourceLabel ? `<span class="result-source-label">${esc(sourceLabel)}</span>` : "";
   return `<div class="result-domain-row">${faviconImg(url)}<span class="result-domain">${esc(host)}</span>${badge}${src}</div>`;
 }
-
-
