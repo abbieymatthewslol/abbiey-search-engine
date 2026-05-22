@@ -364,6 +364,11 @@ document.addEventListener("DOMContentLoaded", () => {
       "--search-accent-focus",
       "--search-accent-ring",
       "--search-accent-focus-icon",
+      "--search-button-bg",
+      "--search-button-bg-hover",
+      "--search-button-text",
+      "--search-button-shadow",
+      "--search-button-shadow-hover",
     ];
     if (!color) {
       vars.forEach(v => html.style.removeProperty(v));
@@ -375,6 +380,11 @@ document.addEventListener("DOMContentLoaded", () => {
       html.style.setProperty("--search-accent-focus", color);
       html.style.setProperty("--search-accent-ring", _mix(color, 0.22));
       html.style.setProperty("--search-accent-focus-icon", _mix(color, 1.0, true));
+      html.style.setProperty("--search-button-bg", color);
+      html.style.setProperty("--search-button-bg-hover", adjustBrightness(color, -22));
+      html.style.setProperty("--search-button-text", getReadableTextColor(color));
+      html.style.setProperty("--search-button-shadow", _mix(color, 0.22));
+      html.style.setProperty("--search-button-shadow-hover", _mix(color, 0.30));
       localStorage.setItem(SEARCH_ACCENT_KEY, color);
     }
     document.querySelectorAll(".search-color-swatch").forEach(s => {
@@ -403,6 +413,17 @@ document.addEventListener("DOMContentLoaded", () => {
     const g = Math.max(0, Math.min(255, parseInt(hex.slice(2, 4), 16) + amount));
     const b = Math.max(0, Math.min(255, parseInt(hex.slice(4, 6), 16) + amount));
     return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
+  }
+
+  function getReadableTextColor(hex) {
+    const h = String(hex || "").replace("#", "");
+    if (h.length !== 6) return "#052e16";
+    const r = parseInt(h.slice(0, 2), 16) / 255;
+    const g = parseInt(h.slice(2, 4), 16) / 255;
+    const b = parseInt(h.slice(4, 6), 16) / 255;
+    const toLinear = c => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
+    const luminance = 0.2126 * toLinear(r) + 0.7152 * toLinear(g) + 0.0722 * toLinear(b);
+    return luminance > 0.45 ? "#052e16" : "#f8fafc";
   }
 
   // Wrap URL paths in a span so CSS can hide just the path, leaving the domain visible
@@ -4571,5 +4592,4 @@ function resultDomainRow(url, sourceType, sourceLabel) {
   const src = sourceLabel ? `<span class="result-source-label">${esc(sourceLabel)}</span>` : "";
   return `<div class="result-domain-row">${faviconImg(url)}<span class="result-domain">${esc(host)}</span>${badge}${src}</div>`;
 }
-
 

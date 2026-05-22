@@ -242,6 +242,54 @@ test("overwriting a setting replaces the previous value", () => {
 });
 
 // ---------------------------------------------------------------------------
+
+console.log("\nSearch bar colour helpers");
+
+const SEARCH_ACCENT_KEY = "abbiey_search_accent";
+
+function getReadableTextColor(hex) {
+  const h = String(hex || "").replace("#", "");
+  if (h.length !== 6) return "#052e16";
+  const r = parseInt(h.slice(0, 2), 16) / 255;
+  const g = parseInt(h.slice(2, 4), 16) / 255;
+  const b = parseInt(h.slice(4, 6), 16) / 255;
+  const toLinear = (c) => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
+  const luminance = 0.2126 * toLinear(r) + 0.7152 * toLinear(g) + 0.0722 * toLinear(b);
+  return luminance > 0.45 ? "#052e16" : "#f8fafc";
+}
+
+function applySearchAccent(ls, style, color) {
+  const vars = ["--search-button-bg", "--search-button-bg-hover", "--search-button-text"];
+  if (!color) {
+    vars.forEach((v) => delete style[v]);
+    ls.removeItem(SEARCH_ACCENT_KEY);
+    return;
+  }
+  style["--search-button-bg"] = color;
+  style["--search-button-bg-hover"] = color;
+  style["--search-button-text"] = getReadableTextColor(color);
+  ls.setItem(SEARCH_ACCENT_KEY, color);
+}
+
+test("uses dark text on light search button colours", () => {
+  assertEqual(getReadableTextColor("#e7e5e4"), "#052e16");
+});
+
+test("uses light text on dark search button colours", () => {
+  assertEqual(getReadableTextColor("#2563eb"), "#f8fafc");
+});
+
+test("search bar colour persists and reset clears override key", () => {
+  const ls = makeLocalStorage();
+  const style = Object.create(null);
+  applySearchAccent(ls, style, "#2563eb");
+  assertEqual(ls.getItem(SEARCH_ACCENT_KEY), "#2563eb");
+  applySearchAccent(ls, style, "");
+  assertEqual(ls.getItem(SEARCH_ACCENT_KEY), null);
+  assert(!("--search-button-bg" in style), "Expected button bg override to be removed");
+});
+
+// ---------------------------------------------------------------------------
 // Summary
 // ---------------------------------------------------------------------------
 console.log(`\n${passed + failed} tests: ${passed} passed, ${failed} failed\n`);
