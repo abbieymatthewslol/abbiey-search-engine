@@ -4974,11 +4974,93 @@ body.page-auth .auth-main {
   color: var(--text-dim);
   line-height: 1.45;
 }
+.welcome-consent-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--bg-surface) 88%, transparent);
+}
+.welcome-consent-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.welcome-consent-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.welcome-consent-copy {
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: var(--text-dim);
+}
+.welcome-consent-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.7rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+}
+.welcome-consent-option input {
+  margin-top: 0.2rem;
+  flex-shrink: 0;
+}
+.welcome-consent-option span {
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+  min-width: 0;
+}
+.welcome-consent-option strong {
+  font-size: 0.875rem;
+  line-height: 1.4;
+  color: var(--text);
+}
+.welcome-consent-option small {
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+.welcome-consent-option a {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.welcome-consent-option a:hover {
+  color: var(--text);
+  border-bottom-color: var(--text-dim);
+}
 a.welcome-email-btn {
   text-decoration: none;
   text-align: center;
   display: block;
   box-sizing: border-box;
+}
+a.welcome-guest-btn {
+  text-decoration: none;
+  text-align: center;
+  display: block;
+  box-sizing: border-box;
+  margin-top: 0;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+}
+a.welcome-guest-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.auth-submit.is-disabled {
+  opacity: 0.5;
+  pointer-events: none;
+  cursor: not-allowed;
+  box-shadow: none;
 }
 
 .auth-errors {
@@ -6465,4 +6547,3 @@ body:not(.has-results) .footer-links {
   .profile-avatar { width: 44px; height: 44px; font-size: 1.15rem; }
   .profile-name { font-size: 1rem; }
 }
-

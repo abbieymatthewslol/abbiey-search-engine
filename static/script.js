@@ -1,5 +1,5 @@
 /**
- * script.js — main client bundle (single file for simple deploy/caching).
+ * script.js â€” main client bundle (single file for simple deploy/caching).
  * Logical regions (grep for "// ====="):
  *   Post-checkout search unlock sync, loading bars, theme, settings modal, filters, infinite scroll,
  *   lightbox, preview panel + layout gutter, "/" shortcut, chat, onion verify,
@@ -72,6 +72,14 @@ document.addEventListener("DOMContentLoaded", () => {
     "Europe/Rome": "IT",
     "Pacific/Honolulu": "US",
   });
+  const TERMS_CONSENT_KEY = "abbiey_terms_accepted";
+  const LOCATION_CONSENT_KEY = "abbiey_location_consent";
+  const LOCATION_CONSENT_VALUES = Object.freeze({
+    granted: "granted",
+    denied: "denied",
+  });
+  const CLIENT_PREF_MAX_AGE = 31536000;
+  let geoRequestInFlight = false;
 
   /** Line-art search glass: tilted lens, NW highlight arc, rounded handle (suggestions + recent + inline reuse). */
   const ICON_SEARCH_GLASS_SVG =
@@ -156,6 +164,161 @@ document.addEventListener("DOMContentLoaded", () => {
     return parts.length > 1 ? parts[1] : "";
   }
 
+  function readClientCookie(name) {
+    try {
+      const cookie = document.cookie
+        .split(";")
+        .map((part) => part.trim())
+        .find((part) => part.startsWith(`${name}=`));
+      return cookie ? decodeURIComponent(cookie.slice(name.length + 1)) : "";
+    } catch (_) {
+      return "";
+    }
+  }
+
+  function writeClientCookie(name, value, maxAgeSeconds) {
+    try {
+      const secure = window.location.protocol === "https:";
+      document.cookie =
+        `${name}=${encodeURIComponent(String(value || ""))}; path=/; max-age=${maxAgeSeconds}; samesite=lax` +
+        (secure ? "; secure" : "");
+    } catch (_) {
+      /* ignore */
+    }
+  }
+
+  function clearClientCookie(name) {
+    try {
+      const secure = window.location.protocol === "https:";
+      document.cookie = `${name}=; path=/; max-age=0; samesite=lax` + (secure ? "; secure" : "");
+    } catch (_) {
+      /* ignore */
+    }
+  }
+
+  function readClientPref(key) {
+    try {
+      const localValue = localStorage.getItem(key);
+      if (localValue != null) return String(localValue);
+    } catch (_) {
+      /* ignore */
+    }
+    return readClientCookie(key);
+  }
+
+  function writeClientPref(key, value) {
+    const normalized = String(value || "");
+    try {
+      localStorage.setItem(key, normalized);
+    } catch (_) {
+      /* ignore */
+    }
+    writeClientCookie(key, normalized, CLIENT_PREF_MAX_AGE);
+  }
+
+  function clearClientPref(key) {
+    try {
+      localStorage.removeItem(key);
+    } catch (_) {
+      /* ignore */
+    }
+    clearClientCookie(key);
+  }
+
+  function getTermsAccepted() {
+    return readClientPref(TERMS_CONSENT_KEY) === "1";
+  }
+
+  function setTermsAccepted(accepted) {
+    if (accepted) {
+      writeClientPref(TERMS_CONSENT_KEY, "1");
+    } else {
+      clearClientPref(TERMS_CONSENT_KEY);
+    }
+  }
+
+  function normalizeLocationConsent(value) {
+    const normalized = String(value || "").trim().toLowerCase();
+    if (normalized === LOCATION_CONSENT_VALUES.granted || normalized === LOCATION_CONSENT_VALUES.denied) {
+      return normalized;
+    }
+    return "";
+  }
+
+  function getLocationConsent() {
+    return normalizeLocationConsent(readClientPref(LOCATION_CONSENT_KEY));
+  }
+
+  function clearStoredGeoCoordinates() {
+    try {
+      sessionStorage.removeItem("abbiey_geo");
+    } catch (_) {
+      /* ignore */
+    }
+    const latInput = document.getElementById("geo-lat-input");
+    const lonInput = document.getElementById("geo-lon-input");
+    if (latInput) latInput.value = "";
+    if (lonInput) lonInput.value = "";
+  }
+
+  function setLocationConsent(value) {
+    const normalized = normalizeLocationConsent(value);
+    if (!normalized) {
+      clearClientPref(LOCATION_CONSENT_KEY);
+      clearStoredGeoCoordinates();
+      return;
+    }
+    writeClientPref(LOCATION_CONSENT_KEY, normalized);
+    if (normalized !== LOCATION_CONSENT_VALUES.granted) {
+      clearStoredGeoCoordinates();
+    }
+  }
+
+  function pageUsesPreciseLocation() {
+    return !!document.getElementById("geo-lat-input") || !!document.getElementById("geo-lon-input");
+  }
+
+  function storePreciseLocation(lat, lon) {
+    try {
+      sessionStorage.setItem(
+        "abbiey_geo",
+        JSON.stringify({
+          lat,
+          lon,
+          t: Date.now(),
+        }),
+      );
+    } catch (_) {
+      /* ignore */
+    }
+    const latInput = document.getElementById("geo-lat-input");
+    const lonInput = document.getElementById("geo-lon-input");
+    if (latInput) latInput.value = String(lat);
+    if (lonInput) lonInput.value = String(lon);
+  }
+
+  function requestPreciseLocation() {
+    if (!navigator.geolocation || !pageUsesPreciseLocation() || geoRequestInFlight) {
+      return Promise.resolve(false);
+    }
+    geoRequestInFlight = true;
+    return new Promise((resolve) => {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          geoRequestInFlight = false;
+          storePreciseLocation(pos.coords.latitude, pos.coords.longitude);
+          resolve(true);
+        },
+        () => {
+          geoRequestInFlight = false;
+          clearStoredGeoCoordinates();
+          resolve(false);
+        },
+        { enableHighAccuracy: false, timeout: 8000, maximumAge: 300000 },
+      );
+    });
+  }
+
   function localizePhonePlaceholders() {
     const country = detectUserCountryCode() || "US";
     const placeholder = PHONE_PLACEHOLDER_BY_COUNTRY[country] || PHONE_PLACEHOLDER_BY_COUNTRY.US;
@@ -167,6 +330,14 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   localizePhonePlaceholders();
+  window.__abbieyConsent = {
+    getTermsAccepted,
+    setTermsAccepted,
+    getLocationConsent,
+    setLocationConsent,
+    clearStoredGeoCoordinates,
+    requestPreciseLocation,
+  };
 
   /** Append &lat=&lon= for local ranking when browser or prior search shared coordinates. */
   function geoQuerySuffix() {
@@ -189,7 +360,7 @@ document.addEventListener("DOMContentLoaded", () => {
     return "";
   }
 
-  /** Region, language, Original web — keep AI APIs aligned with the current SERP. */
+  /** Region, language, Original web â€” keep AI APIs aligned with the current SERP. */
   function searchContextQuerySuffix() {
     let s = geoQuerySuffix();
     const reg = document.getElementById("region-input");
@@ -272,29 +443,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  if (navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        try {
-          sessionStorage.setItem(
-            "abbiey_geo",
-            JSON.stringify({
-              lat: pos.coords.latitude,
-              lon: pos.coords.longitude,
-              t: Date.now(),
-            }),
-          );
-          const la = document.getElementById("geo-lat-input");
-          const lo = document.getElementById("geo-lon-input");
-          if (la && !la.value) la.value = String(pos.coords.latitude);
-          if (lo && !lo.value) lo.value = String(pos.coords.longitude);
-        } catch (_) {
-          /* ignore */
-        }
-      },
-      () => {},
-      { enableHighAccuracy: false, timeout: 8000, maximumAge: 300000 },
-    );
+  if (getLocationConsent() === LOCATION_CONSENT_VALUES.granted) {
+    requestPreciseLocation();
   }
 
   // Search paywall (quota / $7 / 24h) removed; keep Stripe return handling so post-checkout unlock still syncs.
@@ -616,7 +766,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Apply all settings on load
   function applyAllSettings() {
-    // Font size — change html font-size so rem units scale
+    // Font size â€” change html font-size so rem units scale
     const fsMap = { small: "13.5px", medium: "", large: "17.5px", xl: "20px" };
     const fs = gs("fontSize");
     html.style.fontSize = fsMap[fs] || "";
@@ -874,7 +1024,7 @@ document.addEventListener("DOMContentLoaded", () => {
         // If they actually clicked the interactive element inside, don't double trigger
         const interactive = row.querySelector("button, select, input, a");
         if (!interactive || e.target === interactive || interactive.contains(e.target)) return;
-        
+
         // For selects, focus or showPicker if available
         if (interactive.tagName === "SELECT") {
           try {
@@ -886,7 +1036,7 @@ document.addEventListener("DOMContentLoaded", () => {
           } catch (err) {
             interactive.focus();
           }
-        } 
+        }
         // For buttons/anchors, mock click
         else if (typeof interactive.click === "function") {
           interactive.click();
@@ -995,6 +1145,7 @@ document.addEventListener("DOMContentLoaded", () => {
     syncToggle("ai-summary-toggle",    gs("aiSummary")     === "true");
     syncToggle("autocomplete-toggle",  gs("autocomplete")  === "true");
     syncToggle("persist-region-toggle",gs("persistRegion") === "true");
+    syncToggle("location-consent-toggle", getLocationConsent() === LOCATION_CONSENT_VALUES.granted);
     syncToggle("history-toggle",       gs("history")       === "true");
     syncToggle("incognito-toggle",     gs("incognito")     === "true");
     syncToggle("cards-toggle",         gs("showCards")     === "true");
@@ -1101,6 +1252,22 @@ document.addEventListener("DOMContentLoaded", () => {
   });
   wireToggle("autocomplete-toggle", "autocomplete", null);
   wireToggle("persist-region-toggle", "persistRegion", null);
+  const locationConsentToggle = document.getElementById("location-consent-toggle");
+  if (locationConsentToggle) {
+    locationConsentToggle.addEventListener("change", async () => {
+      if (locationConsentToggle.checked) {
+        setLocationConsent(LOCATION_CONSENT_VALUES.granted);
+        const granted = await requestPreciseLocation();
+        if (!granted && pageUsesPreciseLocation()) {
+          setLocationConsent(LOCATION_CONSENT_VALUES.denied);
+          showToast("Location access was not granted. Nearby results will keep using your region setting.", "error");
+        }
+      } else {
+        setLocationConsent(LOCATION_CONSENT_VALUES.denied);
+      }
+      syncToggle("location-consent-toggle", getLocationConsent() === LOCATION_CONSENT_VALUES.granted);
+    });
+  }
   wireToggle("history-toggle", "history", (checked) => {
     if (!checked) {
       clearStoredSearchHistory(true);
@@ -1171,7 +1338,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // ===== History panel (Settings → Privacy) =====
+  // ===== History panel (Settings â†’ Privacy) =====
   (function () {
     const HISTORY_KEY_PANEL = "abbiey_search_history";
     const CLOCK_SVG = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`;
@@ -1223,11 +1390,11 @@ document.addEventListener("DOMContentLoaded", () => {
     async function renderPanel() {
       const list = document.getElementById("history-panel-list");
       if (!list) return;
-      list.innerHTML = `<div class="history-panel-empty">Loading…</div>`;
+      list.innerHTML = `<div class="history-panel-empty">Loadingâ€¦</div>`;
       const items = await panelHistoryQueries();
       if (!items.length) {
         list.innerHTML = gs("incognito") === "true"
-          ? `<div class="history-panel-empty">Incognito is on — new searches are not saved. Turn it off in Settings to build history again.</div>`
+          ? `<div class="history-panel-empty">Incognito is on â€” new searches are not saved. Turn it off in Settings to build history again.</div>`
           : `<div class="history-panel-empty">No recent searches</div>`;
         return;
       }
@@ -1363,6 +1530,10 @@ document.addEventListener("DOMContentLoaded", () => {
           localStorage.setItem("abbiey_unlocked", "1");
         } catch (_) {}
       }
+      clearClientCookie("abbiey_welcome_seen");
+      clearClientPref(TERMS_CONSENT_KEY);
+      clearClientPref(LOCATION_CONSENT_KEY);
+      clearStoredGeoCoordinates();
       location.reload();
     });
   }
@@ -1710,7 +1881,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // ===== Stable placeholder copy =====
   const rotatingInput = document.querySelector("[data-placeholder-rotate]");
   if (rotatingInput && !rotatingInput.value) {
-    rotatingInput.setAttribute("placeholder", "Try: site:example.com · 8.8.8.8 · user@domain · BTC address · .onion index…");
+    rotatingInput.setAttribute("placeholder", "Try: site:example.com Â· 8.8.8.8 Â· user@domain Â· BTC address Â· .onion indexâ€¦");
   }
 
   // ===== Operator chip removal =====
@@ -1985,7 +2156,7 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     }
 
-    // Original web (anti-template ranking) — toggles hidden cleanweb=1
+    // Original web (anti-template ranking) â€” toggles hidden cleanweb=1
     const cleanwebPill = document.getElementById("cleanweb-pill");
     const cleanwebInput = document.getElementById("cleanweb-input");
     if (cleanwebPill && cleanwebInput && filterForm) {
@@ -2445,7 +2616,7 @@ document.addEventListener("DOMContentLoaded", () => {
       osintBody.hidden = false;
       if (osintEntityLoaded) return;
       osintEntityLoaded = true;
-      osintStatus.textContent = "Loading public signals…";
+      osintStatus.textContent = "Loading public signalsâ€¦";
       const body = {
         entity_type: osintPanel.dataset.osintType,
         value: osintPanel.dataset.osintValue,
@@ -2496,7 +2667,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const host = lightboxOsintBtn.dataset.osintHost;
       if (!host) return;
       lightboxOsintResults.hidden = false;
-      lightboxOsintResults.innerHTML = "<p class=\"osint-fact-line\">Loading…</p>";
+      lightboxOsintResults.innerHTML = "<p class=\"osint-fact-line\">Loadingâ€¦</p>";
       const { ok, data } = await fetchJson("/api/osint/enrich", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -2507,7 +2678,7 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
       }
       const parts = (data.facts || []).map((f) => {
-        const line = `<div class="osint-fact-line"><strong>${esc(f.label || f.type)}</strong> — ${esc(f.value != null ? String(f.value) : "")}</div><div class="osint-fact-meta">${esc(f.source || "")}</div>`;
+        const line = `<div class="osint-fact-line"><strong>${esc(f.label || f.type)}</strong> â€” ${esc(f.value != null ? String(f.value) : "")}</div><div class="osint-fact-meta">${esc(f.source || "")}</div>`;
         return line;
       });
       parts.push(`<div class="osint-fact-meta" style="margin-top:.5rem">${esc(data.disclaimer || "")}</div>`);
@@ -2703,7 +2874,7 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     }
 
-    // Cached result elements — invalidated on DOM changes
+    // Cached result elements â€” invalidated on DOM changes
     let _cachedResults = null;
     const resultsEl = document.getElementById("results");
 
@@ -2773,7 +2944,7 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
       }
 
-      // Show loading — batched in rAF
+      // Show loading â€” batched in rAF
       requestAnimationFrame(() => {
         previewEmpty.style.display = "none";
         previewContent.style.display = "none";
@@ -2858,7 +3029,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (e.target.closest(PREVIEW_CARD_SEL)) clearTimeout(hoverTimer);
     }, { passive: true });
 
-    // Tap on card body on touch / coarse-pointer devices — hover does not run there
+    // Tap on card body on touch / coarse-pointer devices â€” hover does not run there
     function onResultCardTapPreview(e) {
       const card = e.target.closest(PREVIEW_CARD_SEL);
       if (!card || !card.dataset.url) return;
@@ -3021,7 +3192,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (m.role === "user") {
           const t = (m.content || "").trim();
           if (t) return t.slice(0, 120);
-          if (m.image) return `Image · ${searchQuery}`.slice(0, 120);
+          if (m.image) return `Image Â· ${searchQuery}`.slice(0, 120);
         }
       }
       return searchQuery.slice(0, 120) || "Research chat";
@@ -3148,7 +3319,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     async function renderSavedChatsMenu() {
       if (!chatSavedList) return;
-      chatSavedList.innerHTML = `<div class="chat-saved-empty">Loading…</div>`;
+      chatSavedList.innerHTML = `<div class="chat-saved-empty">Loadingâ€¦</div>`;
       const local = localChatsForQuery(searchQuery);
       let server = [];
       if (chatIsLoggedIn()) {
@@ -3168,7 +3339,7 @@ document.addEventListener("DOMContentLoaded", () => {
           id: s.id,
           localId: null,
           title: s.title || searchQuery,
-          meta: `${s.message_count || 0} messages · account`,
+          meta: `${s.message_count || 0} messages Â· account`,
           server: true,
         });
       }
@@ -3181,7 +3352,7 @@ document.addEventListener("DOMContentLoaded", () => {
           id: l.serverId || null,
           localId: l.id,
           title: l.title || searchQuery,
-          meta: `${(l.messages || []).length} messages · this device`,
+          meta: `${(l.messages || []).length} messages Â· this device`,
           server: false,
           messages: l.messages,
         });
@@ -3582,7 +3753,7 @@ document.addEventListener("DOMContentLoaded", () => {
           continue;
         }
         if (!part.trim()) continue;
-        const sentences = part.match(/[^.!?…]+[.!?…]+(?:\s+|$)|[^.!?…]+$/g) || [part];
+        const sentences = part.match(/[^.!?â€¦]+[.!?â€¦]+(?:\s+|$)|[^.!?â€¦]+$/g) || [part];
         if (sentences.length <= 1 && part.length < 90) {
           chunks.push(pendingBreak + part);
           pendingBreak = "";
@@ -3592,7 +3763,7 @@ document.addEventListener("DOMContentLoaded", () => {
         pendingBreak = "";
         for (const sentence of sentences) {
           batch += sentence;
-          if (batch.length >= 72 || /[.!?…]\s*$/.test(batch)) {
+          if (batch.length >= 72 || /[.!?â€¦]\s*$/.test(batch)) {
             chunks.push(batch);
             batch = "";
           }
@@ -3712,7 +3883,7 @@ document.addEventListener("DOMContentLoaded", () => {
         sorted.forEach(el => container.insertBefore(el, ref));
       }
 
-      // Add badges — only check actual .onion URLs, skip clearnet DDG fallback results
+      // Add badges â€” only check actual .onion URLs, skip clearnet DDG fallback results
       const urls = [];
       onionResults.forEach(el => {
         const url = el.dataset.url || "";
@@ -3737,7 +3908,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       reorderOnionResults();
 
-      // Fire off verification request — skip if all URLs already cached
+      // Fire off verification request â€” skip if all URLs already cached
       const uncachedUrls = urls.filter(u => !verified[u]);
       if (uncachedUrls.length) {
         fetch("/api/onion-check", {
@@ -3756,7 +3927,7 @@ document.addEventListener("DOMContentLoaded", () => {
               const url = el.dataset.url;
               const status = res[url];
               if (!status || status === "unknown") {
-                // Tor not available — remove checking badge
+                // Tor not available â€” remove checking badge
                 const badge = el.querySelector(".onion-status.checking");
                 if (badge) badge.remove();
                 return;
@@ -4052,7 +4223,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         if (!data.entries.length) {
           ol.innerHTML =
-            "<li class=\"leaderboard-empty\">No explorers yet — full-access searches (safesearch off) add to this list.</li>";
+            "<li class=\"leaderboard-empty\">No explorers yet â€” full-access searches (safesearch off) add to this list.</li>";
           return;
         }
         ol.innerHTML = data.entries
@@ -4134,10 +4305,10 @@ document.addEventListener("DOMContentLoaded", () => {
         const showWikiMini = !hasPanel && wiki && wiki.extract;
         if (!topics.length && !cats.length && !showWikiMini) return;
         let html = `<article class="knowledge-graph-card" aria-label="Knowledge graph">`;
-        html += `<div class="kg-header"><span class="kg-title">Knowledge graph</span><span class="kg-sub">Topics and categories from public knowledge bases — not a custom crawl.</span></div>`;
+        html += `<div class="kg-header"><span class="kg-title">Knowledge graph</span><span class="kg-sub">Topics and categories from public knowledge bases â€” not a custom crawl.</span></div>`;
         if (showWikiMini) {
           const ex = String(wiki.extract);
-          const short = ex.length > 560 ? `${ex.slice(0, 560)}…` : ex;
+          const short = ex.length > 560 ? `${ex.slice(0, 560)}â€¦` : ex;
           html += `<div class="kg-wiki-mini">`;
           if (wiki.image_url) {
             html += `<img src="${esc(wiki.image_url)}" alt="" class="kg-wiki-thumb" loading="lazy"/>`;
@@ -4145,7 +4316,7 @@ document.addEventListener("DOMContentLoaded", () => {
           html += `<div class="kg-wiki-mini-text"><h3 class="kg-wiki-title">${esc(wiki.title)}</h3>`;
           html += `<p class="kg-wiki-extract">${esc(short)}</p>`;
           if (wiki.page_url) {
-            html += `<a class="kg-wiki-more" href="${esc(wiki.page_url)}" target="_blank" rel="noopener">Read on Wikipedia →</a>`;
+            html += `<a class="kg-wiki-more" href="${esc(wiki.page_url)}" target="_blank" rel="noopener">Read on Wikipedia â†’</a>`;
           }
           html += `</div></div>`;
         }
@@ -4288,7 +4459,7 @@ document.addEventListener("DOMContentLoaded", () => {
     recognition.addEventListener("result", (e) => {
       // Build transcript like MDN: only new slices (resultIndex), keep finals across
       // events, and recompute interim each fire so refinements do not duplicate text.
-      // Joining every result with "" used to glue words ("hello" + "world" → "helloworld").
+      // Joining every result with "" used to glue words ("hello" + "world" â†’ "helloworld").
       let interimTranscript = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const res = e.results[i];
@@ -4454,7 +4625,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         return;
       }
-      if (fileHint) fileHint.textContent = file ? "Searching…" : "";
+      if (fileHint) fileHint.textContent = file ? "Searchingâ€¦" : "";
       setBusy(true);
       try {
         let resp;
@@ -4482,7 +4653,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (data.redirect) window.location.href = data.redirect;
       } finally {
         setBusy(false);
-        if (fileHint && fileHint.textContent === "Searching…") fileHint.textContent = "";
+        if (fileHint && fileHint.textContent === "Searchingâ€¦") fileHint.textContent = "";
       }
     }
 

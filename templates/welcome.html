@@ -7,8 +7,8 @@
 {% block tw_title %}{{ seo.tw_title }}{% endblock %}
 {% block tw_description %}{{ seo.tw_description }}{% endblock %}
 
-{% block auth_back_href %}{{ url_for('welcome_dismiss') }}{% endblock %}
-{% block auth_back_text %}Skip to search{% endblock %}
+{% block auth_back_href %}{{ url_for('terms') }}{% endblock %}
+{% block auth_back_text %}View terms{% endblock %}
 
 {% block auth_content %}
         <div class="auth-heading" id="welcome-title">
@@ -44,6 +44,27 @@
             <span class="form-hint" id="welcome-phone-hint">Include country code. Used only for your account, not for ads.</span>
         </div>
 
+        <section class="welcome-consent-card" aria-labelledby="welcome-consent-title">
+            <div class="welcome-consent-header">
+                <h2 class="welcome-consent-title" id="welcome-consent-title">Privacy choices</h2>
+                <p class="welcome-consent-copy">Agree to the site terms to continue. Precise location is separate and optional for better nearby results.</p>
+            </div>
+            <label class="welcome-consent-option" for="welcome-terms-consent">
+                <input type="checkbox" id="welcome-terms-consent">
+                <span>
+                    <strong>I agree to the <a href="{{ url_for('terms') }}" target="_blank" rel="noopener noreferrer">Terms of Service</a> and <a href="{{ url_for('privacy') }}" target="_blank" rel="noopener noreferrer">Privacy Policy</a>.</strong>
+                    <small>Required to create an account or continue as a guest.</small>
+                </span>
+            </label>
+            <label class="welcome-consent-option" for="welcome-location-consent">
+                <input type="checkbox" id="welcome-location-consent">
+                <span>
+                    <strong>Allow precise location for nearby results</strong>
+                    <small>Optional. Used only when you want local answers like food, taxis, delivery, or businesses near you.</small>
+                </span>
+            </label>
+        </section>
+
         <div class="auth-errors" id="welcome-sb-error" role="alert" aria-live="polite" style="display:none"></div>
 
         {% if supabase_auth %}
@@ -59,7 +80,8 @@
         </div>
         {% endif %}
 
-        <a href="{{ url_for('signup') }}" class="search-btn auth-submit welcome-email-btn">Create account with email</a>
+        <a href="{{ url_for('signup') }}" class="search-btn auth-submit welcome-email-btn" id="welcome-email-link" aria-disabled="true">Create account with email</a>
+        <a href="{{ url_for('welcome_dismiss') }}" class="search-btn auth-submit welcome-guest-btn" id="welcome-guest-link" aria-disabled="true">Continue as guest</a>
 
         <p class="auth-switch" style="margin-top:1.5rem">
             Already have an account? <a href="{{ url_for('login') }}">Sign in</a>
@@ -70,18 +92,17 @@
 {% if supabase_auth %}
 <script src="{{ url_for('static', filename='vendor/supabase.min.js') }}"></script>
 <script type="application/json" id="welcome-supabase-cfg">{{ {'url': supabase_url, 'anon_key': supabase_anon_key} | tojson }}</script>
+{% endif %}
 <script nonce="{{ csp_nonce }}">
 (function () {
-    var cfgEl = document.getElementById('welcome-supabase-cfg');
-    var cfg = {};
-    try {
-        cfg = JSON.parse((cfgEl && cfgEl.textContent) ? cfgEl.textContent.trim() : '{}') || {};
-    } catch (_e) {
-        cfg = {};
-    }
+    var consentApi = window.__abbieyConsent || {};
     var errEl = document.getElementById('welcome-sb-error');
     var googleBtn = document.getElementById('welcome-google-btn');
+    var emailLink = document.getElementById('welcome-email-link');
+    var guestLink = document.getElementById('welcome-guest-link');
     var phoneEl = document.getElementById('welcome-phone');
+    var termsEl = document.getElementById('welcome-terms-consent');
+    var locationEl = document.getElementById('welcome-location-consent');
 
     function showErr(msg) {
         if (errEl) {
@@ -93,8 +114,100 @@
         }
     }
 
+    function clearErr() {
+        if (errEl) {
+            errEl.style.display = 'none';
+        }
+    }
+
+    function setActionEnabled(el, enabled) {
+        if (!el) {
+            return;
+        }
+        if (typeof el.disabled === 'boolean') {
+            el.disabled = !enabled;
+        }
+        el.classList.toggle('is-disabled', !enabled);
+        if (enabled) {
+            el.removeAttribute('aria-disabled');
+        } else {
+            el.setAttribute('aria-disabled', 'true');
+        }
+    }
+
+    function persistConsent() {
+        if (typeof consentApi.setTermsAccepted === 'function') {
+            consentApi.setTermsAccepted(!!(termsEl && termsEl.checked));
+        }
+        if (typeof consentApi.setLocationConsent === 'function') {
+            consentApi.setLocationConsent(locationEl && locationEl.checked ? 'granted' : 'denied');
+        }
+    }
+
+    function syncConsentUi() {
+        var enabled = !!(termsEl && termsEl.checked);
+        setActionEnabled(googleBtn, enabled);
+        setActionEnabled(emailLink, enabled);
+        setActionEnabled(guestLink, enabled);
+    }
+
+    function guardRequiredConsent(evt) {
+        if (termsEl && !termsEl.checked) {
+            if (evt) {
+                evt.preventDefault();
+            }
+            showErr('Please agree to the Terms of Service and Privacy Policy before continuing.');
+            try {
+                termsEl.focus();
+            } catch (_focusErr) { /* ignore */ }
+            syncConsentUi();
+            return false;
+        }
+        clearErr();
+        persistConsent();
+        return true;
+    }
+
+    if (typeof consentApi.getTermsAccepted === 'function' && termsEl) {
+        termsEl.checked = consentApi.getTermsAccepted() === true;
+    }
+    if (typeof consentApi.getLocationConsent === 'function' && locationEl) {
+        locationEl.checked = consentApi.getLocationConsent() === 'granted';
+    }
+    syncConsentUi();
+
+    [termsEl, locationEl].forEach(function (el) {
+        if (!el) {
+            return;
+        }
+        el.addEventListener('change', function () {
+            persistConsent();
+            syncConsentUi();
+            clearErr();
+        });
+    });
+
+    [emailLink, guestLink].forEach(function (el) {
+        if (!el) {
+            return;
+        }
+        el.addEventListener('click', function (evt) {
+            if (!guardRequiredConsent(evt)) {
+                return;
+            }
+        });
+    });
+
     if (!googleBtn) {
         return;
+    }
+
+    var cfgEl = document.getElementById('welcome-supabase-cfg');
+    var cfg = {};
+    try {
+        cfg = JSON.parse((cfgEl && cfgEl.textContent) ? cfgEl.textContent.trim() : '{}') || {};
+    } catch (_e) {
+        cfg = {};
     }
 
     var sb;
@@ -113,9 +226,9 @@
     }
 
     var googleBtnHtml = googleBtn.innerHTML;
-    googleBtn.addEventListener('click', async function () {
-        if (errEl) {
-            errEl.style.display = 'none';
+    googleBtn.addEventListener('click', async function (evt) {
+        if (!guardRequiredConsent(evt)) {
+            return;
         }
         try {
             var phv = phoneEl && phoneEl.value ? phoneEl.value.trim() : '';
@@ -157,5 +270,4 @@
     });
 })();
 </script>
-{% endif %}
 {% endblock %}

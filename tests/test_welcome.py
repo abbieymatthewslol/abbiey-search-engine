@@ -25,6 +25,8 @@ def test_welcome_page_renders_onboarding(client, monkeypatch):
     assert resp.status_code == 200
     assert b"welcome-steps" in resp.data
     assert b"Continue with Google" in resp.data or b"Create account with email" in resp.data
+    assert b"Privacy choices" in resp.data
+    assert b"Allow precise location for nearby results" in resp.data
 
 
 def test_welcome_exposes_detected_country_for_phone_localization(client, monkeypatch):
