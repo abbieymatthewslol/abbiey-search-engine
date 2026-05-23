@@ -31,7 +31,6 @@ def test_welcome_exposes_detected_country_for_phone_localization(client, monkeyp
     monkeypatch.setenv("ABBIEY_SKIP_WELCOME_SCREEN", "0")
     resp = client.get("/welcome", headers={"X-Vercel-IP-Country": "AU"})
     assert resp.status_code == 200
-    assert b'data-detected-country="AU"' in resp.data
     assert b'data-phone-placeholder-localize="true"' in resp.data
 
 

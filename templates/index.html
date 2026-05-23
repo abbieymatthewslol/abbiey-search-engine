@@ -1831,7 +1831,7 @@
     </nav>
 
     <script nonce="{{ csp_nonce }}">
-        window.__currentUser = {{ (({"id": current_user.id, "username": current_user.username} if current_user else none)) | tojson }};
+        window.__currentUser = {{ (true if current_user else false) | tojson }};
         window.__searchQuery = {{ query|tojson }};
         window.__searchType = {{ search_type|tojson }};
         window.__onionMode = {{ onion_mode|tojson }};

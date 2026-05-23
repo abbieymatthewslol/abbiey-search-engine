@@ -602,6 +602,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function gs(name) { return localStorage.getItem(_S[name].key) ?? _S[name].def; }
   function ss(name, val) { localStorage.setItem(_S[name].key, val); }
   function clearStoredSearchHistory(includeServer = false) {
+    try { sessionStorage.removeItem("abbiey_search_history"); } catch {}
     try { localStorage.removeItem("abbiey_search_history"); } catch {}
     if (includeServer && document.querySelector(".user-avatar-chip")) {
       fetch("/api/user/history", {
@@ -1177,7 +1178,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function panelGetHistory() {
       if (gs("history") !== "true" || gs("incognito") === "true") return [];
-      try { return JSON.parse(localStorage.getItem(HISTORY_KEY_PANEL)) || []; } catch { return []; }
+      try { localStorage.removeItem(HISTORY_KEY_PANEL); } catch {}
+      try { return JSON.parse(sessionStorage.getItem(HISTORY_KEY_PANEL)) || []; } catch { return []; }
     }
     function isLoggedInUi() {
       return !!document.querySelector(".user-avatar-chip");
@@ -1206,7 +1208,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     function panelRemove(term) {
       const items = panelGetHistory().filter(i => i !== term);
-      try { localStorage.setItem(HISTORY_KEY_PANEL, JSON.stringify(items)); } catch {}
+      try { sessionStorage.setItem(HISTORY_KEY_PANEL, JSON.stringify(items)); } catch {}
       if (isLoggedInUi()) {
         fetch("/api/user/history", {
           method: "DELETE", headers: { "Content-Type": "application/json" },
@@ -1746,12 +1748,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function getHistory() {
       if (gs("history") !== "true" || gs("incognito") === "true") return [];
-      try { return JSON.parse(localStorage.getItem(HISTORY_KEY)) || []; }
+      try { localStorage.removeItem(HISTORY_KEY); } catch {}
+      try { return JSON.parse(sessionStorage.getItem(HISTORY_KEY)) || []; }
       catch { return []; }
     }
     function saveHistory(items) {
       if (gs("history") !== "true" || gs("incognito") === "true") { clearStoredSearchHistory(); return; }
-      try { localStorage.setItem(HISTORY_KEY, JSON.stringify(items)); }
+      try { sessionStorage.setItem(HISTORY_KEY, JSON.stringify(items)); }
       catch {}
     }
     function addHistory(term) {
@@ -2983,11 +2986,12 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function readLocalChatStore() {
-      try { return JSON.parse(localStorage.getItem(LP_RESEARCH_CHATS) || "{}"); } catch { return {}; }
+      try { localStorage.removeItem(LP_RESEARCH_CHATS); } catch {}
+      try { return JSON.parse(sessionStorage.getItem(LP_RESEARCH_CHATS) || "{}"); } catch { return {}; }
     }
 
     function writeLocalChatStore(store) {
-      try { localStorage.setItem(LP_RESEARCH_CHATS, JSON.stringify(store)); } catch {}
+      try { sessionStorage.setItem(LP_RESEARCH_CHATS, JSON.stringify(store)); } catch {}
     }
 
     function localChatsForQuery(q) {
