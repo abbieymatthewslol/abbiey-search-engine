@@ -534,6 +534,9 @@ _CHAT_MSG_HISTORY = "Something went wrong with the conversation. Refresh the pag
 _CHAT_MSG_UNAVAILABLE = "The research assistant is temporarily unavailable. Please try again in a moment."
 _AI_SUMMARY_MSG_UNAVAILABLE = "Summary is temporarily unavailable. Results are shown below."
 _AI_SUMMARY_MSG_NO_CONTEXT = "Summary is unavailable because there were not enough results to summarize yet."
+_INTERNAL_MECHANICS_BLOCK_MSG = (
+    "This platform does not expose its internal mechanics, implementation details, or operational setup."
+)
 _RATE_LIMIT_MSG = "Too many requests. Please wait a moment and try again."
 _ONION_FALLBACK_MSG = (
     "Ahmia is temporarily unavailable, so these results come from a web fallback and may reference "
@@ -546,6 +549,58 @@ _ONION_UNAVAILABLE_MSG = (
     "Deep web search is temporarily degraded. Ahmia could not be reached and the fallback returned no results."
 )
 _ONION_SCOPE_VALUES = {"strict", "balanced", "broad"}
+
+_INTERNAL_MECHANICS_BRAND_TERMS = (
+    "abbiey",
+    "abbieysearch",
+    "abbiey.search",
+    "this site",
+    "this platform",
+    "your platform",
+    "your site",
+    "your search engine",
+    "this search engine",
+    "your app",
+)
+_INTERNAL_MECHANICS_PROBE_TERMS = (
+    "how do you work",
+    "how you work",
+    "how does it work",
+    "how does this work",
+    "how does abbiey",
+    "internal",
+    "internals",
+    "mechanic",
+    "architecture",
+    "implementation",
+    "backend",
+    "database",
+    "infra",
+    "infrastructure",
+    "deployment",
+    "hosting",
+    "ranking algorithm",
+    "algorithm",
+    "system prompt",
+    "prompt",
+    "source code",
+    "admin token",
+    "secret key",
+    "logs",
+    "analytics",
+    "model",
+)
+
+
+def _is_internal_mechanics_probe(text: str) -> bool:
+    low = (text or "").strip().lower()
+    if not low:
+        return False
+    has_brand = any(term in low for term in _INTERNAL_MECHANICS_BRAND_TERMS)
+    has_probe = any(term in low for term in _INTERNAL_MECHANICS_PROBE_TERMS)
+    if has_brand and has_probe:
+        return True
+    return any(term in low for term in ("system prompt", "prompt injection", "reveal your prompt"))
 _ONION_STRICT_EMPTY_MSG = (
     "Strict onion mode only returns direct .onion listings. Try Broad mode if you also want clearnet references."
 )
@@ -1143,6 +1198,38 @@ def _migrate_search_logs_client_columns():
             con.commit()
     except Exception:
         pass
+
+
+def _sanitize_search_logs_privacy():
+    """Strip legacy raw query text and client metadata from analytics rows."""
+    try:
+        _analytics_execute(
+            "UPDATE search_logs SET client_ip='', user_agent='', device_label='', location=''"
+            " WHERE COALESCE(client_ip,'') != '' OR COALESCE(user_agent,'') != ''"
+            " OR COALESCE(device_label,'') != '' OR COALESCE(location,'') != ''"
+        )
+    except Exception:
+        pass
+    try:
+        rows = _analytics_execute(
+            "SELECT id, query FROM search_logs"
+            " WHERE query IS NOT NULL AND query != '' AND query NOT LIKE 'digest:%'"
+            " ORDER BY id ASC LIMIT 1000"
+        )
+    except Exception:
+        return
+    for row in rows or []:
+        try:
+            rid = int(row.get("id"))
+        except Exception:
+            continue
+        digest = _analytics_query_digest(str(row.get("query") or ""))
+        if not digest:
+            continue
+        try:
+            _analytics_execute("UPDATE search_logs SET query=? WHERE id=?", [digest, rid])
+        except Exception:
+            continue
 
 
 try:
@@ -1989,6 +2076,12 @@ def _analytics_query_digest(query: str) -> str:
     return f"digest:{digest[:24]}"
 
 
+try:
+    _sanitize_search_logs_privacy()
+except Exception as _privacy_mig_err:
+    logging.warning("search_logs privacy sanitization: %s", _privacy_mig_err)
+
+
 # Bounded thread pool for async analytics — prevents thread explosion under load
 _analytics_pool = ThreadPoolExecutor(max_workers=8, thread_name_prefix="analytics")
 
@@ -2039,13 +2132,10 @@ def _log_search_worker(
     try:
         _sse_broadcast({
             "type": "search",
-            "query": query_digest,
             "search_type": search_type,
             "results": result_count,
             "latency_ms": latency_ms,
             "ts": ts,
-            "ip": (client_ip or "")[:80],
-            "device": (device_label or "")[:80],
         })
     except Exception:
         pass
@@ -4423,6 +4513,14 @@ def search(stype=None):
             ),
             extra_help=True,
         ), 400
+    if _is_internal_mechanics_probe(query):
+        return render_template(
+            "error.html",
+            code=403,
+            title="Query blocked",
+            message=_INTERNAL_MECHANICS_BLOCK_MSG,
+            extra_help=False,
+        ), 403
 
     # Parse search operators
     clean_query, operators = _parse_operators(query)
@@ -5718,6 +5816,8 @@ def api_chat():
         return jsonify({"error": _CHAT_MSG_QUERY_LONG}), 400
     if message and len(message) > _MAX_CHAT_MESSAGE_LEN:
         return jsonify({"error": _CHAT_MSG_MESSAGE_LONG}), 400
+    if _is_internal_mechanics_probe(query) or _is_internal_mechanics_probe(message):
+        return jsonify({"error": _INTERNAL_MECHANICS_BLOCK_MSG}), 403
     history, hist_err = _research_chat.normalize_history(
         history, max_turns=_MAX_CHAT_HISTORY_TURNS, max_message_len=_MAX_CHAT_MESSAGE_LEN
     )
@@ -6031,6 +6131,8 @@ def api_protocol_answer():
 
     if not query or len(query) > MAX_QUERY_LENGTH:
         return Response("Invalid query\n", status=400, mimetype="text/plain")
+    if _is_internal_mechanics_probe(query):
+        return Response(_INTERNAL_MECHANICS_BLOCK_MSG + "\n", status=403, mimetype="text/plain")
 
     if depth not in (ProtocolDepth.QUICK, ProtocolDepth.STANDARD, ProtocolDepth.DEEP):
         depth = ProtocolDepth.STANDARD
@@ -6182,6 +6284,8 @@ def api_ai_summary():
     query = request.args.get("q", "").strip()
     if not query or len(query) > MAX_QUERY_LENGTH:
         return jsonify({"error": "Invalid query"}), 400
+    if _is_internal_mechanics_probe(query):
+        return jsonify({"error": _INTERNAL_MECHANICS_BLOCK_MSG, "enabled": False}), 403
 
     prep = preprocess_query(query)
     if not should_enable_ai_summary(prep):
@@ -6351,19 +6455,8 @@ def api_privacy_stats():
 @app.route("/api/trends")
 @limiter.limit("120/minute")
 def api_trends():
-    """Public endpoint — returns top 10 trending queries from the last 24 h."""
-    try:
-        rows = _analytics_execute(
-            "SELECT query, COUNT(*) as cnt FROM search_logs"
-            " WHERE created_at >= datetime('now', '-1 day')"
-            "   AND search_type = 'text'"
-            "   AND length(query) BETWEEN 2 AND 80"
-            " GROUP BY lower(query) ORDER BY cnt DESC LIMIT 10"
-        )
-        return jsonify([{"query": r["query"], "count": r["cnt"]} for r in rows])
-    except Exception as exc:
-        logger.error("Trends error: %s", exc)
-        return jsonify([])
+    """Public trends are disabled to avoid exposing what other users searched for."""
+    return jsonify([])
 
 
 @app.route("/admin/analytics")
@@ -6388,13 +6481,7 @@ def admin_analytics():
             "SELECT COUNT(*) as cnt FROM search_logs WHERE created_at >= datetime('now','-7 days')")
         stats["total_week"] = rows[0]["cnt"] if rows else 0
 
-        # Top queries (7 days) — as (query, cnt) tuples for template
-        raw = _analytics_execute(
-            "SELECT query, COUNT(*) as cnt FROM search_logs"
-            " WHERE created_at >= datetime('now','-7 days')"
-            "   AND length(query) BETWEEN 2 AND 80"
-            " GROUP BY lower(query) ORDER BY cnt DESC LIMIT 20")
-        stats["top_queries"] = [(r["query"], r["cnt"]) for r in raw]
+        stats["top_queries"] = []
 
         # Tab distribution
         raw = _analytics_execute(
@@ -6512,11 +6599,7 @@ def admin_api_stats():
         data["errors_week"] = _scalar(
             "SELECT COUNT(*) as c FROM error_logs WHERE created_at >= datetime('now','-7 days')")
 
-        # Top queries (7 days)
-        data["top_queries"] = _analytics_execute(
-            "SELECT query, COUNT(*) as count FROM search_logs"
-            " WHERE created_at >= datetime('now','-7 days') AND length(query) BETWEEN 2 AND 80"
-            " GROUP BY lower(query) ORDER BY count DESC LIMIT 15")
+        data["top_queries"] = []
 
         # Type breakdown (7 days)
         data["by_type"] = _analytics_execute(
@@ -6543,11 +6626,7 @@ def admin_api_stats():
         hour_map = {int(r["hour"]): int(r["count"]) for r in raw_hourly}
         data["hourly"] = [{"hour": h, "count": hour_map.get(h, 0)} for h in range(24)]
 
-        # Recent searches (50) — includes client metadata when columns exist
-        data["recent_searches"] = _analytics_execute(
-            "SELECT query, search_type as type, result_count as results,"
-            " latency_ms, created_at as ts, client_ip, user_agent, device_label, location"
-            " FROM search_logs ORDER BY id DESC LIMIT 50")
+        data["recent_searches"] = []
 
         # User stats
         try:
@@ -6589,26 +6668,19 @@ def admin_api_stats():
 
 @app.route("/admin/api/query-log")
 def admin_api_query_log():
-    """Paginated search log with query text, IP, device summary, and resolved location (admin only)."""
+    """Query-level search logs are withheld to preserve user privacy."""
     err = _admin_check()
     if err:
         return err
-    limit = min(500, max(1, request.args.get("limit", 100, type=int) or 100))
-    offset = max(0, request.args.get("offset", 0, type=int) or 0)
     try:
         tot = _analytics_execute("SELECT COUNT(*) as c FROM search_logs")
         total = int(list(tot[0].values())[0]) if tot else 0
-        rows = _analytics_execute(
-            "SELECT id, query, search_type as type, result_count as results, latency_ms,"
-            " created_at as ts, client_ip, user_agent, device_label, location"
-            " FROM search_logs ORDER BY id DESC LIMIT ? OFFSET ?",
-            [limit, offset],
-        )
         return jsonify({
             "total": total,
-            "rows": rows or [],
-            "limit": limit,
-            "offset": offset,
+            "rows": [],
+            "privacy_protected": True,
+            "limit": 0,
+            "offset": 0,
         })
     except Exception as exc:
         return jsonify({"error": str(exc), "total": 0, "rows": []}), 500
@@ -6616,27 +6688,19 @@ def admin_api_query_log():
 
 @app.route("/admin/api/account-history")
 def admin_api_account_history():
-    """Paginated rows from user_search_history (queries saved for logged-in accounts)."""
+    """Saved account search history is private to each user and not exposed in admin APIs."""
     err = _admin_check()
     if err:
         return err
-    limit = min(500, max(1, request.args.get("limit", 100, type=int) or 100))
-    offset = max(0, request.args.get("offset", 0, type=int) or 0)
     try:
         tot = _users_execute("SELECT COUNT(*) as cnt FROM user_search_history")
         total = int(tot[0]["cnt"]) if tot else 0
-        rows = _users_execute(
-            "SELECT h.id, h.query, h.search_type as type, h.searched_at as ts,"
-            " u.id as user_id, u.username, u.email"
-            " FROM user_search_history h INNER JOIN users u ON u.id = h.user_id"
-            " ORDER BY h.searched_at DESC LIMIT ? OFFSET ?",
-            [limit, offset],
-        )
         return jsonify({
             "total": total,
-            "rows": rows or [],
-            "limit": limit,
-            "offset": offset,
+            "rows": [],
+            "privacy_protected": True,
+            "limit": 0,
+            "offset": 0,
         })
     except Exception as exc:
         return jsonify({"error": str(exc), "total": 0, "rows": []}), 500
@@ -6974,6 +7038,8 @@ def admin_chat():
 
     if not user_message:
         return jsonify({"error": "Please enter a message."}), 400
+    if _is_internal_mechanics_probe(user_message):
+        return jsonify({"error": _INTERNAL_MECHANICS_BLOCK_MSG}), 403
 
     # Build messages for LLM
     system = _ABBIEY_SYSTEM_PROMPT

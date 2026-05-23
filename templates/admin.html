@@ -510,6 +510,10 @@ function renderDailyChart() {
 function renderTopQueries() {
   const body = document.getElementById('top-queries-body');
   const qs = _data.top_queries || [];
+  if (!qs.length) {
+    body.innerHTML = '<tr><td colspan="2" style="text-align:center;color:var(--text-muted);padding:1.5rem">Disabled for privacy.</td></tr>';
+    return;
+  }
   const max = qs[0]?.count || 1;
   body.innerHTML = qs.map(q => `
     <tr>
@@ -549,7 +553,7 @@ function renderHourly() {
     `<div class="hour-lbl">${h.hour}</div>`).join('');
 }
 
-// ── Query log (paginated, IP / device / location) ─────────────────────────
+// ── Query log (privacy-protected) ─────────────────────────────────────────
 let _queryLogRows = [];
 let _queryLogTotal = 0;
 let _queryLogOffset = 0;
@@ -573,6 +577,14 @@ async function loadQueryLog(append) {
     const r = await fetch(`/admin/api/query-log${BASE}${_queryLogConn()}limit=${QUERY_LOG_PAGE}&offset=${_queryLogOffset}`);
     if (!r.ok) throw new Error(r.status);
     const data = await r.json();
+    if (data.privacy_protected) {
+      _queryLogTotal = data.total || 0;
+      _queryLogRows = [];
+      if (meta) meta.textContent = `${_queryLogTotal} searches recorded as aggregate analytics only`;
+      if (moreBtn) moreBtn.style.display = 'none';
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:1.5rem">Query-level activity is hidden for privacy.</td></tr>';
+      return;
+    }
     _queryLogTotal = data.total || 0;
     const chunk = data.rows || [];
     if (append) _queryLogRows = _queryLogRows.concat(chunk);
@@ -630,7 +642,7 @@ function filterQueryLog(q) {
   drawQueryLogTable(filterQueryLogRows(q));
 }
 
-// ── Account history (user_search_history) ───────────────────────────────
+// ── Account history (privacy-protected) ───────────────────────────────
 let _acctHistoryRows = [];
 let _acctHistoryTotal = 0;
 let _acctHistoryOffset = 0;
@@ -650,6 +662,14 @@ async function loadAccountHistory(append) {
     const r = await fetch(`/admin/api/account-history${BASE}${_queryLogConn()}limit=${ACCT_HISTORY_PAGE}&offset=${_acctHistoryOffset}`);
     if (!r.ok) throw new Error(r.status);
     const data = await r.json();
+    if (data.privacy_protected) {
+      _acctHistoryTotal = data.total || 0;
+      _acctHistoryRows = [];
+      if (meta) meta.textContent = `${_acctHistoryTotal} saved searches retained privately in user accounts`;
+      if (moreBtn) moreBtn.style.display = 'none';
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:1.5rem">Saved search history is visible only to the signed-in user who created it.</td></tr>';
+      return;
+    }
     _acctHistoryTotal = data.total || 0;
     const chunk = data.rows || [];
     if (append) _acctHistoryRows = _acctHistoryRows.concat(chunk);
@@ -787,8 +807,7 @@ function pushLiveRow(ev) {
   row.innerHTML = `
     <span style="color:var(--text-muted);font-size:.68rem;white-space:nowrap;flex-shrink:0">${now}</span>
     <span style="color:${typeC};font-size:.68rem;flex-shrink:0">${esc(ev.search_type||'text')}</span>
-    <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1" title="${esc(ev.query)}">${esc(ev.query)}</span>
-    ${who ? `<span style="color:var(--text-muted);font-size:.65rem;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(who)}">${esc(who)}</span>` : ''}
+    <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">Private search activity</span>
     ${lat}
     <span style="color:var(--text-muted);font-size:.68rem;flex-shrink:0">${ev.results} results</span>
   `;
