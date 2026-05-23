@@ -130,7 +130,14 @@
     var googleBtn = document.getElementById('sb-google-btn');
     var nextUrl = (document.getElementById('next-url') || {}).value || '';
 
-    function showErr(msg) { errEl.style.display = 'block'; errEl.innerHTML = '<p>' + msg + '</p>'; }
+    function showErr(msg) {
+        if (!errEl) return;
+        errEl.style.display = 'block';
+        errEl.innerHTML = '';
+        var p = document.createElement('p');
+        p.textContent = String(msg || 'Something went wrong.');
+        errEl.appendChild(p);
+    }
 
     if (googleBtn) {
         var googleBtnHtml = googleBtn.innerHTML;

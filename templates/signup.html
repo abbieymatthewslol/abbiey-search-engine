@@ -164,7 +164,7 @@
         }
         if (errEl) {
             errEl.classList.remove('auth-flash-hidden');
-            errEl.innerHTML = '<p>' + msg + '</p>';
+            errEl.innerHTML = '<p>' + escapeHtml(msg) + '</p>';
         }
     }
 

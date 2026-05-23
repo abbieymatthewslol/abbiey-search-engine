@@ -88,7 +88,7 @@
         } catch (_sn) { /* ignore */ }
         if (errEl) {
             errEl.classList.remove('auth-errors--hidden');
-            errEl.innerHTML = '<p>' + msg + '</p>';
+            errEl.innerHTML = '<p>' + escapeHtml(msg) + '</p>';
         }
     }
 
