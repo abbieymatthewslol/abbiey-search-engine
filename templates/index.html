@@ -310,7 +310,7 @@
                         </div>
                     </div>
                     <div class="settings-row">
-                        <span class="settings-row-label">AI Summary</span>
+                        <span class="settings-row-label">Summary</span>
                         <label class="settings-toggle">
                             <input type="checkbox" id="ai-summary-toggle" checked>
                             <span class="settings-toggle-track"></span>
@@ -880,7 +880,6 @@
         <div class="ai-summary-card{% if query_ui.answer_mode == 'single' %} answer-single{% endif %}" id="ai-summary-card" data-answer-mode="{{ query_ui.answer_mode or 'standard' }}">
             <div class="ai-summary-header">
                 <div class="ai-summary-header-left">
-                    <svg class="ai-sparkle" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.09 6.26L20 10l-5.91 1.74L12 18l-2.09-6.26L4 10l5.91-1.74L12 2z"/></svg>
                     <span class="ai-summary-label" id="ai-summary-label">{% if query_ui.answer_mode == 'single' %}Answer{% else %}Summary{% endif %}</span>
                 </div>
                 <button type="button" class="ai-summary-dismiss" id="ai-summary-dismiss" aria-label="Hide summary for this visit" title="Hide for this visit">
@@ -897,7 +896,7 @@
             <div class="ai-summary-sources" id="ai-summary-sources"></div>
         </div>
         <div class="ai-summary-restore-wrap" id="ai-summary-restore-wrap" hidden>
-            <button type="button" class="ai-summary-restore-btn" id="ai-summary-restore-tab">Show AI summary</button>
+            <button type="button" class="ai-summary-restore-btn" id="ai-summary-restore-tab">Show summary</button>
         </div>
         {% endif %} {# show_ai_summary_block #}
 
