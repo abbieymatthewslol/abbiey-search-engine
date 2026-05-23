@@ -86,7 +86,10 @@
     function showErr(msg) {
         if (errEl) {
             errEl.style.display = 'block';
-            errEl.innerHTML = '<p>' + msg + '</p>';
+            errEl.innerHTML = '';
+            var p = document.createElement('p');
+            p.textContent = String(msg || 'Something went wrong.');
+            errEl.appendChild(p);
         }
     }
 

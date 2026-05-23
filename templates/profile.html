@@ -153,7 +153,7 @@
                         <span class="bookmark-domain">{{ b.url | replace('https://', '') | replace('http://', '') | truncate(50, True, '…') }}</span>
                         {% if b.snippet %}<p class="bookmark-snippet">{{ b.snippet }}</p>{% endif %}
                     </div>
-                    <button class="bookmark-delete-btn" data-id="{{ b.id }}" title="Remove bookmark" aria-label="Remove bookmark">
+                    <button type="button" class="bookmark-delete-btn" data-id="{{ b.id }}" title="Remove bookmark" aria-label="Remove bookmark">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                     </button>
                 </li>
@@ -249,10 +249,15 @@
         const errEl = document.getElementById('sbots-err');
         const listEl = document.getElementById('sbots-list');
         const form = document.getElementById('sbots-form');
+        function escapeHtml(value) {
+            return String(value == null ? '' : value).replace(/[&<>"']/g, function (ch) {
+                return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch];
+            });
+        }
         function showErr(msg) {
             if (!errEl) return;
             errEl.style.display = 'block';
-            errEl.innerHTML = '<p>' + msg + '</p>';
+            errEl.innerHTML = '<p>' + escapeHtml(msg || 'Something went wrong.') + '</p>';
         }
         function clearErr() {
             if (!errEl) return;
@@ -278,17 +283,19 @@
                     const li = document.createElement('li');
                     li.className = 'bookmark-item';
                     li.style.marginBottom = '0.75rem';
-                    const st = (b.last_crawl_status || 'Never crawled').replace(/</g, '&lt;');
+                    const st = escapeHtml(b.last_crawl_status || 'Never crawled');
+                    const botName = escapeHtml(b.name || '');
+                    const botId = Number.isFinite(Number(b.id)) ? String(Number(b.id)) : '';
                     li.innerHTML =
                         '<div class="bookmark-main">' +
-                        '<span class="bookmark-title">' + String(b.name || '').replace(/</g, '&lt;') + '</span>' +
+                        '<span class="bookmark-title">' + botName + '</span>' +
                         '<p class="bookmark-snippet" style="font-size:.8rem;color:var(--text-dim)">' + st + '</p>' +
                         '<p class="form-hint" style="margin:.35rem 0 0">' +
-                        '<a href="/search?type=mybot&amp;bot_id=' + encodeURIComponent(String(b.id)) + '">Search with this bot</a>' +
+                        '<a href="/search?type=mybot&amp;bot_id=' + encodeURIComponent(botId) + '">Search with this bot</a>' +
                         '</p></div>' +
                         '<div style="display:flex;flex-direction:column;gap:.35rem;align-items:flex-end">' +
-                        '<button type="button" class="auth-submit-btn sb-crawl" data-id="' + b.id + '" style="padding:.25rem .6rem;font-size:.78rem">Update index</button>' +
-                        '<button type="button" class="signout-link sb-del" data-id="' + b.id + '" style="font-size:.78rem;border:none;background:none;cursor:pointer">Delete</button>' +
+                        '<button type="button" class="auth-submit-btn sb-crawl" data-id="' + botId + '" style="padding:.25rem .6rem;font-size:.78rem">Update index</button>' +
+                        '<button type="button" class="signout-link sb-del" data-id="' + botId + '" style="font-size:.78rem;border:none;background:none;cursor:pointer">Delete</button>' +
                         '</div>';
                     listEl.appendChild(li);
                 });
