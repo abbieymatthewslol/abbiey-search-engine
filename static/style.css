@@ -32,6 +32,8 @@
   --search-border-hover: rgba(255,255,255,0.16);
   --search-shadow: 0 10px 30px rgba(0,0,0,.18);
   --search-shadow-hover: 0 14px 34px rgba(0,0,0,.22);
+  --search-text: #f5f5f4;
+  --search-icon: rgba(255,255,255,0.72);
   --search-placeholder: rgba(255,255,255,0.35);
   --search-button-bg: #4ade80;
   --search-button-bg-hover: #22c55e;
@@ -64,14 +66,17 @@
   --shadow:        0 1px 3px rgba(0,0,0,.08);
   --shadow-lg:     0 4px 12px rgba(0,0,0,.1);
   --shadow-glow:   0 0 0 1px var(--border);
-  /* Solid surface so the bar reads clearly on warm off-white page bg */
-  --search-surface: #ffffff;
-  --search-surface-focus: linear-gradient(120deg, #ffffff, rgba(74,222,128,0.12));
-  --search-border: rgba(28,25,23,0.14);
-  --search-border-hover: rgba(28,25,23,0.22);
-  --search-shadow: 0 8px 26px rgba(28,25,23,.1);
-  --search-shadow-hover: 0 12px 32px rgba(28,25,23,.14);
-  --search-placeholder: rgba(28,25,23,0.38);
+  --search-surface: #000000;
+  --search-surface-focus: #050505;
+  --search-border: rgba(255,255,255,0.82);
+  --search-border-hover: rgba(255,255,255,0.96);
+  --search-shadow: 0 8px 26px rgba(0,0,0,.22);
+  --search-shadow-hover: 0 12px 32px rgba(0,0,0,.28);
+  --search-text: #ffffff;
+  --search-icon: rgba(255,255,255,0.72);
+  --search-placeholder: rgba(255,255,255,0.56);
+  --search-accent-focus: rgba(255,255,255,0.96);
+  --search-accent-ring: rgba(255,255,255,0.12);
   --search-button-bg: #4ade80;
   --search-button-bg-hover: #22c55e;
   --search-button-text: #052e16;
@@ -695,7 +700,7 @@ body:not(.has-results) .search-btn .icon-search-glass {
   appearance: none;
   font-size: 1rem;
   font-weight: 400;
-  color: var(--text);
+  color: var(--search-text, var(--text));
   line-height: 1.5;
   min-width: 0;
   padding: 0.125rem 0.15rem;
@@ -754,6 +759,15 @@ body.has-results .reverse-image-btn {
 body.has-results .voice-btn {
   width: 36px;
   height: 36px;
+}
+
+.search-box .reverse-image-btn,
+.search-box .voice-btn {
+  color: var(--search-icon, var(--text-muted));
+}
+.search-box .reverse-image-btn:hover,
+.search-box .voice-btn:hover {
+  color: var(--search-text, var(--text));
 }
 
 .search-btn {
