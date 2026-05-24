@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 460" role="img" aria-labelledby="logo-title logo-desc">
+  <title id="logo-title">abbieysearch logo</title>
+  <desc id="logo-desc">White emblem and abbieysearch wordmark.</desc>
+  <defs>
+    <filter id="softGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="2" result="blur"/>
+      <feOffset dy="1" result="offset"/>
+      <feMerge>
+        <feMergeNode in="offset"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <linearGradient id="wingFade" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.96"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0.52"/>
+    </linearGradient>
+  </defs>
+
+  <g fill="none" stroke="url(#wingFade)" stroke-linecap="round" stroke-linejoin="round" filter="url(#softGlow)">
+    <path d="M357 147 C289 91 221 77 183 93 C219 129 284 139 357 147Z" stroke-width="5"/>
+    <path d="M356 158 C284 139 217 139 174 166 C216 196 284 181 356 158Z" stroke-width="5"/>
+    <path d="M363 147 C445 93 532 82 579 101 C531 138 452 144 363 147Z" stroke-width="5"/>
+    <path d="M363 159 C450 142 529 149 581 182 C525 207 449 187 363 159Z" stroke-width="5"/>
+    <path d="M205 100 C251 98 301 113 350 143" stroke-width="2" opacity="0.85"/>
+    <path d="M191 112 C244 116 292 127 349 145" stroke-width="2" opacity="0.65"/>
+    <path d="M206 170 C253 166 300 161 352 156" stroke-width="2" opacity="0.75"/>
+    <path d="M198 181 C247 184 298 173 352 158" stroke-width="2" opacity="0.55"/>
+    <path d="M382 144 C434 115 488 103 555 106" stroke-width="2" opacity="0.85"/>
+    <path d="M379 148 C440 132 496 124 566 116" stroke-width="2" opacity="0.62"/>
+    <path d="M378 157 C439 160 501 168 566 182" stroke-width="2" opacity="0.72"/>
+    <path d="M377 160 C438 181 504 191 565 190" stroke-width="2" opacity="0.52"/>
+  </g>
+
+  <g fill="#ffffff" filter="url(#softGlow)">
+    <ellipse cx="336" cy="100" rx="13" ry="16"/>
+    <ellipse cx="365" cy="100" rx="13" ry="16"/>
+    <path d="M348 116 h15 l9 125 c1 14 -7 25 -19 25 s-20 -11 -19 -25 l9 -125Z"/>
+    <circle cx="354" cy="135" r="9"/>
+    <circle cx="354" cy="162" r="9"/>
+    <circle cx="354" cy="190" r="8"/>
+    <circle cx="354" cy="217" r="7"/>
+    <path d="M337 74 C327 53 309 39 286 31" stroke="#ffffff" stroke-width="4" stroke-linecap="round" fill="none" opacity="0.75"/>
+    <path d="M369 74 C382 52 401 39 423 31" stroke="#ffffff" stroke-width="4" stroke-linecap="round" fill="none" opacity="0.75"/>
+  </g>
+
+  <g fill="#ffffff" filter="url(#softGlow)">
+    <path d="M236 268 C186 244 169 197 191 164 C211 133 262 132 286 166 C293 176 293 190 285 198 C276 207 263 202 260 191 C257 178 248 169 234 171 C211 175 203 203 219 229 C239 259 287 266 349 248 C395 234 441 211 479 176 C470 220 443 254 405 279 C377 299 342 309 302 309 C277 309 255 295 236 268Z"/>
+    <path d="M323 306 C375 305 428 288 480 251 C469 288 432 322 384 337 C336 352 282 343 236 311 C261 319 290 315 323 306Z"/>
+    <path d="M409 280 C454 269 493 244 526 208 C516 246 484 282 441 303 C428 309 416 314 405 317 C410 306 412 294 409 280Z"/>
+  </g>
+
+  <text x="360" y="402" text-anchor="middle" fill="#ffffff" font-family="Georgia, 'Times New Roman', serif" font-size="68" letter-spacing="8" filter="url(#softGlow)">abbieysearch</text>
+</svg>
