@@ -2,3 +2,47 @@
 <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client={{ google_adsense_client }}"
      crossorigin="anonymous"></script>
 {% endif %}
+<style>
+.logo,
+.home-logo {
+  color: transparent !important;
+  font-size: 0 !important;
+  line-height: 0 !important;
+  letter-spacing: 0 !important;
+  background-image: url("{{ url_for('static', filename='abbieysearch-logo.svg', v=deploy_hash) }}");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  overflow: hidden;
+}
+.logo span,
+.home-logo span {
+  color: transparent !important;
+}
+.logo {
+  display: inline-block;
+  width: clamp(8.75rem, 18vw, 11.5rem);
+  height: 3.1rem;
+  flex: 0 0 auto;
+}
+.home-logo {
+  display: block;
+  width: min(88vw, 30rem);
+  height: clamp(9.5rem, 28vw, 15rem);
+  margin: 0 auto;
+}
+[data-theme="light"] .logo,
+[data-theme="light"] .home-logo {
+  filter: invert(1);
+}
+@media (max-width: 480px) {
+  .logo {
+    width: 8.25rem;
+    height: 2.75rem;
+  }
+  .home-logo {
+    width: min(92vw, 23rem);
+    height: 10.75rem;
+  }
+}
+</style>
