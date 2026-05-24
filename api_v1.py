@@ -186,6 +186,15 @@ def search():
             "count": len(results.get("results") or []),
             "results": results.get("results") or [],
             "notice": results.get("notice"),
+            "sources": results.get("sources") or [],
+            "provider_sources": results.get("provider_sources") or [],
+            "cache_state": results.get("cache_state"),
+            "served_stale": bool(results.get("served_stale")),
+            "refreshing": bool(results.get("refreshing")),
+            "degraded": bool(results.get("degraded")),
+            "degraded_reasons": results.get("degraded_reasons") or [],
+            "fetched_at": results.get("fetched_at"),
+            "expires_at": results.get("expires_at"),
             "latency_ms": latency_ms,
         }
     )

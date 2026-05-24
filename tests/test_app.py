@@ -308,7 +308,14 @@ class TestFeedbackAPI:
             },
         )
         assert fb.status_code == 200
-        resp = client.get("/search?q=python&type=text")
+        with patch("app._try_marginalia", return_value=[]), \
+             patch("app._try_stract", return_value=[]), \
+             patch("app._try_searxng", return_value=[]), \
+             patch("app._try_hackernews_text", return_value=[]), \
+             patch("app._try_reddit_text", return_value=[]), \
+             patch("app._try_internet_archive_text", return_value=[]), \
+             patch("app._try_wikipedia", return_value=[]):
+            resp = client.get("/search?q=python&type=text")
         assert resp.status_code == 200
         html = resp.data.decode("utf-8", errors="ignore")
         m = re.search(r'<article class="result[^"]*"[^>]*data-url="([^"]+)"', html)
@@ -376,6 +383,89 @@ class TestCaching:
         assert text_calls > 0
         assert image_calls > 0
 
+    def test_people_fallback_only_is_not_cached(self):
+        fallback_card = [{
+            "title": "Jane Example",
+            "url": "https://en.wikipedia.org/wiki/Jane_Example",
+            "body": "Fallback only",
+            "source": "Wikipedia",
+            "source_type": "person",
+            "profile_card": True,
+        }]
+        with patch("app._try_wikidata_person", return_value=[]), \
+             patch("app._try_wikipedia_person", return_value=fallback_card) as mock_wp, \
+             patch("app._try_github_users", return_value=[]), \
+             patch("app._try_ddg_instant", return_value=[]), \
+             patch("app._try_ddg_profiles", return_value=[]):
+            app._fetch_results("jane example", 1, "people")
+            app._fetch_results("jane example", 1, "people")
+        assert mock_wp.call_count == 2
+
+    def test_people_platform_hits_still_cache(self):
+        profile_hits = [{
+            "title": "Jane Example (@jane)",
+            "url": "https://x.com/jane",
+            "body": "Platform hit",
+            "source": "X (Twitter)",
+            "source_type": "person",
+        }]
+        with patch("app._try_wikidata_person", return_value=[]), \
+             patch("app._try_wikipedia_person", return_value=[]), \
+             patch("app._try_github_users", return_value=[]), \
+             patch("app._try_ddg_instant", return_value=[]), \
+             patch("app._try_ddg_profiles", return_value=profile_hits) as mock_ddg_profiles:
+            app._fetch_results("jane example", 1, "people")
+            app._fetch_results("jane example", 1, "people")
+        assert mock_ddg_profiles.call_count == 1
+
+    def test_stale_cache_serves_and_schedules_refresh(self, monkeypatch):
+        cache_key = "stale query|text|||||off"
+        entry = app._cache_payload(
+            [{"title": "Cached", "url": "https://example.com/cached", "body": "Cached body", "source": "Wikipedia"}],
+            ttl_seconds=1,
+            stale_grace_seconds=120,
+            provider_sources=["wikipedia"],
+        )
+        entry["expires_at"] = app.time.monotonic() - 1
+        entry["stale_until"] = app.time.monotonic() + 60
+        with app._cache_lock:
+            app._cache[cache_key] = entry
+
+        submits = []
+
+        class _DummyFuture:
+            pass
+
+        monkeypatch.setattr(
+            app._SEARCH_REFRESH_POOL,
+            "submit",
+            lambda fn, *args, **kwargs: submits.append((fn, args, kwargs)) or _DummyFuture(),
+        )
+
+        result = app._fetch_results("stale query", 1, "text")
+
+        assert result["cache_state"] == "stale_hit"
+        assert result["served_stale"] is True
+        assert result["refreshing"] is True
+        assert submits
+        assert "cached results while sources refresh" in (result["notice"] or "").lower()
+
+    def test_degraded_refresh_does_not_replace_stronger_cache_entry(self):
+        existing = app._cache_payload(
+            [{"title": "Strong", "url": "https://example.com/strong", "body": "body", "source": "Wikipedia"}],
+            ttl_seconds=60,
+            provider_sources=["wikipedia"],
+            degraded=False,
+        )
+        candidate = app._cache_payload(
+            [{"title": "Weak", "url": "https://x.com/weak", "body": "body", "source": "X (Twitter)"}],
+            ttl_seconds=60,
+            provider_sources=["ddg_profiles"],
+            degraded=True,
+            degraded_reasons=["ddg_profiles:http_429"],
+        )
+        assert app._cache_entry_can_replace(existing, candidate) is False
+
 
 class TestErrorHandlers:
     """Test custom error pages."""
@@ -392,6 +482,20 @@ class TestErrorHandlers:
 
 class TestFallbackChain:
     """Test the multi-layer fallback mechanism."""
+
+    def test_try_ddg_retries_transient_throttle_once(self, monkeypatch):
+        ddg = MagicMock()
+        ddg.text.side_effect = [
+            RuntimeError("429 Too Many Requests"),
+            [{"title": "Recovered", "href": "https://example.com/recovered", "body": "ok"}],
+        ]
+        monkeypatch.setattr(app, "DDGS", lambda: ddg)
+        monkeypatch.setattr(app.time, "sleep", lambda *_args, **_kwargs: None)
+
+        results = app._try_ddg("retry me", 5, "text")
+
+        assert len(results) == 1
+        assert ddg.text.call_count == 2
 
     def test_ddg_failure_falls_to_searxng(self, client, mock_httpx):
         with patch("app._try_ddg", side_effect=Exception("DDG down")):
@@ -426,6 +530,44 @@ class TestFallbackChain:
             data = resp.get_json()
             assert data["results"] == []
             assert data["has_more"] is False
+
+    def test_provider_cooldown_skips_source_after_rate_limit(self):
+        hit_counter = {"calls": 0}
+
+        def _rate_limited():
+            hit_counter["calls"] += 1
+            raise RuntimeError("429 Too Many Requests")
+
+        _, outcome1 = app._run_provider_call("searxng", "text", _rate_limited)
+        assert outcome1 == "http_429"
+        assert app._provider_cooldown_remaining("searxng", "text") > 0
+
+        def _should_not_run():
+            hit_counter["calls"] += 1
+            return [{"title": "unexpected", "url": "https://example.com/unexpected", "body": ""}]
+
+        hits2, outcome2 = app._run_provider_call("searxng", "text", _should_not_run)
+        assert outcome2 == "cooldown_skip"
+        assert hits2 == []
+        assert hit_counter["calls"] == 1
+
+    def test_provider_reliability_ranking_prefers_structured_sources(self):
+        ranked = app._rank_provider_reliability(
+            [
+                {"title": "Social", "url": "https://www.linkedin.com/in/example", "body": "", "source": "LinkedIn", "source_type": "person"},
+                {"title": "Structured", "url": "https://en.wikipedia.org/wiki/Example", "body": "", "source": "Wikipedia", "source_type": "person", "profile_card": True},
+            ],
+            "people",
+        )
+        assert ranked[0]["source"] == "Wikipedia"
+
+    def test_provider_outcome_logging_is_structured(self, caplog):
+        with caplog.at_level("INFO"):
+            app._record_provider_outcome("ddg", "text", "http_429", 123, detail="rate")
+            app._log_cache_event("cache-key", "text", "fresh_hit", refreshing=False)
+        joined = "\n".join(caplog.messages)
+        assert "provider_event provider=ddg search_type=text outcome=http_429" in joined
+        assert "search_cache_event search_type=text state=fresh_hit" in joined
 
 
 class TestSearchOperators:

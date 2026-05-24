@@ -75,6 +75,15 @@ def test_v1_search_happy_path_records_usage(client, fake_key):
             {"title": "Doc", "url": "https://example.com/a", "body": "body", "source": "example.com"}
         ],
         "has_more": False,
+        "sources": [],
+        "provider_sources": ["ddg"],
+        "cache_state": "fresh_hit",
+        "served_stale": False,
+        "refreshing": False,
+        "degraded": False,
+        "degraded_reasons": [],
+        "fetched_at": "2026-05-24T10:00:00Z",
+        "expires_at": "2026-05-24T10:10:00Z",
     }
     recorded: list[tuple] = []
 
@@ -93,6 +102,10 @@ def test_v1_search_happy_path_records_usage(client, fake_key):
     assert body["count"] == 1
     assert body["query"] == "hello"
     assert body["results"][0]["url"] == "https://example.com/a"
+    assert body["provider_sources"] == ["ddg"]
+    assert body["cache_state"] == "fresh_hit"
+    assert body["served_stale"] is False
+    assert body["degraded"] is False
     assert recorded and recorded[0][0] == 1
     assert recorded[0][1] == "/api/v1/search"
     assert recorded[0][2] == 200

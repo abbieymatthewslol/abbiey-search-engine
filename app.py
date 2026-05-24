@@ -2394,7 +2394,10 @@ if ABBIEY_OPEN_ACCESS:
 # ---------------------------------------------------------------------------
 # TTL cache for search results — fixes pagination instability
 # ---------------------------------------------------------------------------
-_cache = TTLCache(maxsize=1000, ttl=600)
+_SEARCH_CACHE_TTL_SECONDS = 600
+_PLATFORM_QUERY_CACHE_TTL_SECONDS = 60
+
+_cache = TTLCache(maxsize=1000, ttl=_SEARCH_CACHE_TTL_SECONDS)
 _cache_lock = threading.Lock()
 _in_flight: dict = {}
 _in_flight_lock = threading.Lock()
@@ -2422,6 +2425,402 @@ def _httpx_effective_timeout(url: str, requested: float) -> float:
     if "127.0.0.1" in u or "localhost" in u or "0.0.0.0" in u:
         return float(requested)
     return min(float(requested), _EXTERNAL_HTTP_MAX_S)
+
+
+_STALE_CACHE_GRACE_SECONDS = {
+    "text": 180,
+    "people": 120,
+    "business": 120,
+    "code": 120,
+    "news": 60,
+}
+_STALE_WHILE_REVALIDATE_TYPES = frozenset(_STALE_CACHE_GRACE_SECONDS.keys())
+_PROVIDER_HEALTH: dict[str, dict[str, object]] = {}
+_PROVIDER_HEALTH_LOCK = threading.Lock()
+_SEARCH_REFRESH_POOL = ThreadPoolExecutor(max_workers=4, thread_name_prefix="search-refresh")
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _extract_result_sources(results: list) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for item in results or []:
+        if not isinstance(item, dict):
+            continue
+        src = str(item.get("source") or item.get("source_label") or item.get("provider_name") or "").strip()
+        if not src:
+            continue
+        key = src.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(src)
+    return out
+
+
+def _search_cache_stale_grace_seconds(search_type: str) -> int:
+    return int(_STALE_CACHE_GRACE_SECONDS.get(search_type, 0))
+
+
+def _cache_payload(
+    results: list,
+    ttl_seconds: int,
+    *,
+    stale_grace_seconds: int = 0,
+    provider_sources: list[str] | None = None,
+    degraded: bool = False,
+    degraded_reasons: list[str] | None = None,
+    cache_reason: str = "fresh_fetch",
+    refreshing: bool = False,
+) -> dict:
+    ttl = max(0, int(ttl_seconds or 0))
+    stale_grace = max(0, int(stale_grace_seconds or 0))
+    now_mono = time.monotonic()
+    fetched_at = _utc_now_iso()
+    return {
+        "results": results,
+        "fetched_at": fetched_at,
+        "fetched_at_monotonic": now_mono,
+        "expires_at": now_mono + ttl,
+        "expires_at_iso": (
+            datetime.now(timezone.utc) + timedelta(seconds=ttl)
+        ).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        "stale_until": now_mono + ttl + stale_grace,
+        "provider_sources": list(provider_sources or _extract_result_sources(results)),
+        "degraded": bool(degraded),
+        "degraded_reasons": list(degraded_reasons or []),
+        "cache_reason": str(cache_reason or "fresh_fetch"),
+        "refreshing": bool(refreshing),
+    }
+
+
+def _normalize_cache_entry(entry):
+    if entry is None:
+        return None
+    if isinstance(entry, list):
+        now_mono = time.monotonic()
+        return {
+            "results": entry,
+            "fetched_at": None,
+            "fetched_at_monotonic": now_mono - _SEARCH_CACHE_TTL_SECONDS,
+            "expires_at": now_mono - 1,
+            "expires_at_iso": None,
+            "stale_until": now_mono - 1,
+            "provider_sources": _extract_result_sources(entry),
+            "degraded": False,
+            "degraded_reasons": [],
+            "cache_reason": "legacy",
+            "refreshing": False,
+        }
+    if not isinstance(entry, dict):
+        return None
+    results = entry.get("results") if isinstance(entry.get("results"), list) else []
+    normalized = dict(entry)
+    normalized["results"] = results
+    normalized.setdefault("fetched_at", None)
+    normalized.setdefault("fetched_at_monotonic", time.monotonic())
+    normalized.setdefault("expires_at", time.monotonic() - 1)
+    normalized.setdefault("expires_at_iso", None)
+    normalized.setdefault("stale_until", normalized.get("expires_at", time.monotonic() - 1))
+    normalized["provider_sources"] = list(normalized.get("provider_sources") or _extract_result_sources(results))
+    normalized["degraded"] = bool(normalized.get("degraded"))
+    normalized["degraded_reasons"] = list(normalized.get("degraded_reasons") or [])
+    normalized["cache_reason"] = str(normalized.get("cache_reason") or "fresh_fetch")
+    normalized["refreshing"] = bool(normalized.get("refreshing"))
+    return normalized
+
+
+def _cache_entry_state(entry, search_type: str) -> str:
+    normalized = _normalize_cache_entry(entry)
+    if normalized is None:
+        return "missing"
+    now_mono = time.monotonic()
+    try:
+        expires_at = float(normalized.get("expires_at"))
+        stale_until = float(normalized.get("stale_until"))
+    except (TypeError, ValueError):
+        return "missing"
+    if expires_at > now_mono:
+        return "fresh"
+    if search_type in _STALE_WHILE_REVALIDATE_TYPES and stale_until > now_mono:
+        return "stale"
+    return "expired"
+
+
+def _cache_results_from_entry(entry):
+    normalized = _normalize_cache_entry(entry)
+    if normalized is None:
+        return None
+    if _cache_entry_state(normalized, "text") == "expired":
+        return None
+    return normalized["results"]
+
+
+def _is_retryable_ddg_error(exc: BaseException) -> bool:
+    msg = str(exc).strip().lower()
+    if not msg:
+        return False
+    needles = (
+        "429",
+        "too many requests",
+        "rate limit",
+        "timed out",
+        "timeout",
+        "temporarily unavailable",
+        "service unavailable",
+        "cloudflare",
+        "captcha",
+        "connection reset",
+        "remote protocol",
+        "tls",
+    )
+    return any(n in msg for n in needles)
+
+
+def _classify_provider_exception(exc: BaseException) -> str:
+    if isinstance(exc, TimeoutError):
+        return "timeout"
+    if isinstance(exc, httpx.TimeoutException):
+        return "timeout"
+    if isinstance(exc, httpx.HTTPStatusError):
+        status = int(exc.response.status_code)
+        if status == 429:
+            return "http_429"
+        if status == 403:
+            return "http_403"
+        if status >= 500:
+            return "http_5xx"
+    msg = str(exc).strip().lower()
+    if "429" in msg or "too many requests" in msg or "rate limit" in msg:
+        return "http_429"
+    if "403" in msg or "forbidden" in msg or "cloudflare" in msg or "captcha" in msg:
+        return "http_403"
+    if "timed out" in msg or "timeout" in msg:
+        return "timeout"
+    if "json" in msg or "decode" in msg or "parse" in msg:
+        return "parse_error"
+    return "network_error"
+
+
+def _provider_health_key(provider: str, search_type: str) -> str:
+    return f"{(search_type or 'generic').strip().lower()}::{(provider or 'unknown').strip().lower()}"
+
+
+def _provider_cooldown_seconds(outcome: str, failures: int) -> int:
+    base = {
+        "http_429": 45,
+        "timeout": 30,
+        "network_error": 30,
+        "parse_error": 30,
+        "http_5xx": 45,
+        "http_403": 120,
+        "cooldown_skip": 0,
+        "success": 0,
+        "empty": 0,
+    }.get(outcome, 0)
+    if base <= 0:
+        return 0
+    multiplier = min(max(int(failures or 1), 1), 4)
+    return int(base * multiplier)
+
+
+def _provider_health_snapshot(provider: str, search_type: str) -> dict:
+    key = _provider_health_key(provider, search_type)
+    with _PROVIDER_HEALTH_LOCK:
+        snap = dict(_PROVIDER_HEALTH.get(key) or {})
+    if not snap:
+        snap = {
+            "provider": provider,
+            "search_type": search_type,
+            "last_outcome": None,
+            "consecutive_failures": 0,
+            "cooldown_until": 0.0,
+            "last_success_at": None,
+        }
+    snap["cooldown_remaining_s"] = max(0.0, float(snap.get("cooldown_until") or 0.0) - time.monotonic())
+    return snap
+
+
+def _provider_cooldown_remaining(provider: str, search_type: str) -> float:
+    snap = _provider_health_snapshot(provider, search_type)
+    return max(0.0, float(snap.get("cooldown_remaining_s") or 0.0))
+
+
+def _log_provider_event(
+    provider: str,
+    search_type: str,
+    outcome: str,
+    elapsed_ms: int,
+    *,
+    result_count: int = 0,
+    cooldown_s: int = 0,
+    detail: str | None = None,
+) -> None:
+    logger.info(
+        "provider_event provider=%s search_type=%s outcome=%s elapsed_ms=%s result_count=%s cooldown_s=%s detail=%s",
+        provider,
+        search_type,
+        outcome,
+        elapsed_ms,
+        result_count,
+        cooldown_s,
+        (detail or "")[:180],
+    )
+
+
+def _record_provider_outcome(
+    provider: str,
+    search_type: str,
+    outcome: str,
+    elapsed_ms: int,
+    *,
+    result_count: int = 0,
+    detail: str | None = None,
+) -> dict:
+    key = _provider_health_key(provider, search_type)
+    now_mono = time.monotonic()
+    cooldown_s = 0
+    with _PROVIDER_HEALTH_LOCK:
+        state = dict(_PROVIDER_HEALTH.get(key) or {})
+        state.setdefault("provider", provider)
+        state.setdefault("search_type", search_type)
+        state.setdefault("consecutive_failures", 0)
+        state["last_outcome"] = outcome
+        state["last_elapsed_ms"] = int(elapsed_ms)
+        state["last_result_count"] = int(result_count)
+        state["last_checked_at"] = _utc_now_iso()
+        if outcome == "success":
+            state["consecutive_failures"] = 0
+            state["cooldown_until"] = 0.0
+            state["last_success_at"] = _utc_now_iso()
+        elif outcome in {"empty", "cooldown_skip"}:
+            pass
+        else:
+            failures = int(state.get("consecutive_failures") or 0) + 1
+            state["consecutive_failures"] = failures
+            cooldown_s = _provider_cooldown_seconds(outcome, failures)
+            if cooldown_s > 0:
+                state["cooldown_until"] = now_mono + cooldown_s
+        _PROVIDER_HEALTH[key] = state
+    _log_provider_event(
+        provider,
+        search_type,
+        outcome,
+        int(elapsed_ms),
+        result_count=int(result_count),
+        cooldown_s=int(cooldown_s),
+        detail=detail,
+    )
+    return state
+
+
+def _run_provider_call(provider: str, search_type: str, fn):
+    cooldown_remaining = _provider_cooldown_remaining(provider, search_type)
+    if cooldown_remaining > 0:
+        _record_provider_outcome(
+            provider,
+            search_type,
+            "cooldown_skip",
+            0,
+            detail=f"cooldown_remaining={int(cooldown_remaining)}",
+        )
+        return [], "cooldown_skip"
+    started = time.perf_counter()
+    try:
+        results = fn() or []
+    except Exception as exc:
+        outcome = _classify_provider_exception(exc)
+        _record_provider_outcome(
+            provider,
+            search_type,
+            outcome,
+            int((time.perf_counter() - started) * 1000),
+            detail=type(exc).__name__,
+        )
+        return [], outcome
+    outcome = "success" if results else "empty"
+    _record_provider_outcome(
+        provider,
+        search_type,
+        outcome,
+        int((time.perf_counter() - started) * 1000),
+        result_count=len(results),
+    )
+    return results, outcome
+
+
+def _provider_failure_penalty(provider: str, search_type: str) -> int:
+    snap = _provider_health_snapshot(provider, search_type)
+    penalty = int(snap.get("consecutive_failures") or 0) * 8
+    if float(snap.get("cooldown_remaining_s") or 0.0) > 0:
+        penalty += 20
+    return penalty
+
+
+def _provider_for_result(result: dict, search_type: str) -> str:
+    src = str(result.get("provider_name") or result.get("source") or "").strip().lower()
+    if src in {"linkedin", "x (twitter)", "instagram", "facebook", "threads", "youtube", "mastodon", "about.me", "muck rack", "crunchbase", "web"}:
+        return "ddg_profiles" if search_type == "people" else "ddg_business"
+    mapping = {
+        "wikipedia": "wikipedia",
+        "wikidata": "wikidata",
+        "github": "github",
+        "opencorporates": "opencorporates",
+        "sec edgar": "sec_edgar",
+        "clearbit logo": "clearbit",
+        "gravatar": "gravatar",
+        "dns/whois": "email_dns",
+    }
+    return mapping.get(src, src or "unknown")
+
+
+def _cache_entry_can_replace(existing_entry, new_entry) -> bool:
+    current = _normalize_cache_entry(existing_entry)
+    candidate = _normalize_cache_entry(new_entry)
+    if candidate is None:
+        return False
+    if current is None:
+        return True
+    current_results = list(current.get("results") or [])
+    candidate_results = list(candidate.get("results") or [])
+    if not candidate_results:
+        return False
+    if current_results and not current.get("degraded") and candidate.get("degraded") and len(candidate_results) <= len(current_results):
+        return False
+    return True
+
+
+def _log_cache_event(cache_key: str, search_type: str, state: str, *, refreshing: bool = False) -> None:
+    cache_key_hash = hashlib.sha256((cache_key or "").encode("utf-8", errors="ignore")).hexdigest()[:12]
+    logger.info(
+        "search_cache_event search_type=%s state=%s refreshing=%s cache_key_hash=%s",
+        search_type,
+        state,
+        int(bool(refreshing)),
+        cache_key_hash,
+    )
+
+
+def _build_response_notice(base_notice: str | None, *, served_stale: bool, degraded: bool) -> str | None:
+    parts: list[str] = []
+    if base_notice:
+        parts.append(str(base_notice).strip())
+    if served_stale:
+        parts.append("Showing recent cached results while sources refresh in the background.")
+    elif degraded:
+        parts.append("Some sources were temporarily unavailable, so results may be incomplete.")
+    if not parts:
+        return None
+    out: list[str] = []
+    seen: set[str] = set()
+    for part in parts:
+        if part and part not in seen:
+            seen.add(part)
+            out.append(part)
+    return " ".join(out)
 
 
 def _get_http():
@@ -7124,69 +7523,86 @@ def _abbiey_bot_fallback(msg: str, ctx: str = "") -> str:
     )
 
 def _try_ddg(query, max_results, search_type, region=None, time_filter=None, safesearch="off"):
-    """Primary: ddgs library with all backends enabled."""
-    ddg = DDGS()
-    kwargs = {"safesearch": safesearch or "off"}
-    if region:
-        kwargs["region"] = region
+    """Primary: ddgs library with bounded retry for transient throttling/timeouts."""
 
-    if search_type == "images":
-        raw = list(ddg.images(query, max_results=max_results, **kwargs))
-        return [
-            {
-                "title": r.get("title", ""),
-                "url": r.get("url", ""),
-                "image": r.get("image", ""),
-                "thumbnail": r.get("thumbnail", ""),
-                "source": r.get("source", ""),
-            }
-            for r in raw
-        ]
-    elif search_type == "news":
-        if time_filter and time_filter in {"d", "w", "m", "y"}:
-            kwargs["timelimit"] = time_filter
-        raw = list(ddg.news(query, max_results=max_results, **kwargs))
-        return [
-            {
-                "title": r.get("title", ""),
-                "url": r.get("url", ""),
-                "body": r.get("body", ""),
-                "source": r.get("source", ""),
-                "date": r.get("date", ""),
-            }
-            for r in raw
-        ]
-    elif search_type == "videos":
-        raw = list(ddg.videos(query, max_results=max_results, **kwargs))
-        return [
-            {
-                "title": r.get("title", ""),
-                "url": r.get("content", ""),
-                "description": r.get("description", ""),
-                "publisher": r.get("publisher", ""),
-                "thumbnail": r.get("images", {}).get("large", "")
-                if isinstance(r.get("images"), dict)
-                else "",
-                "duration": r.get("duration", ""),
-            }
-            for r in raw
-        ]
-    else:
-        if time_filter and time_filter in {"d", "w", "m", "y"}:
-            kwargs["timelimit"] = time_filter
-        raw = list(ddg.text(
-            query,
-            max_results=max_results,
-            **kwargs,
-        ))
-        return [
-            {
-                "title": r.get("title", ""),
-                "url": r.get("href", ""),
-                "body": r.get("body", ""),
-            }
-            for r in raw
-        ]
+    def _run_once():
+        ddg = DDGS()
+        kwargs = {"safesearch": safesearch or "off"}
+        if region:
+            kwargs["region"] = region
+
+        if search_type == "images":
+            raw = list(ddg.images(query, max_results=max_results, **kwargs))
+            return [
+                {
+                    "title": r.get("title", ""),
+                    "url": r.get("url", ""),
+                    "image": r.get("image", ""),
+                    "thumbnail": r.get("thumbnail", ""),
+                    "source": r.get("source", ""),
+                }
+                for r in raw
+            ]
+        elif search_type == "news":
+            if time_filter and time_filter in {"d", "w", "m", "y"}:
+                kwargs["timelimit"] = time_filter
+            raw = list(ddg.news(query, max_results=max_results, **kwargs))
+            return [
+                {
+                    "title": r.get("title", ""),
+                    "url": r.get("url", ""),
+                    "body": r.get("body", ""),
+                    "source": r.get("source", ""),
+                    "date": r.get("date", ""),
+                }
+                for r in raw
+            ]
+        elif search_type == "videos":
+            raw = list(ddg.videos(query, max_results=max_results, **kwargs))
+            return [
+                {
+                    "title": r.get("title", ""),
+                    "url": r.get("content", ""),
+                    "description": r.get("description", ""),
+                    "publisher": r.get("publisher", ""),
+                    "thumbnail": r.get("images", {}).get("large", "")
+                    if isinstance(r.get("images"), dict)
+                    else "",
+                    "duration": r.get("duration", ""),
+                }
+                for r in raw
+            ]
+        else:
+            if time_filter and time_filter in {"d", "w", "m", "y"}:
+                kwargs["timelimit"] = time_filter
+            raw = list(ddg.text(
+                query,
+                max_results=max_results,
+                **kwargs,
+            ))
+            return [
+                {
+                    "title": r.get("title", ""),
+                    "url": r.get("href", ""),
+                    "body": r.get("body", ""),
+                }
+                for r in raw
+            ]
+
+    for attempt in range(2):
+        try:
+            return _run_once()
+        except Exception as exc:
+            if attempt >= 1 or not _is_retryable_ddg_error(exc):
+                raise
+            delay = 0.35 * (attempt + 1)
+            logger.warning(
+                "DDG transient failure for type=%s; retrying once in %.2fs",
+                search_type,
+                delay,
+            )
+            time.sleep(delay)
+    return []
 
 
 # ---- Exa Search API (neural / keyword / auto) ----
@@ -8868,6 +9284,52 @@ def _deduplicate(results):
     return unique
 
 
+def _rank_provider_reliability(results: list, search_type: str) -> list:
+    if search_type not in {"people", "business"} or not results:
+        return results
+    priorities = {
+        "people": {
+            "Wikidata": 140,
+            "Wikipedia": 135,
+            "GitHub": 120,
+            "Crunchbase": 108,
+            "Muck Rack": 102,
+            "About.me": 96,
+            "LinkedIn": 78,
+            "X (Twitter)": 68,
+            "Threads": 66,
+            "Instagram": 62,
+            "YouTube": 60,
+            "Facebook": 54,
+            "Mastodon": 54,
+            "Web": 42,
+        },
+        "business": {
+            "OpenCorporates": 145,
+            "SEC EDGAR": 140,
+            "Wikipedia": 125,
+            "Clearbit Logo": 110,
+            "Bloomberg": 105,
+            "Crunchbase": 100,
+            "LinkedIn": 82,
+            "Glassdoor": 72,
+            "BBB": 70,
+            "Web": 40,
+        },
+    }
+    scored: list[tuple[int, int, dict]] = []
+    for idx, item in enumerate(results):
+        src = str(item.get("source") or "").strip()
+        score = priorities.get(search_type, {}).get(src, 50)
+        if item.get("profile_card"):
+            score += 8
+        provider = _provider_for_result(item, search_type)
+        score -= _provider_failure_penalty(provider, search_type)
+        scored.append((score, idx, item))
+    scored.sort(key=lambda row: (-row[0], row[1]))
+    return [row[2] for row in scored]
+
+
 # ---------------------------------------------------------------------------
 # People / Email / Business search backends
 #
@@ -9766,6 +10228,9 @@ def _fetch_results(
     mybot_user_id=None,
     img_rev_key=None,
     onion_mode="balanced",
+    _skip_cache_read: bool = False,
+    _background_refresh: bool = False,
+    _refresh_event: threading.Event | None = None,
 ):
     """Fetch results with caching. Returns paginated slice."""
     if search_type == "images" and img_rev_key:
@@ -9789,7 +10254,6 @@ def _fetch_results(
         }
 
     operators = operators or {}
-    # Include operators in cache key to prevent cross-contamination
     ops_str = "&".join(f"{k}={','.join(v)}" for k, v in sorted(operators.items())) if operators else ""
     img_seg = ""
     if image_opts and search_type == "images":
@@ -9802,6 +10266,25 @@ def _fetch_results(
     if search_type == "onion":
         onion_seg = f"|om={onion_mode}"
     cache_key = f"{query}|{search_type}|{region or ''}|{lang or ''}|{ops_str}|{time_filter or ''}|{safesearch or 'off'}{img_seg}{cw_seg}{bot_seg}{onion_seg}"
+
+    provider_sources_used: list[str] = []
+    _provider_seen: set[str] = set()
+    degraded_reasons: list[str] = []
+
+    def _remember_provider(provider: str, outcome: str, hits: list | None) -> None:
+        if hits:
+            if provider not in _provider_seen:
+                _provider_seen.add(provider)
+                provider_sources_used.append(provider)
+        if outcome not in {"success", "empty"}:
+            reason = f"{provider}:{outcome}"
+            if reason not in degraded_reasons:
+                degraded_reasons.append(reason)
+
+    def _run_provider(provider: str, fn):
+        hits, outcome = _run_provider_call(provider, search_type, fn)
+        _remember_provider(provider, outcome, hits)
+        return hits
 
     def _onion_notice(all_results):
         if search_type != "onion":
@@ -9830,120 +10313,191 @@ def _fetch_results(
             src.append("DuckDuckGo intel fallback")
         return src
 
-    # Check cache
-    with _cache_lock:
-        cached = _cache.get(cache_key)
-
-    if cached is not None:
-        # Serve from cache
+    def _build_response(entry, *, cache_state: str, served_stale: bool = False):
+        normalized = _normalize_cache_entry(entry) or _cache_payload([], 0)
+        all_results = list(normalized.get("results") or [])
         start = RESULTS_PER_PAGE * (page - 1)
-        page_results = cached[start : start + RESULTS_PER_PAGE]
-        has_more = len(cached) > start + RESULTS_PER_PAGE
-        notice = _onion_notice(cached)
+        page_results = all_results[start : start + RESULTS_PER_PAGE]
+        has_more = len(all_results) > start + RESULTS_PER_PAGE
+        notice = _build_response_notice(
+            _onion_notice(all_results),
+            served_stale=served_stale,
+            degraded=bool(normalized.get("degraded")),
+        )
         return {
             "results": page_results,
             "has_more": has_more,
             "page": page,
             "notice": notice,
-            "sources": _onion_sources(cached),
+            "sources": _onion_sources(all_results),
+            "provider_sources": list(normalized.get("provider_sources") or []),
+            "cache_state": cache_state,
+            "served_stale": served_stale,
+            "refreshing": bool(normalized.get("refreshing")),
+            "degraded": bool(normalized.get("degraded")),
+            "degraded_reasons": list(normalized.get("degraded_reasons") or []),
+            "fetched_at": normalized.get("fetched_at"),
+            "expires_at": normalized.get("expires_at_iso"),
         }
 
-    # In-flight deduplication: if another thread is already fetching the same key, wait for it
-    _my_event = None
-    with _in_flight_lock:
-        if cache_key in _in_flight:
-            _wait_event = _in_flight[cache_key]
-        else:
-            _my_event = threading.Event()
-            _in_flight[cache_key] = _my_event
-            _wait_event = None
-
-    if _wait_event is not None:
-        _wait_event.wait(timeout=10)
+    if not _skip_cache_read:
         with _cache_lock:
-            cached = _cache.get(cache_key)
-        if cached is not None:
-            start = RESULTS_PER_PAGE * (page - 1)
-            page_results = cached[start : start + RESULTS_PER_PAGE]
-            has_more = len(cached) > start + RESULTS_PER_PAGE
-            notice = _onion_notice(cached)
-            return {
-                "results": page_results,
-                "has_more": has_more,
-                "page": page,
-                "notice": notice,
-                "sources": _onion_sources(cached),
-            }
-        # Primary fetch failed or timed out — fall through and fetch ourselves.
-        # Register our own event so subsequent waiters can piggyback on our result.
-        _my_event = threading.Event()
-        with _in_flight_lock:
-            _in_flight[cache_key] = _my_event
+            cached_entry = _normalize_cache_entry(_cache.get(cache_key))
+        cache_state = _cache_entry_state(cached_entry, search_type)
+        if cache_state == "fresh":
+            _log_cache_event(cache_key, search_type, "fresh_hit", refreshing=bool(cached_entry.get("refreshing")))
+            return _build_response(cached_entry, cache_state="fresh_hit")
+        if cache_state == "stale" and not _background_refresh:
+            refresh_started = False
+            refresh_event = None
+            with _in_flight_lock:
+                refresh_event = _in_flight.get(cache_key)
+                if refresh_event is None:
+                    refresh_event = threading.Event()
+                    _in_flight[cache_key] = refresh_event
+                    refresh_started = True
+            if refresh_started:
+                with _cache_lock:
+                    latest_entry = _normalize_cache_entry(_cache.get(cache_key))
+                    if latest_entry is not None:
+                        latest_entry["refreshing"] = True
+                        _cache[cache_key] = latest_entry
+                try:
+                    _SEARCH_REFRESH_POOL.submit(
+                        _fetch_results,
+                        query,
+                        page,
+                        search_type,
+                        region,
+                        lang,
+                        operators,
+                        time_filter,
+                        safesearch,
+                        image_opts,
+                        local_rank_context,
+                        anti_template,
+                        source_query_for_fallback,
+                        mybot_id,
+                        mybot_user_id,
+                        img_rev_key,
+                        onion_mode,
+                        True,
+                        True,
+                        refresh_event,
+                    )
+                    _log_cache_event(cache_key, search_type, "refresh_started", refreshing=True)
+                except Exception:
+                    logger.exception("search_refresh_submit_failed")
+                    with _in_flight_lock:
+                        _in_flight.pop(cache_key, None)
+                    refresh_event.set()
+                    with _cache_lock:
+                        latest_entry = _normalize_cache_entry(_cache.get(cache_key))
+                        if latest_entry is not None:
+                            latest_entry["refreshing"] = False
+                            _cache[cache_key] = latest_entry
+            else:
+                _log_cache_event(cache_key, search_type, "stale_hit", refreshing=True)
+            with _cache_lock:
+                stale_entry = _normalize_cache_entry(_cache.get(cache_key))
+            return _build_response(stale_entry or cached_entry, cache_state="stale_hit", served_stale=True)
+        if cache_state == "expired" and cached_entry is not None:
+            with _cache_lock:
+                _cache.pop(cache_key, None)
+        _log_cache_event(cache_key, search_type, "miss")
 
-    # Build effective query with operators
+    _my_event = _refresh_event if _background_refresh else None
+    _wait_event = None
+    if not _background_refresh:
+        with _in_flight_lock:
+            if cache_key in _in_flight:
+                _wait_event = _in_flight[cache_key]
+            else:
+                _my_event = threading.Event()
+                _in_flight[cache_key] = _my_event
+        if _wait_event is not None:
+            _wait_event.wait(timeout=10)
+            with _cache_lock:
+                waited_entry = _normalize_cache_entry(_cache.get(cache_key))
+            waited_state = _cache_entry_state(waited_entry, search_type)
+            if waited_state in {"fresh", "stale"}:
+                _log_cache_event(cache_key, search_type, "wait_hit", refreshing=bool(waited_entry.get("refreshing")))
+                return _build_response(
+                    waited_entry,
+                    cache_state="fresh_hit" if waited_state == "fresh" else "stale_hit",
+                    served_stale=waited_state == "stale",
+                )
+            _my_event = threading.Event()
+            with _in_flight_lock:
+                _in_flight[cache_key] = _my_event
+
     effective_query = _build_engine_query(query, operators) if operators else query
     max_results = CACHE_FETCH_SIZE
-    # Onion / Deep Web — dedicated path, skip normal engines
     results = []
+    cache_ttl_seconds = _SEARCH_CACHE_TTL_SECONDS
+    stale_grace_seconds = _search_cache_stale_grace_seconds(search_type)
     if search_type == "onion":
-        ahmia_results = []
+        ahmia_results = _run_provider("ahmia", lambda: _try_ahmia(effective_query, max_results=max_results))
         ddg_results = []
-        try:
-            ahmia_results = _try_ahmia(effective_query, max_results=max_results)
-        except Exception:
-            logger.warning("_try_ahmia raised unexpectedly; falling through to DDG fallback", exc_info=True)
         if onion_mode == "extended":
             logger.info("Onion extended mode: blending Ahmia + DDG intel")
-            try:
-                ddg_results = _try_onion_ddg(effective_query, max_results=max_results, mode=onion_mode)
-            except Exception:
-                logger.warning("_try_onion_ddg raised unexpectedly", exc_info=True)
+            ddg_results = _run_provider(
+                "ddg_onion",
+                lambda: _try_onion_ddg(effective_query, max_results=max_results, mode=onion_mode),
+            )
             results = _deduplicate([*ahmia_results, *ddg_results])
         elif onion_mode == "balanced":
             results = ahmia_results
             if not results:
                 logger.info("Ahmia empty, trying DDG onion fallback")
-                try:
-                    results = _try_onion_ddg(effective_query, max_results=max_results, mode=onion_mode)
-                except Exception:
-                    logger.warning("_try_onion_ddg raised unexpectedly", exc_info=True)
+                results = _run_provider(
+                    "ddg_onion",
+                    lambda: _try_onion_ddg(effective_query, max_results=max_results, mode=onion_mode),
+                )
         else:
             results = ahmia_results
     elif search_type == "code":
-        # Code — dedicated path: fetch GitHub, StackOverflow, GitLab, npm in parallel.
-        # Never use generic DDG — it returns unrelated web pages styled in code font.
         logger.info("Code search: fetching GitHub/SO/GitLab/npm in parallel")
         with ThreadPoolExecutor(max_workers=4) as _code_pool:
-            _gh_fut  = _code_pool.submit(_try_github_search,   effective_query, max_results)
-            _so_fut  = _code_pool.submit(_try_stackoverflow,   effective_query, max_results)
-            _gl_fut  = _code_pool.submit(_try_gitlab,          effective_query, max_results)
-            _npm_fut = _code_pool.submit(_try_npm,             effective_query, max_results)
-            gh_res  = _gh_fut.result(timeout=8)  or []
-            so_res  = _so_fut.result(timeout=8)  or []
-            gl_res  = _gl_fut.result(timeout=8)  or []
-            npm_res = _npm_fut.result(timeout=8) or []
+            futures = {
+                _code_pool.submit(_run_provider_call, "github_code", search_type, lambda: _try_github_search(effective_query, max_results)): "github_code",
+                _code_pool.submit(_run_provider_call, "stackoverflow", search_type, lambda: _try_stackoverflow(effective_query, max_results)): "stackoverflow",
+                _code_pool.submit(_run_provider_call, "gitlab", search_type, lambda: _try_gitlab(effective_query, max_results)): "gitlab",
+                _code_pool.submit(_run_provider_call, "npm", search_type, lambda: _try_npm(effective_query, max_results)): "npm",
+            }
+            provider_hits = {name: [] for name in futures.values()}
+            for fut, provider in futures.items():
+                try:
+                    hits, outcome = fut.result(timeout=8)
+                except Exception as exc:
+                    hits, outcome = [], _classify_provider_exception(exc)
+                    _record_provider_outcome(provider, search_type, outcome, 8000, detail=type(exc).__name__)
+                _remember_provider(provider, outcome, hits)
+                provider_hits[provider] = hits or []
 
-        # Interleave sources so results aren't all from one platform
         seen_urls = set()
-        for batch in zip_longest(gh_res, so_res, gl_res, npm_res):
+        for batch in zip_longest(
+            provider_hits["github_code"],
+            provider_hits["stackoverflow"],
+            provider_hits["gitlab"],
+            provider_hits["npm"],
+        ):
             for r in batch:
                 if r and r.get("url") not in seen_urls:
                     seen_urls.add(r.get("url"))
                     results.append(r)
-
-        # Fallback: DDG with code-site filter if all APIs failed
         if not results:
             logger.info("Code APIs all failed, falling back to DDG code-focused")
-            results = _try_code_ddg(effective_query, max_results)
+            results = _run_provider("code_ddg", lambda: _try_code_ddg(effective_query, max_results))
     elif search_type == "prices":
         logger.info("Price search: fetching from retailers in parallel")
-        results = _try_prices(effective_query, max_results)
+        results = _run_provider("prices", lambda: _try_prices(effective_query, max_results))
     elif search_type == "alts":
         logger.info("Alternatives search: trying AlternativeTo + DDG fallback")
-        results = _try_alternativeto(effective_query)
+        results = _run_provider("alternativeto", lambda: _try_alternativeto(effective_query))
         if not results:
             logger.info("AlternativeTo empty, falling back to DDG alternatives search")
-            results = _try_alternatives_ddg(effective_query, max_results)
+            results = _run_provider("alternatives_ddg", lambda: _try_alternatives_ddg(effective_query, max_results))
     elif search_type == "mybot":
         if mybot_id is None or mybot_user_id is None:
             results = []
@@ -9952,95 +10506,143 @@ def _fetch_results(
     elif search_type == "people":
         logger.info("People search: Wikidata + Wikipedia + GitHub + DDG social filter")
         with ThreadPoolExecutor(max_workers=5) as _p_pool:
-            _wd_fut = _p_pool.submit(_try_wikidata_person, effective_query, 5)
-            _wp_fut = _p_pool.submit(_try_wikipedia_person, effective_query)
-            _gh_fut = _p_pool.submit(_try_github_users, effective_query, 6)
-            _ia_fut = _p_pool.submit(_try_ddg_instant, effective_query)
-            _dd_fut = _p_pool.submit(_try_ddg_profiles, effective_query, max_results)
-            wd = _wd_fut.result(timeout=8) or []
-            wp = _wp_fut.result(timeout=6) or []
-            gh = _gh_fut.result(timeout=8) or []
-            ia = _ia_fut.result(timeout=6) or []
-            dd = _dd_fut.result(timeout=10) or []
-        # Force the profile-style hits to the front, then interleave social links
+            futures = {
+                _p_pool.submit(_run_provider_call, "wikidata", search_type, lambda: _try_wikidata_person(effective_query, 5)): ("wikidata", 8),
+                _p_pool.submit(_run_provider_call, "wikipedia", search_type, lambda: _try_wikipedia_person(effective_query)): ("wikipedia", 6),
+                _p_pool.submit(_run_provider_call, "github", search_type, lambda: _try_github_users(effective_query, 6)): ("github", 8),
+                _p_pool.submit(_run_provider_call, "ddg_instant", search_type, lambda: _try_ddg_instant(effective_query)): ("ddg_instant", 6),
+                _p_pool.submit(_run_provider_call, "ddg_profiles", search_type, lambda: _try_ddg_profiles(effective_query, max_results)): ("ddg_profiles", 10),
+            }
+            people_hits = {"wikidata": [], "wikipedia": [], "github": [], "ddg_instant": [], "ddg_profiles": []}
+            for fut, spec in futures.items():
+                provider, timeout_s = spec
+                try:
+                    hits, outcome = fut.result(timeout=timeout_s)
+                except Exception as exc:
+                    hits, outcome = [], _classify_provider_exception(exc)
+                    _record_provider_outcome(provider, search_type, outcome, int(timeout_s * 1000), detail=type(exc).__name__)
+                _remember_provider(provider, outcome, hits)
+                people_hits[provider] = hits or []
         top_cards = []
-        for _c in (wp + wd + gh):
+        for _c in (people_hits["wikipedia"] + people_hits["wikidata"] + people_hits["github"]):
             if _c not in top_cards:
                 top_cards.append(_c)
-        merged = _dedupe_results_by_url([top_cards, dd, ia])
-        results = merged[:max_results]
+        merged = _dedupe_results_by_url([top_cards, people_hits["ddg_profiles"], people_hits["ddg_instant"]])
+        results = _rank_provider_reliability(merged[:max_results], "people")
+        cache_ttl_seconds = _PLATFORM_QUERY_CACHE_TTL_SECONDS if people_hits["ddg_profiles"] else 0
         if not results:
-            # Last-ditch fallback — at least return organic DDG web hits for the name
-            results = _try_ddg(effective_query, max_results, "text", safesearch="off") or []
+            results = _run_provider(
+                "ddg",
+                lambda: _try_ddg(effective_query, max_results, "text", safesearch="off"),
+            ) or []
+            cache_ttl_seconds = 0
     elif search_type == "email":
         em = effective_query.strip()
-        # Extract a plausible address if the user pasted a sentence
         m = re.search(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", em)
         addr = m.group(0) if m else em
         logger.info("Email search: Gravatar + DNS facts + web mentions (email=%s)", addr)
         with ThreadPoolExecutor(max_workers=3) as _e_pool:
-            _gr_fut = _e_pool.submit(_try_gravatar_email, addr)
-            _dn_fut = _e_pool.submit(_try_email_dns_facts, addr)
-            _wb_fut = _e_pool.submit(_try_email_web, addr, max_results)
-            gr = _gr_fut.result(timeout=8) or []
-            dn = _dn_fut.result(timeout=10) or []
-            wb = _wb_fut.result(timeout=10) or []
-        cards = gr + dn
-        results = _dedupe_results_by_url([cards, wb])[:max_results]
+            futures = {
+                _e_pool.submit(_run_provider_call, "gravatar", search_type, lambda: _try_gravatar_email(addr)): ("gravatar", 8),
+                _e_pool.submit(_run_provider_call, "email_dns", search_type, lambda: _try_email_dns_facts(addr)): ("email_dns", 10),
+                _e_pool.submit(_run_provider_call, "email_web", search_type, lambda: _try_email_web(addr, max_results)): ("email_web", 10),
+            }
+            email_hits = {"gravatar": [], "email_dns": [], "email_web": []}
+            for fut, spec in futures.items():
+                provider, timeout_s = spec
+                try:
+                    hits, outcome = fut.result(timeout=timeout_s)
+                except Exception as exc:
+                    hits, outcome = [], _classify_provider_exception(exc)
+                    _record_provider_outcome(provider, search_type, outcome, int(timeout_s * 1000), detail=type(exc).__name__)
+                _remember_provider(provider, outcome, hits)
+                email_hits[provider] = hits or []
+        cards = email_hits["gravatar"] + email_hits["email_dns"]
+        results = _dedupe_results_by_url([cards, email_hits["email_web"]])[:max_results]
         if not results:
-            results = _try_ddg(f'"{addr}"', max_results, "text", safesearch="off") or []
+            results = _run_provider("ddg", lambda: _try_ddg(f'"{addr}"', max_results, "text", safesearch="off")) or []
     elif search_type == "business":
         logger.info("Business search: OpenCorporates + SEC + Wikipedia + DDG business filter")
         with ThreadPoolExecutor(max_workers=5) as _b_pool:
-            _oc_fut = _b_pool.submit(_try_opencorporates, effective_query, 12)
-            _sc_fut = _b_pool.submit(_try_sec_edgar, effective_query, 6)
-            _wp_fut = _b_pool.submit(_try_wikipedia_company, effective_query)
-            _cl_fut = _b_pool.submit(_try_clearbit_logo_for_query, effective_query)
-            _dd_fut = _b_pool.submit(_try_ddg_business, effective_query, max_results)
-            oc = _oc_fut.result(timeout=8) or []
-            sc = _sc_fut.result(timeout=8) or []
-            wp = _wp_fut.result(timeout=6) or []
-            cl = _cl_fut.result(timeout=4) or []
-            dd = _dd_fut.result(timeout=10) or []
+            futures = {
+                _b_pool.submit(_run_provider_call, "opencorporates", search_type, lambda: _try_opencorporates(effective_query, 12)): ("opencorporates", 8),
+                _b_pool.submit(_run_provider_call, "sec_edgar", search_type, lambda: _try_sec_edgar(effective_query, 6)): ("sec_edgar", 8),
+                _b_pool.submit(_run_provider_call, "wikipedia", search_type, lambda: _try_wikipedia_company(effective_query)): ("wikipedia", 6),
+                _b_pool.submit(_run_provider_call, "clearbit", search_type, lambda: _try_clearbit_logo_for_query(effective_query)): ("clearbit", 4),
+                _b_pool.submit(_run_provider_call, "ddg_business", search_type, lambda: _try_ddg_business(effective_query, max_results)): ("ddg_business", 10),
+            }
+            business_hits = {"opencorporates": [], "sec_edgar": [], "wikipedia": [], "clearbit": [], "ddg_business": []}
+            for fut, spec in futures.items():
+                provider, timeout_s = spec
+                try:
+                    hits, outcome = fut.result(timeout=timeout_s)
+                except Exception as exc:
+                    hits, outcome = [], _classify_provider_exception(exc)
+                    _record_provider_outcome(provider, search_type, outcome, int(timeout_s * 1000), detail=type(exc).__name__)
+                _remember_provider(provider, outcome, hits)
+                business_hits[provider] = hits or []
         top_cards = []
-        for _c in (wp + cl + sc + oc):
+        for _c in (
+            business_hits["wikipedia"]
+            + business_hits["clearbit"]
+            + business_hits["sec_edgar"]
+            + business_hits["opencorporates"]
+        ):
             if _c not in top_cards:
                 top_cards.append(_c)
-        results = _dedupe_results_by_url([top_cards, dd])[:max_results]
+        results = _rank_provider_reliability(
+            _dedupe_results_by_url([top_cards, business_hits["ddg_business"]])[:max_results],
+            "business",
+        )
+        cache_ttl_seconds = _PLATFORM_QUERY_CACHE_TTL_SECONDS if business_hits["ddg_business"] else 0
         if not results:
-            results = _try_ddg(effective_query, max_results, "text", safesearch="off") or []
+            results = _run_provider(
+                "ddg",
+                lambda: _try_ddg(effective_query, max_results, "text", safesearch="off"),
+            ) or []
+            cache_ttl_seconds = 0
     else:
         results = []
         skip_ddg = False
         if search_type == "images" and image_opts:
-            results = _fetch_images_multi_source(
-                effective_query, max_results, region, time_filter, safesearch, image_opts
+            results = _run_provider(
+                "images_multi",
+                lambda: _fetch_images_multi_source(
+                    effective_query, max_results, region, time_filter, safesearch, image_opts
+                ),
             )
             skip_ddg = bool(results)
 
         pipeline_used = False
         if search_type == "text" and _retrieval_pipeline_enabled():
             try:
+                def _pipeline_fetcher(provider: str, fn):
+                    def _wrapped():
+                        hits, outcome = _run_provider_call(provider, "text", fn)
+                        _remember_provider(provider, outcome, hits)
+                        return hits
+                    return _wrapped
+
                 _rp_fetchers = {
-                    "ddg": lambda: _try_ddg(
+                    "ddg": _pipeline_fetcher("ddg", lambda: _try_ddg(
                         effective_query, max_results, "text", region, time_filter, safesearch
-                    ),
-                    "wikipedia": lambda: _try_wikipedia(effective_query, lang),
-                    "marginalia": lambda: _try_marginalia(query),
-                    "stract": lambda: _try_stract(query),
-                    "searxng": lambda: _try_searxng(query),
-                    "hn": lambda: _try_hackernews_text(query),
-                    "reddit": lambda: _try_reddit_text(query),
-                    "archive": lambda: _try_internet_archive_text(query),
+                    )),
+                    "wikipedia": _pipeline_fetcher("wikipedia", lambda: _try_wikipedia(effective_query, lang)),
+                    "marginalia": _pipeline_fetcher("marginalia", lambda: _try_marginalia(query)),
+                    "stract": _pipeline_fetcher("stract", lambda: _try_stract(query)),
+                    "searxng": _pipeline_fetcher("searxng", lambda: _try_searxng(query)),
+                    "hn": _pipeline_fetcher("hn", lambda: _try_hackernews_text(query)),
+                    "reddit": _pipeline_fetcher("reddit", lambda: _try_reddit_text(query)),
+                    "archive": _pipeline_fetcher("archive", lambda: _try_internet_archive_text(query)),
                 }
                 if _exa_api_key():
-                    _rp_fetchers["exa"] = lambda: _try_exa(
+                    _rp_fetchers["exa"] = _pipeline_fetcher("exa", lambda: _try_exa(
                         effective_query, max_results, "text", region, time_filter, safesearch
-                    )
+                    ))
                 if _looks_academic(query):
-                    _rp_fetchers["arxiv"] = lambda: _try_arxiv(query)
-                    _rp_fetchers["pubmed"] = lambda: _try_pubmed(query)
-                    _rp_fetchers["crossref"] = lambda: _try_crossref(query)
+                    _rp_fetchers["arxiv"] = _pipeline_fetcher("arxiv", lambda: _try_arxiv(query))
+                    _rp_fetchers["pubmed"] = _pipeline_fetcher("pubmed", lambda: _try_pubmed(query))
+                    _rp_fetchers["crossref"] = _pipeline_fetcher("crossref", lambda: _try_crossref(query))
                 _rp_hits = run_text_retrieval_pipeline_sync(
                     user_query=query,
                     effective_query=effective_query,
@@ -10057,48 +10659,60 @@ def _fetch_results(
                     skip_ddg = True
             except Exception:
                 logger.exception("retrieval_pipeline_failed")
+                if "pipeline" not in degraded_reasons:
+                    degraded_reasons.append("pipeline:failed")
 
         if not skip_ddg:
-            # Layer 1: DDG multi-backend (with timeout guard)
             try:
                 with ThreadPoolExecutor(max_workers=1) as _ddg_pool:
                     _ddg_fut = _ddg_pool.submit(
-                        _try_ddg, effective_query, max_results, search_type, region, time_filter, safesearch
+                        _run_provider_call,
+                        "ddg",
+                        search_type,
+                        lambda: _try_ddg(effective_query, max_results, search_type, region, time_filter, safesearch),
                     )
-                    results = _ddg_fut.result(timeout=9)
-            except Exception:
+                    results, ddg_outcome = _ddg_fut.result(timeout=9)
+                    _remember_provider("ddg", ddg_outcome, results)
+            except Exception as exc:
+                _remember_provider("ddg", _classify_provider_exception(exc), [])
+                _record_provider_outcome("ddg", search_type, _classify_provider_exception(exc), 9000, detail=type(exc).__name__)
                 logger.exception("DDG failed/timed out for query=%s type=%s", query, search_type)
 
-        # Text: parallel multi-source enrichment — blend deeper sources alongside DDG (legacy path)
         if search_type == "text" and not pipeline_used:
             existing_urls = {r.get("url", "") for r in results}
             _deep_pool = ThreadPoolExecutor(max_workers=10)
             try:
                 _deep_futures = {
-                    _deep_pool.submit(_try_marginalia, query): "marginalia",
-                    _deep_pool.submit(_try_stract, query): "stract",
-                    _deep_pool.submit(_try_searxng, query): "searxng",
-                    _deep_pool.submit(_try_hackernews_text, query): "hn",
-                    _deep_pool.submit(_try_reddit_text, query): "reddit",
-                    _deep_pool.submit(_try_internet_archive_text, query): "archive",
+                    _deep_pool.submit(_run_provider_call, "marginalia", "text", lambda: _try_marginalia(query)): "marginalia",
+                    _deep_pool.submit(_run_provider_call, "stract", "text", lambda: _try_stract(query)): "stract",
+                    _deep_pool.submit(_run_provider_call, "searxng", "text", lambda: _try_searxng(query)): "searxng",
+                    _deep_pool.submit(_run_provider_call, "hn", "text", lambda: _try_hackernews_text(query)): "hn",
+                    _deep_pool.submit(_run_provider_call, "reddit", "text", lambda: _try_reddit_text(query)): "reddit",
+                    _deep_pool.submit(_run_provider_call, "archive", "text", lambda: _try_internet_archive_text(query)): "archive",
                 }
                 if _exa_api_key():
                     _deep_futures[
                         _deep_pool.submit(
-                            _try_exa, effective_query, max_results, "text", region, time_filter, safesearch
+                            _run_provider_call,
+                            "exa",
+                            "text",
+                            lambda: _try_exa(effective_query, max_results, "text", region, time_filter, safesearch),
                         )
                     ] = "exa"
                 if _looks_academic(query):
-                    _deep_futures[_deep_pool.submit(_try_arxiv, query)] = "arxiv"
-                    _deep_futures[_deep_pool.submit(_try_pubmed, query)] = "pubmed"
-                    _deep_futures[_deep_pool.submit(_try_crossref, query)] = "crossref"
+                    _deep_futures[_deep_pool.submit(_run_provider_call, "arxiv", "text", lambda: _try_arxiv(query))] = "arxiv"
+                    _deep_futures[_deep_pool.submit(_run_provider_call, "pubmed", "text", lambda: _try_pubmed(query))] = "pubmed"
+                    _deep_futures[_deep_pool.submit(_run_provider_call, "crossref", "text", lambda: _try_crossref(query))] = "crossref"
                 deep_results = []
                 done, pending = _futures_wait(_deep_futures.keys(), timeout=8)
                 for _future in pending:
                     _future.cancel()
                 for _future in done:
                     try:
-                        for r in (_future.result() or []):
+                        provider = _deep_futures[_future]
+                        hits, outcome = _future.result() or ([], "empty")
+                        _remember_provider(provider, outcome, hits)
+                        for r in (hits or []):
                             url = r.get("url", "")
                             if url and url not in existing_urls:
                                 existing_urls.add(url)
@@ -10115,140 +10729,172 @@ def _fetch_results(
             finally:
                 _deep_pool.shutdown(wait=False)
 
-        # News: blend Exa alongside DDG when both have results (neutral semantic match)
         if search_type == "news" and results and _exa_api_key():
-            try:
-                exa_news = _try_exa(
-                    effective_query, max_results, "news", region, time_filter, safesearch
-                ) or []
-                if exa_news:
-                    seen_news = {r.get("url", "") for r in results}
-                    for r in exa_news:
-                        u = r.get("url") or ""
-                        if u and u not in seen_news:
-                            seen_news.add(u)
-                            results.append(r)
-            except Exception:
-                logger.debug("exa_news_blend_failed", exc_info=True)
+            exa_news = _run_provider(
+                "exa",
+                lambda: _try_exa(effective_query, max_results, "news", region, time_filter, safesearch),
+            ) or []
+            if exa_news:
+                seen_news = {r.get("url", "") for r in results}
+                for r in exa_news:
+                    u = r.get("url") or ""
+                    if u and u not in seen_news:
+                        seen_news.add(u)
+                        results.append(r)
 
-        # Image-specific fallbacks — parallel
         if not results and search_type == "images":
             logger.info("Image search empty, trying parallel fallbacks")
             with ThreadPoolExecutor(max_workers=3) as _img_pool:
-                _img_futs = [
-                    _img_pool.submit(_try_openverse, query),
-                    _img_pool.submit(_try_wikimedia_commons, query),
-                    _img_pool.submit(_try_internet_archive_images, query, max_results),
-                ]
+                _img_futs = {
+                    _img_pool.submit(_run_provider_call, "openverse", search_type, lambda: _try_openverse(query)): "openverse",
+                    _img_pool.submit(_run_provider_call, "wikimedia_commons", search_type, lambda: _try_wikimedia_commons(query)): "wikimedia_commons",
+                    _img_pool.submit(_run_provider_call, "archive_images", search_type, lambda: _try_internet_archive_images(query, max_results)): "archive_images",
+                }
                 for fut in as_completed(_img_futs):
                     try:
-                        r = fut.result(timeout=6)
-                        if r:
-                            results = r
+                        provider = _img_futs[fut]
+                        hits, outcome = fut.result(timeout=6)
+                        _remember_provider(provider, outcome, hits)
+                        if hits:
+                            results = hits
                             break
                     except Exception:
                         pass
 
-        # News-specific fallbacks — parallel
         if not results and search_type == "news":
             logger.info("News search empty, trying parallel fallbacks")
             with ThreadPoolExecutor(max_workers=5) as _news_pool:
-                _news_futs = [
-                    _news_pool.submit(_try_google_news_rss, query),
-                    _news_pool.submit(_try_bing_news_rss, query),
-                    _news_pool.submit(_try_hackernews, query, max_results),
-                    _news_pool.submit(_try_reddit_news, query, max_results),
-                ]
+                _news_futs = {
+                    _news_pool.submit(_run_provider_call, "google_news_rss", search_type, lambda: _try_google_news_rss(query)): "google_news_rss",
+                    _news_pool.submit(_run_provider_call, "bing_news_rss", search_type, lambda: _try_bing_news_rss(query)): "bing_news_rss",
+                    _news_pool.submit(_run_provider_call, "hackernews_news", search_type, lambda: _try_hackernews(query, max_results)): "hackernews_news",
+                    _news_pool.submit(_run_provider_call, "reddit_news", search_type, lambda: _try_reddit_news(query, max_results)): "reddit_news",
+                }
                 if _exa_api_key():
-                    _news_futs.append(
+                    _news_futs[
                         _news_pool.submit(
-                            _try_exa, effective_query, max_results, "news", region, time_filter, safesearch
+                            _run_provider_call,
+                            "exa",
+                            search_type,
+                            lambda: _try_exa(effective_query, max_results, "news", region, time_filter, safesearch),
                         )
-                    )
+                    ] = "exa"
                 for fut in as_completed(_news_futs):
                     try:
-                        r = fut.result(timeout=6)
-                        if r:
-                            results = r
+                        provider = _news_futs[fut]
+                        hits, outcome = fut.result(timeout=6)
+                        _remember_provider(provider, outcome, hits)
+                        if hits:
+                            results = hits
                             break
                     except Exception:
                         pass
 
-        # Video-specific fallbacks — parallel
         if not results and search_type == "videos":
             logger.info("Video search empty, trying parallel fallbacks")
             with ThreadPoolExecutor(max_workers=2) as _vid_pool:
-                _vid_futs = [
-                    _vid_pool.submit(_try_internet_archive_videos, query, max_results),
-                    _vid_pool.submit(_try_peertube, query, max_results),
-                ]
+                _vid_futs = {
+                    _vid_pool.submit(_run_provider_call, "archive_videos", search_type, lambda: _try_internet_archive_videos(query, max_results)): "archive_videos",
+                    _vid_pool.submit(_run_provider_call, "peertube", search_type, lambda: _try_peertube(query, max_results)): "peertube",
+                }
                 for fut in as_completed(_vid_futs):
                     try:
-                        r = fut.result(timeout=6)
-                        if r:
-                            results = r
+                        provider = _vid_futs[fut]
+                        hits, outcome = fut.result(timeout=6)
+                        _remember_provider(provider, outcome, hits)
+                        if hits:
+                            results = hits
                             break
                     except Exception:
                         pass
 
-
-    # Text-only deep fallbacks
     if not results and search_type == "text":
         logger.info("DDG empty, trying Marginalia")
-        results = _try_marginalia(query)
+        results = _run_provider("marginalia", lambda: _try_marginalia(query))
     if not results and search_type == "text":
         logger.info("Marginalia empty, trying Wikipedia")
-        results = _try_wikipedia(query, lang)
+        results = _run_provider("wikipedia", lambda: _try_wikipedia(query, lang))
     if not results and search_type == "text":
         logger.info("Wikipedia empty, trying Wiby.me")
-        results = _try_wiby(query)
+        results = _run_provider("wiby", lambda: _try_wiby(query))
     if not results and search_type == "text":
         logger.info("Wiby empty, trying Mojeek")
-        results = _try_mojeek(query)
+        results = _run_provider("mojeek", lambda: _try_mojeek(query))
     if not results and search_type == "text":
         logger.info("All engines empty, trying DDG instant answers")
-        results = _try_ddg_instant(query)
+        results = _run_provider("ddg_instant", lambda: _try_ddg_instant(query))
     if not results and search_type == "text":
         logger.info("Inclusive bridge: milder queries + curated portals (no blank SERP)")
-        results = _inclusive_text_recovery_bridge(
-            query,
-            lang,
-            region,
-            time_filter,
-            safesearch,
-            raw_query=(source_query_for_fallback or "").strip() or None,
+        results = _run_provider(
+            "inclusive_bridge",
+            lambda: _inclusive_text_recovery_bridge(
+                query,
+                lang,
+                region,
+                time_filter,
+                safesearch,
+                raw_query=(source_query_for_fallback or "").strip() or None,
+            ),
         )
+
     results = _deduplicate(results)
+    if search_type in {"people", "business"}:
+        results = _rank_provider_reliability(results, search_type)
+    if not results:
+        cache_ttl_seconds = 0
+
     if search_type == "text" and local_rank_context and local_rank_context.get("has_local_intent"):
         results = _rank_local_search_results(results, local_rank_context)
     elif search_type == "text" and anti_template:
         results = _rank_anti_template_results(results)
     elif search_type == "text":
-        # Default: neutral steering toward the user's query, without injecting
-        # negativity the user did not ask for.
         results = _rank_neutral_query_aligned(results, query)
-    # Store in cache and always release the in-flight lock so waiters are never stranded
+
+    onion_notice = _onion_notice(results)
+    if search_type == "onion" and onion_notice and "temporarily degraded" in onion_notice.lower():
+        if "onion:degraded" not in degraded_reasons:
+            degraded_reasons.append("onion:degraded")
+
+    provider_sources = provider_sources_used or _extract_result_sources(results)
+    degraded = bool(degraded_reasons)
+    new_entry = _cache_payload(
+        results,
+        cache_ttl_seconds,
+        stale_grace_seconds=stale_grace_seconds,
+        provider_sources=provider_sources,
+        degraded=degraded,
+        degraded_reasons=degraded_reasons,
+        cache_reason="background_refresh" if _background_refresh else "fresh_fetch",
+        refreshing=False,
+    )
+
     try:
         with _cache_lock:
-            _cache[cache_key] = results
+            existing_entry = _normalize_cache_entry(_cache.get(cache_key))
+            if cache_ttl_seconds > 0:
+                if _cache_entry_can_replace(existing_entry, new_entry):
+                    _cache[cache_key] = new_entry
+                elif existing_entry is not None:
+                    existing_entry["refreshing"] = False
+                    _cache[cache_key] = existing_entry
+            elif existing_entry is not None and existing_entry.get("refreshing"):
+                existing_entry["refreshing"] = False
+                _cache[cache_key] = existing_entry
+        _log_cache_event(
+            cache_key,
+            search_type,
+            "refresh_complete" if _background_refresh else "write",
+            refreshing=False,
+        )
     finally:
         if _my_event is not None:
             with _in_flight_lock:
                 _in_flight.pop(cache_key, None)
             _my_event.set()
 
-    start = RESULTS_PER_PAGE * (page - 1)
-    page_results = results[start : start + RESULTS_PER_PAGE]
-    has_more = len(results) > start + RESULTS_PER_PAGE
-    notice = _onion_notice(results)
-
-    return {
-        "results": page_results,
-        "has_more": has_more,
-        "page": page,
-        "notice": notice,
-        "sources": _onion_sources(results),
-    }
+    with _cache_lock:
+        response_entry = _normalize_cache_entry(_cache.get(cache_key)) if cache_ttl_seconds > 0 else new_entry
+    return _build_response(response_entry, cache_state="refreshed" if _background_refresh else "miss")
 
 
 # ---------------------------------------------------------------------------
