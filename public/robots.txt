@@ -1,9 +1,27 @@
 User-agent: *
 Allow: /
 Allow: /search
+Allow: /welcome
+Allow: /about
+Allow: /bots
+Allow: /chatbots
+Allow: /community
+Allow: /status
+Allow: /changelog
+Allow: /docs/
+Allow: /api/v1/docs
+
 Disallow: /api/
+Disallow: /admin
 Disallow: /profile
+Disallow: /profile/
 Disallow: /profile/update
 Disallow: /logout
+Disallow: /payment-return
+Disallow: /welcome/dismiss
+Disallow: /webhooks/
+Disallow: /*?checkout_token=
+Disallow: /*?session_id=
+Disallow: /*?welcome=
 
 Sitemap: https://abbieysearch.com/sitemap.xml
