@@ -8,6 +8,9 @@
   box-shadow: none !important;
   -webkit-appearance: none;
   appearance: none;
+  /* Explicitly pin text colour so browser UA / autofill cannot override it */
+  color: var(--text) !important;
+  -webkit-text-fill-color: var(--text) !important;
 }
 
 /* Kill Chrome / Safari autofill "yellow box" so pills match the dark theme */
@@ -21,11 +24,30 @@
   box-shadow: 0 0 0 1000px var(--search-surface) inset !important;
 }
 
+/* Same autofill suppression for the main search bar */
+.search-box #search-input:-webkit-autofill,
+.search-box #search-input:-webkit-autofill:hover,
+.search-box #search-input:-webkit-autofill:focus,
+.search-box #search-input:-webkit-autofill:focus-visible,
+.search-box #search-input:-webkit-autofill:active {
+  -webkit-text-fill-color: var(--text) !important;
+  transition: background-color 9999s ease-out 0s;
+  box-shadow: 0 0 0 1000px var(--search-surface) inset !important;
+}
+
 [data-theme="light"] .auth-input-pill input:-webkit-autofill,
 [data-theme="light"] .auth-input-pill input:-webkit-autofill:hover,
 [data-theme="light"] .auth-input-pill input:-webkit-autofill:focus,
 [data-theme="light"] .auth-input-pill input:-webkit-autofill:focus-visible,
 [data-theme="light"] .auth-input-pill input:-webkit-autofill:active {
+  box-shadow: 0 0 0 1000px #ffffff inset !important;
+}
+
+[data-theme="light"] .search-box #search-input:-webkit-autofill,
+[data-theme="light"] .search-box #search-input:-webkit-autofill:hover,
+[data-theme="light"] .search-box #search-input:-webkit-autofill:focus,
+[data-theme="light"] .search-box #search-input:-webkit-autofill:focus-visible,
+[data-theme="light"] .search-box #search-input:-webkit-autofill:active {
   box-shadow: 0 0 0 1000px #ffffff inset !important;
 }
 
