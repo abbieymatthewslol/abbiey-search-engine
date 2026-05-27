@@ -2,7 +2,7 @@
 """
 Attach production domains to the Vercel project (apex + www).
 
-www → apex redirect is enforced in vercel.json (edge redirect before the function).
+www -> apex redirect is enforced in vercel.json (edge redirect before the function).
 
 Requires: VERCEL_TOKEN (or token in %APPDATA%\\com.vercel.cli\\Data\\auth.json on Windows).
 
@@ -20,7 +20,7 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-DEFAULT_PROJECT_ID = "prj_hGdLqDsNtQK2A57hWyZNxdZKMi3b"
+DEFAULT_PROJECT_ID = "prj_XMC9ngigTMtG8V6wL8kNMary3S1Q"
 DEFAULT_TEAM_ID = "team_YeguIG4NHm4Kp0Jf5AbOwgFN"
 
 DOMAINS = ("abbieysearch.com", "www.abbieysearch.com")
@@ -82,7 +82,7 @@ def main() -> int:
         print(f"ERROR: list domains failed HTTP {status}: {data}")
         return 1
     existing = {d.get("name", "").lower() for d in data.get("domains", [])}
-    print(f"Project {project_id} — domains on Vercel: {sorted(existing) or '(none)'}")
+    print(f"Project {project_id} - domains on Vercel: {sorted(existing) or '(none)'}")
 
     missing = [d for d in DOMAINS if d.lower() not in existing]
     if not missing:
@@ -93,7 +93,7 @@ def main() -> int:
     print(f"Missing: {missing}")
     if not apply_mode:
         print("Dry run. Re-run with --apply to attach.")
-        print("After attach, complete DNS at your registrar per Vercel project → Domains UI.")
+        print("After attach, complete DNS at your registrar per Vercel project -> Domains UI.")
         return 0
 
     for name in missing:
