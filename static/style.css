@@ -659,11 +659,16 @@ body:not(.has-results) .search-container { max-width: 600px; }
   animation: fadeInUp 0.4s var(--ease-out);
 }
 body:not(.has-results) .search-box {
-  padding: .65rem .65rem .65rem 1.2rem;
+  background: #ffffff;
+  border-color: rgba(28, 25, 23, 0.14);
+  padding: .46rem .5rem .46rem 1rem;
 }
 .search-box:hover {
   border-color: var(--search-accent-border-hover, var(--search-border-hover));
   box-shadow: var(--search-shadow-hover);
+}
+body:not(.has-results) .search-box:hover {
+  border-color: rgba(28, 25, 23, 0.22);
 }
 .search-box:focus-within {
   background: var(--search-surface-focus);
@@ -671,6 +676,12 @@ body:not(.has-results) .search-box {
   outline: none;
   box-shadow:
     0 0 0 2px var(--search-accent-ring, rgba(15,23,42,0.08));
+}
+body:not(.has-results) .search-box:focus-within {
+  background: #ffffff;
+  box-shadow:
+    0 0 0 2px rgba(74, 222, 128, 0.18),
+    0 12px 30px rgba(28, 25, 23, 0.16);
 }
 
 .search-icon { flex-shrink: 0; color: var(--search-control-color, var(--text-muted)); }
@@ -680,6 +691,9 @@ body:not(.has-results) .search-box {
   display: block;
 }
 .search-box:focus-within .search-icon { color: var(--search-accent-focus-icon, var(--search-control-color, #57534e)); }
+body:not(.has-results) .search-box > .search-icon {
+  color: rgba(17, 24, 39, 0.5);
+}
 
 /* Shared line-art magnifier (input, autocomplete, recent header) — currentColor, theme-safe */
 .icon-search-glass {
@@ -721,12 +735,22 @@ body:not(.has-results) .search-btn .icon-search-glass {
   outline-offset: 0;
 }
 
-body:not(.has-results) #search-input { font-size: 1.0625rem; }
+body:not(.has-results) #search-input {
+  font-size: 1.0625rem;
+  line-height: 1.4;
+  color: #111827;
+  caret-color: #111827;
+  -webkit-text-fill-color: #111827;
+  padding: 0.0625rem 0.1rem;
+}
 
 #search-input::placeholder {
   color: var(--search-placeholder);
   opacity: .95;
   transition: opacity 200ms var(--ease-out), color 200ms var(--ease-out);
+}
+body:not(.has-results) #search-input::placeholder {
+  color: rgba(17, 24, 39, 0.52);
 }
 #search-input:focus::placeholder { opacity: .5; }
 
@@ -765,6 +789,15 @@ body.has-results .reverse-image-btn {
 }
 .voice-btn:hover { background: rgba(15,23,42,.06); color: var(--search-input-color, var(--text)); }
 .voice-btn.listening { color: #dc2626; }
+body:not(.has-results) .voice-btn {
+  width: 36px;
+  height: 36px;
+  color: rgba(17, 24, 39, 0.54);
+}
+body:not(.has-results) .voice-btn:hover {
+  background: rgba(17, 24, 39, 0.08);
+  color: #111827;
+}
 .result-drag-handle {
   position: absolute;
   left: 0.15rem;
@@ -865,6 +898,10 @@ body.has-results .voice-btn {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+}
+body:not(.has-results) .search-btn.search-btn-icon {
+  width: 36px;
+  height: 36px;
 }
 body.has-results .search-btn.search-btn-icon {
   width: 36px;
@@ -5956,7 +5993,12 @@ footer {
     height: 42px;
   }
   body:not(.has-results) .search-box {
-    padding: 0.35rem 0.35rem 0.35rem 0.9rem;
+    padding: 0.28rem 0.28rem 0.28rem 0.78rem;
+  }
+  body:not(.has-results) .search-btn.search-btn-icon,
+  body:not(.has-results) .voice-btn {
+    width: 34px;
+    height: 34px;
   }
   /* 16px+ avoids iOS Safari zoom-on-focus for inputs */
   #search-input,
