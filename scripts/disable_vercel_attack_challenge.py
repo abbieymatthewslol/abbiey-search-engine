@@ -5,7 +5,7 @@ Turn off Vercel Attack Challenge Mode for the production project.
 When enabled, visitors see the "Vercel Security Checkpoint" (HTTP 429) instead of the app.
 
 Requires: VERCEL_TOKEN (Vercel account token with access to the project).
-Optional: VERCEL_PROJECT_ID (default: value from .github/workflows/deploy.yml),
+Optional: VERCEL_PROJECT_ID (default: live abbieysearch.com project),
           VERCEL_TEAM_ID or VERCEL_ORG_ID (team slug id, e.g. team_...).
 
 Usage:
@@ -23,7 +23,7 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-DEFAULT_PROJECT_ID = "prj_hGdLqDsNtQK2A57hWyZNxdZKMi3b"
+DEFAULT_PROJECT_ID = "prj_XMC9ngigTMtG8V6wL8kNMary3S1Q"
 API = "https://api.vercel.com/v1/security/attack-mode"
 
 
