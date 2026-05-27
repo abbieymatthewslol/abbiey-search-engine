@@ -62,6 +62,13 @@ jobs:
       - name: Pull Vercel environment
         run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
 
+      - name: Ensure production domains are attached
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ env.VERCEL_PROJECT_ID }}
+          VERCEL_ORG_ID: ${{ env.VERCEL_ORG_ID }}
+        run: python3 scripts/vercel_sync_domains.py --apply
+
       - name: Build project
         run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
 
