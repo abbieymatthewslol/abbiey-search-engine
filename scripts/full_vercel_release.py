@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-One-shot production release: env sync → domains → deploy → HTTP probes.
+One-shot production release: env sync -> domains -> deploy -> HTTP probes.
 
 Prerequisites (machine or CI):
   - Repo-root .env with secrets (never committed)
@@ -23,9 +23,9 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PROJECT_JSON = REPO_ROOT / ".vercel" / "project.json"
 EXPECTED_PROJECT = {
-    "projectId": "prj_hGdLqDsNtQK2A57hWyZNxdZKMi3b",
+    "projectId": "prj_XMC9ngigTMtG8V6wL8kNMary3S1Q",
     "orgId": "team_YeguIG4NHm4Kp0Jf5AbOwgFN",
-    "projectName": "search-engine",
+    "projectName": "search-engine-2-live",
 }
 
 
