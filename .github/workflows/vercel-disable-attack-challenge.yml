@@ -1,12 +1,12 @@
 # One-click: turn off Vercel Attack Challenge Mode so abbieysearch.com serves the app
 # (not the "Security Checkpoint" / 429 interstitial). Safe to run anytime.
-name: Vercel — disable Attack Challenge Mode
+name: Vercel - disable Attack Challenge Mode
 
 on:
   workflow_dispatch:
 
 env:
-  VERCEL_PROJECT_ID: prj_hGdLqDsNtQK2A57hWyZNxdZKMi3b
+  VERCEL_PROJECT_ID: prj_XMC9ngigTMtG8V6wL8kNMary3S1Q
   VERCEL_ORG_ID: team_YeguIG4NHm4Kp0Jf5AbOwgFN
 
 jobs:
