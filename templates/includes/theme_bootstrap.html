@@ -26,3 +26,60 @@
     if (sb) el.setAttribute('data-searchbar', sb);
 })();
 </script>
+<style nonce="{{ csp_nonce }}">
+/* Keep the primary search control slim and readable across saved themes. */
+.search-box {
+    padding: 0.32rem 0.4rem 0.32rem 0.9rem !important;
+    gap: 0.28rem !important;
+    background: #ffffff !important;
+}
+body:not(.has-results) .search-box {
+    padding: 0.3rem 0.36rem 0.3rem 0.86rem !important;
+}
+#search-input {
+    color: #111827 !important;
+    -webkit-text-fill-color: #111827 !important;
+    caret-color: #111827 !important;
+    line-height: 1.25 !important;
+    padding: 0 !important;
+}
+#search-input::placeholder {
+    color: rgba(17, 24, 39, 0.56) !important;
+    -webkit-text-fill-color: rgba(17, 24, 39, 0.56) !important;
+}
+.search-icon,
+.reverse-image-btn,
+.voice-btn {
+    color: rgba(17, 24, 39, 0.58) !important;
+}
+.reverse-image-btn,
+.voice-btn,
+.search-btn.search-btn-icon {
+    width: 34px !important;
+    height: 34px !important;
+    min-height: 34px !important;
+}
+body.has-results .reverse-image-btn,
+body.has-results .voice-btn,
+body.has-results .search-btn.search-btn-icon,
+body:not(.has-results) .reverse-image-btn,
+body:not(.has-results) .voice-btn,
+body:not(.has-results) .search-btn.search-btn-icon {
+    width: 32px !important;
+    height: 32px !important;
+    min-height: 32px !important;
+}
+@media (max-width: 480px) {
+    .search-box,
+    body:not(.has-results) .search-box {
+        padding: 0.24rem 0.28rem 0.24rem 0.72rem !important;
+    }
+    .reverse-image-btn,
+    .voice-btn,
+    .search-btn.search-btn-icon {
+        width: 32px !important;
+        height: 32px !important;
+        min-height: 32px !important;
+    }
+}
+</style>
