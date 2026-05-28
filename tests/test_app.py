@@ -1125,6 +1125,32 @@ class TestAISummary:
         assert data.get("enabled") is False
         assert "clarify" in data
 
+    def test_ai_summary_sensitive_query_forces_original_web_mode(self, client, mock_ddg):
+        resp = client.get("/api/ai-summary?q=how+to+shoplift+and+get+away+with+it")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data.get("enabled") is False
+        assert data.get("mode") == "original_web"
+
+    def test_ai_summary_low_relevance_falls_back_to_original_web_mode(self, client):
+        with patch(
+            "app._fetch_results",
+            return_value={
+                "results": [
+                    {"title": "Imgur upload", "url": "https://imgur.com/x", "body": "upload tutorial"},
+                    {"title": "Make automation", "url": "https://example.com/make", "body": "workflow docs"},
+                    {"title": "Liquid soap", "url": "https://example.com/soap", "body": "market in nigeria"},
+                ],
+                "has_more": False,
+                "page": 1,
+            },
+        ):
+            resp = client.get("/api/ai-summary?q=how+to+debug+python+thread+deadlock")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data.get("enabled") is False
+        assert data.get("mode") == "original_web"
+
 
 # =====================================================================
 # ANSWER LAYER API
@@ -1192,6 +1218,32 @@ class TestAnswerLayer:
         assert resp.status_code == 200
         data = resp.get_json()
         assert data.get("layer") is False
+
+    def test_answer_layer_sensitive_query_forces_original_web_mode(self, client, mock_ddg):
+        resp = client.get("/api/answer-layer?q=how+to+shoplift+and+get+away+with+it")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data.get("enabled") is False
+        assert data.get("mode") == "original_web"
+
+    def test_answer_layer_low_relevance_falls_back_to_original_web_mode(self, client, mock_chat):
+        with patch(
+            "app._fetch_results",
+            return_value={
+                "results": [
+                    {"title": "Result 1", "url": "https://example.com/1", "body": "random unrelated snippet"},
+                    {"title": "Result 2", "url": "https://example.com/2", "body": "another unrelated snippet"},
+                    {"title": "Result 3", "url": "https://example.com/3", "body": "more unrelated text"},
+                ],
+                "has_more": False,
+                "page": 1,
+            },
+        ):
+            resp = client.get("/api/answer-layer?q=how+to+debug+python+asyncio+deadlock+workflow")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data.get("enabled") is False
+        assert data.get("mode") == "original_web"
 
 
 # =====================================================================

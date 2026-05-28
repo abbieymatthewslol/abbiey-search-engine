@@ -534,6 +534,10 @@ _CHAT_MSG_HISTORY = "Something went wrong with the conversation. Refresh the pag
 _CHAT_MSG_UNAVAILABLE = "The research assistant is temporarily unavailable. Please try again in a moment."
 _AI_SUMMARY_MSG_UNAVAILABLE = "Summary is temporarily unavailable. Results are shown below."
 _AI_SUMMARY_MSG_NO_CONTEXT = "Summary is unavailable because there were not enough results to summarize yet."
+_AI_SUMMARY_MSG_ORIGINAL_WEB = "AI summary unavailable for this query. Showing original web results."
+_AI_SUMMARY_MSG_LOW_RELEVANCE = (
+    "Showing original web results because there were not enough relevant sources for a reliable answer."
+)
 _INTERNAL_MECHANICS_BLOCK_MSG = (
     "This platform does not expose its internal mechanics, implementation details, or operational setup."
 )
@@ -605,6 +609,19 @@ _ONION_STRICT_EMPTY_MSG = (
     "Strict onion mode only returns direct .onion listings. Try Broad mode if you also want clearnet references."
 )
 _ONION_MODES = {"balanced", "strict", "extended"}
+_SENSITIVE_AI_ANSWER_PATTERNS = [
+    re.compile(r"\bshoplift\b", re.I),
+    re.compile(r"\bget away with\b", re.I),
+    re.compile(r"\bavoid (being )?caught\b", re.I),
+    re.compile(r"\bbypass security\b", re.I),
+    re.compile(r"\bsteal\b", re.I),
+]
+_RELEVANCE_STOPWORDS = {
+    "what", "when", "where", "which", "who", "whom", "whose", "why", "how", "does", "with", "from",
+    "into", "that", "this", "then", "than", "have", "will", "would", "could", "should", "about",
+}
+_RELEVANCE_MIN_RATIO = 0.35
+_RELEVANCE_MIN_RESULTS = 3
 _WELCOME_COOKIE = "abbiey_welcome_seen"
 _WELCOME_COOKIE_MAX_AGE = 60 * 60 * 24 * 400  # ~13 months — first-visit onboarding
 # Opaque device secret (httpOnly cookie) paired with oauth_user_binding for Google OAuth accounts.
@@ -3244,6 +3261,41 @@ def should_show_ai_summary(query: str, intent: str) -> bool:
     if intent in ("transactional", "local", "local_search"):
         return False
     return True
+
+
+def _should_disable_generated_answer(query: str) -> bool:
+    q = (query or "").strip()
+    return bool(q) and any(p.search(q) for p in _SENSITIVE_AI_ANSWER_PATTERNS)
+
+
+def _query_relevance_terms(query: str) -> list[str]:
+    terms = re.findall(r"[a-z0-9]+", (query or "").lower())
+    return [t for t in terms if len(t) > 3 and t not in _RELEVANCE_STOPWORDS]
+
+
+def _result_relevance_score(terms: list[str], result: dict) -> float:
+    if not terms:
+        return 0.0
+    hay = " ".join(
+        [
+            str(result.get("title") or ""),
+            str(result.get("body") or ""),
+            str(result.get("url") or ""),
+        ]
+    ).lower()
+    hits = sum(1 for t in terms if t in hay)
+    return hits / float(len(terms))
+
+
+def _filter_relevant_results(query: str, results: list[dict]) -> tuple[list[dict], bool]:
+    terms = _query_relevance_terms(query)
+    strict = _should_disable_generated_answer(query) or len(terms) >= 3
+    if not strict or not results:
+        return results, True
+    relevant = [r for r in results if _result_relevance_score(terms, r) >= _RELEVANCE_MIN_RATIO]
+    if len(relevant) < min(_RELEVANCE_MIN_RESULTS, len(results)):
+        return relevant, False
+    return relevant, True
 
 
 @app.route("/")
@@ -5981,6 +6033,16 @@ def api_answer_layer():
         return jsonify({"enabled": False, "layer": False, "clarify": detect_query_clarification(prep)}), 200
     if not should_show_ai_summary(query, prep.intent):
         return jsonify({"enabled": False, "layer": False, "clarify": detect_query_clarification(prep)}), 200
+    if _should_disable_generated_answer(query):
+        return jsonify(
+            {
+                "enabled": False,
+                "layer": False,
+                "mode": "original_web",
+                "message": _AI_SUMMARY_MSG_ORIGINAL_WEB,
+                "clarify": detect_query_clarification(prep),
+            }
+        ), 200
 
     safeguard = search_safeguard_meta(query)
     if safeguard.get("show_crisis_strip"):
@@ -6028,7 +6090,19 @@ def api_answer_layer():
             }
         ), 404
 
-    top = organic[:ANSWER_LAYER_MAX_SOURCES]
+    relevant, enough_relevance = _filter_relevant_results(query, organic[:ANSWER_LAYER_MAX_SOURCES])
+    if not enough_relevance:
+        return jsonify(
+            {
+                "enabled": False,
+                "layer": False,
+                "mode": "original_web",
+                "message": _AI_SUMMARY_MSG_LOW_RELEVANCE,
+                "clarify": detect_query_clarification(prep),
+            }
+        ), 200
+
+    top = (relevant or organic)[:ANSWER_LAYER_MAX_SOURCES]
     lines = []
     for i, r in enumerate(top, start=1):
         title = (r.get("title") or "")[:200]
@@ -6294,6 +6368,15 @@ def api_ai_summary():
         return jsonify({"enabled": False, "clarify": detect_query_clarification(prep)})
     if not should_show_ai_summary(query, prep.intent):
         return jsonify({"enabled": False, "clarify": detect_query_clarification(prep)})
+    if _should_disable_generated_answer(query):
+        return jsonify(
+            {
+                "enabled": False,
+                "mode": "original_web",
+                "message": _AI_SUMMARY_MSG_ORIGINAL_WEB,
+                "clarify": detect_query_clarification(prep),
+            }
+        )
 
     clarify = detect_query_clarification(prep)
     simple = is_simple_answer_query(query, clarify)
@@ -6314,7 +6397,19 @@ def api_ai_summary():
     context_results = _fetch_results(
         backend_q, 1, "text", local_rank_context=loc_ctx if loc_ctx.get("has_local_intent") else None
     )
-    top5 = context_results["results"][:_n_ctx]
+    fetched = context_results.get("results") or []
+    relevant, enough_relevance = _filter_relevant_results(query, fetched[: max(_n_ctx, _RELEVANCE_MIN_RESULTS)])
+    if not enough_relevance:
+        return jsonify(
+            {
+                "enabled": False,
+                "mode": "original_web",
+                "message": _AI_SUMMARY_MSG_LOW_RELEVANCE,
+                "clarify": clarify,
+                "answer_mode": "single" if simple else "standard",
+            }
+        )
+    top5 = (relevant or fetched)[:_n_ctx]
     if not top5:
         return jsonify(
             {
