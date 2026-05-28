@@ -1881,7 +1881,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // ===== Stable placeholder copy =====
   const rotatingInput = document.querySelector("[data-placeholder-rotate]");
   if (rotatingInput && !rotatingInput.value) {
-    rotatingInput.setAttribute("placeholder", "Try: site:example.com Â· 8.8.8.8 Â· user@domain Â· BTC address Â· .onion indexâ€¦");
+    rotatingInput.setAttribute("placeholder", "search beyond limitations ..");
   }
 
   // ===== Operator chip removal =====

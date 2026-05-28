@@ -1,9 +1,5 @@
 User-agent: *
 Allow: /
-Allow: /search
-Disallow: /api/
-Disallow: /profile
-Disallow: /profile/update
-Disallow: /logout
 
 Sitemap: https://abbieysearch.com/sitemap.xml
+Host: abbieysearch.com
