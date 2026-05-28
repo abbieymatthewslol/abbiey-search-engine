@@ -1,0 +1,2 @@
+python scripts/verify_deployment_config.py
+python scripts/verify_production_env.py --strict

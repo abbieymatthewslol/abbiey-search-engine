@@ -4358,6 +4358,14 @@ header > .header-brand-top {
 }
 .settings-section { margin-bottom: 1.5rem; }
 .settings-section:last-child { margin-bottom: 0; }
+.settings-section.settings-locked { opacity: .72; }
+.settings-section.settings-locked .settings-row-label { color: var(--text-muted); }
+.settings-account-cta a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.settings-account-cta a:hover { color: var(--accent-dim); }
 .settings-section-title {
   font-size: .6875rem;
   font-weight: 700;
@@ -4887,6 +4895,11 @@ header > .header-brand-top {
 [data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
 [data-theme="dark"] textarea,
 [data-theme="dark"] select { color: var(--text) !important; }
+[data-theme="dark"] #search-input {
+  color: var(--search-input-color, #111827) !important;
+  caret-color: var(--search-input-color, #111827) !important;
+  -webkit-text-fill-color: var(--search-input-color, #111827) !important;
+}
 [data-theme="dark"] input:-webkit-autofill,
 [data-theme="dark"] input:-webkit-autofill:hover,
 [data-theme="dark"] input:-webkit-autofill:focus,

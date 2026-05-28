@@ -160,8 +160,11 @@
             <div class="settings-modal-body">
 
                 {# ===== APPEARANCE ===== #}
-                <section class="settings-section">
+                <section class="settings-section settings-section-account-custom">
                     <h3 class="settings-section-title">Appearance</h3>
+                    {% if not current_user %}
+                    <p class="settings-hint settings-account-cta">Customization is account-locked. <a href="/signup">Create an account</a> or <a href="/login">sign in</a> to save your look.</p>
+                    {% endif %}
                     <div class="settings-row">
                         <span class="settings-row-label">Theme</span>
                         <div class="settings-btn-group" id="theme-btn-group">
@@ -208,6 +211,14 @@
                             </div>
                             <input type="color" id="search-custom-color" value="#4ade80" title="Custom search bar colour" class="settings-color-picker">
                         </div>
+                    </div>
+                    <div class="settings-row">
+                        <span class="settings-row-label">Search text colour</span>
+                        <input type="color" id="search-input-color" value="#111827" title="Custom search text colour" class="settings-color-picker">
+                    </div>
+                    <div class="settings-row">
+                        <span class="settings-row-label">Search background colour</span>
+                        <input type="color" id="search-surface-color" value="#ffffff" title="Custom search background colour" class="settings-color-picker">
                     </div>
                     <div class="settings-row">
                         <span class="settings-row-label">Font size</span>

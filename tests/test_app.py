@@ -1555,6 +1555,41 @@ class TestBookmarkSyncHardening:
         assert get_resp.get_json() == {"bookmarks": []}
 
 
+class TestAccountCustomizationSettingsApi:
+    def test_settings_requires_auth(self, client):
+        r = client.get("/api/user/settings")
+        assert r.status_code == 401
+
+    def test_settings_roundtrip_for_logged_in_user(self, client):
+        _login_test_user(client, "uset")
+
+        save = client.post(
+            "/api/user/settings",
+            json={
+                "settings": {
+                    "theme": "light",
+                    "accent": "#2563eb",
+                    "searchInputColor": "#111827",
+                    "searchSurfaceColor": "#ffffff",
+                    "searchBar": "bordered",
+                    "unknown": "ignore-me",
+                }
+            },
+        )
+        assert save.status_code == 200
+        data = save.get_json()
+        assert data["ok"] is True
+        assert "unknown" not in data["settings"]
+        assert data["settings"]["searchInputColor"] == "#111827"
+
+        load = client.get("/api/user/settings")
+        assert load.status_code == 200
+        loaded = load.get_json()["settings"]
+        assert loaded["theme"] == "light"
+        assert loaded["accent"] == "#2563eb"
+        assert loaded["searchBar"] == "bordered"
+
+
 class TestHealthProbe:
     def test_public_health_endpoint_omits_sensitive_endpoint(self, client):
         resp = client.get("/health")

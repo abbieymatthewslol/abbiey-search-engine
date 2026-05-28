@@ -617,27 +617,39 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // ===== Theme toggle =====
   const toggle = document.getElementById("theme-toggle");
+  const isSignedInUi = () => !!document.querySelector(".user-avatar-chip");
+  function promptCustomizationAccountRequired() {
+    showToast("Create an account to customize and save settings.", "error");
+  }
   const saved = localStorage.getItem("theme");
   if (saved) html.setAttribute("data-theme", saved);
 
   if (toggle) toggle.addEventListener("click", () => {
+    if (!isSignedInUi()) {
+      promptCustomizationAccountRequired();
+      return;
+    }
     const next = html.getAttribute("data-theme") === "dark" ? "light" : "dark";
     html.setAttribute("data-theme", next);
     localStorage.setItem("theme", next);
+    try { ss("theme", next); } catch (_) {}
     const om = document.getElementById("header-overflow-menu");
     if (om) om.setAttribute("hidden", "");
   });
 
   // ===== Custom accent color =====
   const savedAccent = localStorage.getItem("accent-color");
-  if (savedAccent) applyAccentColor(savedAccent);
+  if (savedAccent) applyAccentColor(savedAccent, { persist: false });
 
-  function applyAccentColor(color) {
+  function applyAccentColor(color, { persist = true } = {}) {
     html.style.setProperty("--accent", color);
     // Generate a darker variant
     const dim = adjustBrightness(color, -30);
     html.style.setProperty("--accent-dim", dim);
-    localStorage.setItem("accent-color", color);
+    if (persist) {
+      localStorage.setItem("accent-color", color);
+      try { ss("accent", color); } catch (_) {}
+    }
     // Mark active swatch
     document.querySelectorAll(".color-swatch").forEach(s => {
       s.classList.toggle("active", s.dataset.color === color);
@@ -650,6 +662,13 @@ document.addEventListener("DOMContentLoaded", () => {
   const SEARCH_ACCENT_KEY = "abbiey_search_accent";
   const savedSearchAccent = localStorage.getItem(SEARCH_ACCENT_KEY) || "";
   applySearchAccent(savedSearchAccent);
+
+  const SEARCH_INPUT_COLOR_KEY = "abbiey_search_input_color";
+  const SEARCH_SURFACE_COLOR_KEY = "abbiey_search_surface_color";
+  const savedSearchInputColor = localStorage.getItem(SEARCH_INPUT_COLOR_KEY) || "";
+  const savedSearchSurfaceColor = localStorage.getItem(SEARCH_SURFACE_COLOR_KEY) || "";
+  applySearchInputColor(savedSearchInputColor);
+  applySearchSurfaceColor(savedSearchSurfaceColor);
 
   function applySearchAccent(color) {
     const vars = [
@@ -674,6 +693,30 @@ document.addEventListener("DOMContentLoaded", () => {
     document.querySelectorAll(".search-color-swatch").forEach(s => {
       s.classList.toggle("active", s.dataset.color === color);
     });
+  }
+
+  function applySearchInputColor(color) {
+    const c = String(color || "").trim();
+    if (!c) {
+      html.style.removeProperty("--search-input-color");
+      localStorage.removeItem(SEARCH_INPUT_COLOR_KEY);
+      return;
+    }
+    html.style.setProperty("--search-input-color", c);
+    localStorage.setItem(SEARCH_INPUT_COLOR_KEY, c);
+  }
+
+  function applySearchSurfaceColor(color) {
+    const c = String(color || "").trim();
+    if (!c) {
+      html.style.removeProperty("--search-surface");
+      html.style.removeProperty("--search-surface-focus");
+      localStorage.removeItem(SEARCH_SURFACE_COLOR_KEY);
+      return;
+    }
+    html.style.setProperty("--search-surface", c);
+    html.style.setProperty("--search-surface-focus", c);
+    localStorage.setItem(SEARCH_SURFACE_COLOR_KEY, c);
   }
 
   function _mix(hex, alpha, brighten) {
@@ -726,6 +769,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const _S = {
     theme:         { key: "theme",                 def: "dark"    },
     accent:        { key: "accent-color",          def: "#e7e5e4" },
+    searchAccent:  { key: "abbiey_search_accent",  def: ""        },
+    searchInputColor:   { key: "abbiey_search_input_color",   def: "" },
+    searchSurfaceColor: { key: "abbiey_search_surface_color", def: "" },
     density:       { key: "density",               def: "default" },
     fontSize:      { key: "abbiey_font_size",      def: "medium"  },
     fontFamily:    { key: "abbiey_font_family",    def: "system"  },
@@ -749,8 +795,63 @@ document.addEventListener("DOMContentLoaded", () => {
     searchBar:     { key: "abbiey_searchbar",      def: "default" },
     hoverPreview:  { key: "abbiey_hover_preview",  def: "true"    },
   };
-  function gs(name) { return localStorage.getItem(_S[name].key) ?? _S[name].def; }
-  function ss(name, val) { localStorage.setItem(_S[name].key, val); }
+  const _ACCOUNT_CUSTOM_SETTINGS = new Set([
+    "theme", "accent", "searchAccent", "searchInputColor", "searchSurfaceColor",
+    "density", "fontSize", "fontFamily", "radius", "motion", "width",
+    "urlStyle", "snippetStyle", "searchBar",
+  ]);
+  let _accountSettingsHydrating = false;
+  let _accountSettingsSaveTimer = 0;
+  function _isAccountLockedSetting(name) {
+    return _ACCOUNT_CUSTOM_SETTINGS.has(name);
+  }
+  function gs(name) {
+    if (_isAccountLockedSetting(name) && !isSignedInUi()) return _S[name].def;
+    return localStorage.getItem(_S[name].key) ?? _S[name].def;
+  }
+  function _queueSaveAccountCustomizationSettings() {
+    if (!isSignedInUi() || _accountSettingsHydrating) return;
+    if (_accountSettingsSaveTimer) window.clearTimeout(_accountSettingsSaveTimer);
+    _accountSettingsSaveTimer = window.setTimeout(async () => {
+      const settings = {};
+      _ACCOUNT_CUSTOM_SETTINGS.forEach((name) => {
+        settings[name] = localStorage.getItem(_S[name].key) ?? _S[name].def;
+      });
+      await fetchJson("/api/user/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ settings }),
+      });
+    }, 300);
+  }
+  function ss(name, val) {
+    if (_isAccountLockedSetting(name) && !isSignedInUi()) {
+      promptCustomizationAccountRequired();
+      return false;
+    }
+    localStorage.setItem(_S[name].key, val);
+    if (_isAccountLockedSetting(name)) _queueSaveAccountCustomizationSettings();
+    return true;
+  }
+
+  async function loadAccountCustomizationSettings() {
+    if (!isSignedInUi()) return;
+    const resp = await fetchJson("/api/user/settings");
+    if (!resp.ok || !resp.data || typeof resp.data.settings !== "object") return;
+    _accountSettingsHydrating = true;
+    try {
+      const incoming = resp.data.settings;
+      _ACCOUNT_CUSTOM_SETTINGS.forEach((name) => {
+        const raw = incoming[name];
+        if (typeof raw !== "string") return;
+        localStorage.setItem(_S[name].key, raw);
+      });
+    } finally {
+      _accountSettingsHydrating = false;
+    }
+    applyAllSettings();
+    syncSettingsUI();
+  }
   function clearStoredSearchHistory(includeServer = false) {
     try { sessionStorage.removeItem("abbiey_search_history"); } catch {}
     try { localStorage.removeItem("abbiey_search_history"); } catch {}
@@ -766,6 +867,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Apply all settings on load
   function applyAllSettings() {
+    html.setAttribute("data-theme", gs("theme"));
+    applyAccentColor(gs("accent"), { persist: false });
+
     // Font size â€” change html font-size so rem units scale
     const fsMap = { small: "13.5px", medium: "", large: "17.5px", xl: "20px" };
     const fs = gs("fontSize");
@@ -936,9 +1040,15 @@ document.addEventListener("DOMContentLoaded", () => {
     // Search bar style
     const _searchBar = gs("searchBar");
     if (_searchBar !== "default") html.setAttribute("data-searchbar", _searchBar);
+
+    // Search bar colours
+    applySearchAccent(gs("searchAccent"));
+    applySearchInputColor(gs("searchInputColor"));
+    applySearchSurfaceColor(gs("searchSurfaceColor"));
   }
 
   applyAllSettings();
+  loadAccountCustomizationSettings();
 
   // ===== Density toggle (header quick-toggle) =====
   const densityBtn = document.getElementById("density-toggle");
@@ -968,6 +1078,19 @@ document.addEventListener("DOMContentLoaded", () => {
   const settingsClose = document.getElementById("settings-close");
   let settingsReturnFocus = null;
 
+  function applyCustomizationLockUi() {
+    if (isSignedInUi()) return;
+    const section = document.querySelector(".settings-section-account-custom");
+    if (!section) return;
+    section.classList.add("settings-locked");
+    section.querySelectorAll("button, input, select, textarea").forEach((el) => {
+      if (el.closest(".settings-account-cta")) return;
+      el.disabled = true;
+      el.setAttribute("aria-disabled", "true");
+    });
+  }
+  applyCustomizationLockUi();
+
   function openSettings(trigger = settingsBtn) {
     settingsReturnFocus = rememberFocus(trigger);
     document.body.style.overflow = "hidden";
@@ -987,7 +1110,13 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  if (settingsBtn) settingsBtn.addEventListener("click", (e) => { e.stopPropagation(); openSettings(e.currentTarget); });
+  if (settingsBtn) settingsBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (!isSignedInUi()) {
+      promptCustomizationAccountRequired();
+    }
+    openSettings(e.currentTarget);
+  });
   if (settingsClose) settingsClose.addEventListener("click", closeSettings);
   if (settingsOverlay) {
     settingsOverlay.addEventListener("click", (e) => { if (e.target === settingsOverlay) closeSettings(); });
@@ -1159,9 +1288,16 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     const cc = document.getElementById("custom-color");
     if (cc) cc.value = gs("accent");
+    const sic = document.getElementById("search-input-color");
+    if (sic) sic.value = gs("searchInputColor") || "#111827";
+    const ssc = document.getElementById("search-surface-color");
+    if (ssc) ssc.value = gs("searchSurfaceColor") || "#ffffff";
     // mark active swatch
     document.querySelectorAll(".color-swatch").forEach(s => {
       s.classList.toggle("active", s.dataset.color === gs("accent"));
+    });
+    document.querySelectorAll(".search-color-swatch").forEach(s => {
+      s.classList.toggle("active", s.dataset.color === gs("searchAccent"));
     });
   }
 
@@ -1171,7 +1307,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!g) return;
     g.querySelectorAll(".settings-seg-btn").forEach(btn => {
       btn.addEventListener("click", () => {
-        ss(settingName, btn.dataset.val);
+        if (!ss(settingName, btn.dataset.val)) return;
         syncBtnGroup(groupId, btn.dataset.val);
         if (onChange) onChange(btn.dataset.val);
       });
@@ -1181,7 +1317,10 @@ document.addEventListener("DOMContentLoaded", () => {
     const el = document.getElementById(id);
     if (!el) return;
     el.addEventListener("change", () => {
-      ss(settingName, el.checked ? "true" : "false");
+      if (!ss(settingName, el.checked ? "true" : "false")) {
+        el.checked = gs(settingName) === "true";
+        return;
+      }
       if (onChange) onChange(el.checked);
     });
   }
@@ -1326,15 +1465,33 @@ document.addEventListener("DOMContentLoaded", () => {
     swatch.addEventListener("click", () => {
       const c = swatch.dataset.color || "";
       applySearchAccent(c);
+      ss("searchAccent", c);
       const sc = document.getElementById("search-custom-color");
       if (sc && c) sc.value = c;
     });
   });
   const searchCustomColor = document.getElementById("search-custom-color");
   if (searchCustomColor) {
-    if (savedSearchAccent) searchCustomColor.value = savedSearchAccent;
+    if (gs("searchAccent")) searchCustomColor.value = gs("searchAccent");
     searchCustomColor.addEventListener("input", () => {
       applySearchAccent(searchCustomColor.value);
+      ss("searchAccent", searchCustomColor.value);
+    });
+  }
+  const searchInputColor = document.getElementById("search-input-color");
+  if (searchInputColor) {
+    if (gs("searchInputColor")) searchInputColor.value = gs("searchInputColor");
+    searchInputColor.addEventListener("input", () => {
+      applySearchInputColor(searchInputColor.value);
+      ss("searchInputColor", searchInputColor.value);
+    });
+  }
+  const searchSurfaceColor = document.getElementById("search-surface-color");
+  if (searchSurfaceColor) {
+    if (gs("searchSurfaceColor")) searchSurfaceColor.value = gs("searchSurfaceColor");
+    searchSurfaceColor.addEventListener("input", () => {
+      applySearchSurfaceColor(searchSurfaceColor.value);
+      ss("searchSurfaceColor", searchSurfaceColor.value);
     });
   }
 

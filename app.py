@@ -932,6 +932,12 @@ def _init_pg_tables():
         );
         CREATE INDEX IF NOT EXISTS idx_ush_user ON user_search_history(user_id);
 
+        CREATE TABLE IF NOT EXISTS user_settings (
+            user_id       INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+            settings_json TEXT NOT NULL DEFAULT '{}',
+            updated_at    TIMESTAMPTZ DEFAULT NOW()
+        );
+
         CREATE TABLE IF NOT EXISTS api_keys (
             id            SERIAL PRIMARY KEY,
             user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -1337,6 +1343,11 @@ def _init_users_db():
                 search_type TEXT DEFAULT 'text',
                 searched_at TEXT DEFAULT (datetime('now')),
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+            CREATE TABLE IF NOT EXISTS user_settings (
+                user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+                settings_json TEXT NOT NULL DEFAULT '{}',
+                updated_at TEXT DEFAULT (datetime('now'))
             );
             CREATE INDEX IF NOT EXISTS idx_ub_user  ON user_bookmarks(user_id);
             CREATE INDEX IF NOT EXISTS idx_ush_user ON user_search_history(user_id);
@@ -11864,6 +11875,66 @@ def api_user_me():
             "display_name": user.get("display_name"),
         }
     )
+
+
+@app.route("/api/user/settings", methods=["GET"])
+def api_user_settings_get():
+    uid, bearer_err = _api_auth_user()
+    if bearer_err:
+        return bearer_err
+    if not uid:
+        return jsonify({"error": "Not authenticated"}), 401
+    try:
+        rows = _users_execute(
+            "SELECT settings_json FROM user_settings WHERE user_id=? LIMIT 1",
+            [uid],
+        )
+        settings = {}
+        if rows and rows[0].get("settings_json"):
+            settings = json.loads(rows[0]["settings_json"] or "{}")
+            if not isinstance(settings, dict):
+                settings = {}
+    except Exception:
+        logger.exception("api_user_settings_get_failed")
+        return jsonify({"error": "Could not load settings.", "settings": {}}), 503
+    return jsonify({"ok": True, "settings": settings})
+
+
+@app.route("/api/user/settings", methods=["POST"])
+@limiter.limit("240/hour")
+def api_user_settings_save():
+    uid, bearer_err = _api_auth_user()
+    if bearer_err:
+        return bearer_err
+    if not uid:
+        return jsonify({"error": "Not authenticated"}), 401
+    payload = request.get_json(silent=True) or {}
+    incoming = payload.get("settings") if isinstance(payload, dict) else {}
+    if not isinstance(incoming, dict):
+        return jsonify({"error": "Invalid settings payload."}), 400
+    allowed = {
+        "theme", "accent", "searchAccent", "searchInputColor", "searchSurfaceColor",
+        "density", "fontSize", "fontFamily", "radius", "motion", "width",
+        "urlStyle", "snippetStyle", "searchBar",
+    }
+    cleaned = {}
+    for key, raw in incoming.items():
+        if key not in allowed:
+            continue
+        val = str(raw or "").strip()[:64]
+        if not val:
+            continue
+        cleaned[key] = val
+    try:
+        _users_execute(
+            "INSERT INTO user_settings (user_id, settings_json, updated_at) VALUES (?,?,CURRENT_TIMESTAMP) "
+            "ON CONFLICT(user_id) DO UPDATE SET settings_json=excluded.settings_json, updated_at=CURRENT_TIMESTAMP",
+            [uid, json.dumps(cleaned, separators=(",", ":"))],
+        )
+    except Exception:
+        logger.exception("api_user_settings_save_failed")
+        return jsonify({"error": "Could not save settings."}), 503
+    return jsonify({"ok": True, "settings": cleaned})
 
 
 @app.route("/api/user/bookmarks", methods=["GET"])

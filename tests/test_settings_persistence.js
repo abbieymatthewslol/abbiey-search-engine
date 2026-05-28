@@ -29,6 +29,9 @@ function makeLocalStorage() {
 const _S = {
   theme:         { key: "theme",                 def: "dark"    },
   accent:        { key: "accent-color",          def: "#e7e5e4" },
+  searchAccent:  { key: "abbiey_search_accent",  def: ""        },
+  searchInputColor:   { key: "abbiey_search_input_color",   def: "" },
+  searchSurfaceColor: { key: "abbiey_search_surface_color", def: "" },
   density:       { key: "density",               def: "default" },
   fontSize:      { key: "abbiey_font_size",      def: "medium"  },
   fontFamily:    { key: "abbiey_font_family",    def: "system"  },
@@ -91,10 +94,10 @@ test("every setting name maps to a non-empty key string", () => {
   }
 });
 
-test("every setting name maps to a non-empty default string", () => {
+test("every setting name maps to a default string", () => {
   for (const [name, cfg] of Object.entries(_S)) {
-    assert(typeof cfg.def === "string" && cfg.def.length > 0,
-      `_S.${name}.def is empty or not a string`);
+    assert(typeof cfg.def === "string",
+      `_S.${name}.def is not a string`);
   }
 });
 
