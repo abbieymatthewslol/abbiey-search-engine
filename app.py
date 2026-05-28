@@ -5843,7 +5843,7 @@ def api_chat():
     )
 
     try:
-        response = _ollama_chat(messages)
+        response = _research_chat.clean_chat_response(_ollama_chat(messages))
         if not response:
             raise RuntimeError("Empty AI response")
         return jsonify({"response": response})
@@ -5861,7 +5861,9 @@ def api_chat():
             extra = _fetch_results(f"{query} {message}", 1, "text")
             all_results.extend(extra["results"])
             all_results = _deduplicate(all_results)
-        response = _extractive_research(message, all_results)
+        response = _research_chat.clean_chat_response(_extractive_research(message, all_results))
+        if not response:
+            return jsonify({"error": _CHAT_MSG_UNAVAILABLE}), 503
         return jsonify({"response": response})
     except Exception:
         logger.exception("chat_fallback_failed")

@@ -47,7 +47,38 @@ def test_normalize_history_with_image():
     assert out[0]["image"].startswith("data:image/png")
 
 
+def test_clean_chat_response_strips_generic_opening():
+    raw = "Based on the search results, here's what I found:\n\n- Strong evidence appears in source [1]."
+    cleaned = rc.clean_chat_response(raw)
+    assert "based on the search results" not in cleaned.lower()
+    assert "here's what i found" not in cleaned.lower()
+    assert "source [1]" in cleaned
+
+
+def test_clean_chat_response_removes_ai_disclaimer_line():
+    raw = "As an AI language model, I can't browse the web.\nUse source [2] for verification."
+    cleaned = rc.clean_chat_response(raw)
+    assert "as an ai language model" not in cleaned.lower()
+    assert "can't browse" not in cleaned.lower()
+    assert "source [2]" in cleaned
+
+
 class TestResearchChatAPI:
+    def test_chat_response_is_sanitized(self, client, mock_ddg, monkeypatch):
+        monkeypatch.setattr(
+            "app._ollama_chat",
+            lambda _messages: "Based on the search results, here's what I found:\n\nUse source [1].",
+        )
+        resp = client.post("/api/chat", json={
+            "query": "test",
+            "message": "Summarize",
+            "history": [],
+        })
+        assert resp.status_code == 200
+        text = (resp.get_json() or {}).get("response", "")
+        assert "based on the search results" not in text.lower()
+        assert "source [1]" in text
+
     def test_chat_image_only_requires_valid_image(self, client, mock_ddg, mock_chat):
         resp = client.post("/api/chat", json={
             "query": "test",

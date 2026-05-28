@@ -22,6 +22,23 @@ _DATA_URL_RE = re.compile(
     re.I,
 )
 
+_FENCE_RE = re.compile(r"^```(?:markdown|md|text)?\s*|\s*```$", re.I)
+_SLOP_OPENING_RE = re.compile(
+    r"^\s*(?:"
+    r"based on (?:the )?search results[,:\-\s]*"
+    r"|here(?:'| i)s what i found[,:\-\s]*"
+    r"|as an ai (?:language )?model[,:\-\s]*"
+    r")",
+    re.I,
+)
+_SLOP_LINE_RE = re.compile(
+    r"^\s*(?:"
+    r"as an ai (?:language )?model"
+    r"|i (?:can't|cannot|do not) (?:browse|access)"
+    r")\b",
+    re.I,
+)
+
 PG_RESEARCH_CHATS_DDL = """
 CREATE TABLE IF NOT EXISTS research_chats (
     id            SERIAL PRIMARY KEY,
@@ -186,6 +203,38 @@ def build_ollama_messages(
 
 def messages_have_images(messages: list[dict]) -> bool:
     return any(isinstance(m, dict) and m.get("images") for m in messages)
+
+
+def clean_chat_response(text: str, *, max_len: int = 5_500) -> str:
+    """Normalize assistant output and strip generic AI filler language."""
+    if not isinstance(text, str):
+        return ""
+    s = text.strip()
+    if not s:
+        return ""
+
+    if s.startswith("```"):
+        s = _FENCE_RE.sub("", s).strip()
+
+    lines: list[str] = []
+    for idx, raw_line in enumerate(s.splitlines()):
+        line = raw_line.strip()
+        if not line and lines and lines[-1] == "":
+            continue
+        if idx == 0 and line:
+            prev = None
+            while line and line != prev:
+                prev = line
+                line = _SLOP_OPENING_RE.sub("", line).strip(" -:,.\t")
+            if not line:
+                continue
+        if _SLOP_LINE_RE.match(line or ""):
+            continue
+        lines.append(line)
+
+    cleaned = "\n".join(lines).strip()
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned[:max_len].rstrip()
 
 
 def call_ollama_chat(
