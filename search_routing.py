@@ -37,7 +37,9 @@ def search_mode_href(
     q: str,
     *,
     region: str = "",
+    lang: str = "",
     time_filter: str = "",
+    safesearch: str = "",
     cleanweb: bool = False,
     open_knowledge: bool = False,
     onion_mode: str = "",
@@ -57,8 +59,12 @@ def search_mode_href(
         pairs.append(("q", qs_val))
     if region:
         pairs.append(("region", region))
+    if lang:
+        pairs.append(("lang", lang))
     if time_filter:
         pairs.append(("df", time_filter))
+    if safesearch and safesearch != "off":
+        pairs.append(("safesearch", safesearch))
     if cleanweb:
         pairs.append(("cleanweb", "1"))
     if open_knowledge:

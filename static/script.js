@@ -164,6 +164,40 @@ document.addEventListener("DOMContentLoaded", () => {
     return parts.length > 1 ? parts[1] : "";
   }
 
+  function buildSearchHref(query, overrides) {
+    const params = new URLSearchParams();
+    const q = String(query || "").trim();
+    const opts = overrides || {};
+    const typeInput = document.getElementById("search-type-input");
+    const regionInput = document.getElementById("region-input");
+    const langInput = document.getElementById("lang-input");
+    const dfInput = document.getElementById("df-input");
+    const safeInput = document.getElementById("safesearch-input");
+    const cleanwebInput = document.getElementById("cleanweb-input");
+    const openKnowledgeCheck = document.getElementById("open-knowledge-check");
+    const onionModeInput = document.getElementById("onion-mode-input");
+    const sentinel = document.getElementById("results-sentinel");
+    const type = String(opts.type || (typeInput && typeInput.value) || window.__searchType || "text").trim() || "text";
+    if (!q) return "/search";
+    params.set("q", q);
+    if (type !== "text") params.set("type", type);
+    if (regionInput && regionInput.value.trim()) params.set("region", regionInput.value.trim());
+    if (langInput && langInput.value.trim()) params.set("lang", langInput.value.trim());
+    if (dfInput && dfInput.value.trim()) params.set("df", dfInput.value.trim());
+    if (safeInput && safeInput.value.trim() && safeInput.value.trim() !== "off") {
+      params.set("safesearch", safeInput.value.trim());
+    }
+    if (cleanwebInput && cleanwebInput.value === "1") params.set("cleanweb", "1");
+    if (openKnowledgeCheck && openKnowledgeCheck.checked) params.set("open_knowledge", "1");
+    if (type === "onion" && onionModeInput && onionModeInput.value.trim()) {
+      params.set("onion_mode", onionModeInput.value.trim());
+    }
+    if (type === "mybot" && sentinel && sentinel.dataset.botId) {
+      params.set("bot_id", sentinel.dataset.botId);
+    }
+    return `/search?${params.toString()}`;
+  }
+
   function readClientCookie(name) {
     try {
       const cookie = document.cookie
@@ -2524,6 +2558,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const regionVal = document.getElementById("region-input")?.value || "";
     const langVal = document.getElementById("lang-input")?.value || "";
     const dfVal = document.getElementById("df-input")?.value || "";
+    const safeVal = document.getElementById("safesearch-input")?.value || "";
+    const openKnowledge = document.getElementById("open-knowledge-check")?.checked;
     let scrollUrl = `/search?q=${encodeURIComponent(query)}&page=${page}&type=${type}`;
     if (type === "mybot" && sentinel.dataset.botId) {
       scrollUrl += `&bot_id=${encodeURIComponent(sentinel.dataset.botId)}`;
@@ -2531,7 +2567,9 @@ document.addEventListener("DOMContentLoaded", () => {
     if (regionVal) scrollUrl += `&region=${encodeURIComponent(regionVal)}`;
     if (langVal) scrollUrl += `&lang=${encodeURIComponent(langVal)}`;
     if (dfVal) scrollUrl += `&df=${encodeURIComponent(dfVal)}`;
+    if (safeVal && safeVal !== "off") scrollUrl += `&safesearch=${encodeURIComponent(safeVal)}`;
     if (sentinel.dataset.cleanweb === "1") scrollUrl += "&cleanweb=1";
+    if (openKnowledge) scrollUrl += "&open_knowledge=1";
     const imgExtra = sentinel.dataset.imgExtra;
     if (type === "images" && imgExtra) scrollUrl += `&${imgExtra}`;
     if (type === "images" && sentinel.dataset.imgRevKey) {
@@ -4438,7 +4476,7 @@ document.addEventListener("DOMContentLoaded", () => {
       .then(items => {
         if (!Array.isArray(items) || !items.length) return;
         let h = `<div class="related-header">Related searches</div><div class="related-pills">`;
-        h += items.map(t => `<a href="/search?q=${encodeURIComponent(t)}&type=${window.__searchType || 'text'}" class="related-pill">${esc(t)}</a>`).join("");
+        h += items.map(t => `<a href="${buildSearchHref(t)}" class="related-pill">${esc(t)}</a>`).join("");
         h += `</div>`;
         relatedContainer.innerHTML = h;
       })
@@ -4480,7 +4518,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (topics.length) {
           html += `<div class="kg-block"><span class="kg-block-label">Related topics</span><div class="kg-pills">`;
           topics.forEach(t => {
-            html += `<a class="kg-pill" href="/search?q=${encodeURIComponent(t)}&type=text">${esc(t)}</a>`;
+            html += `<a class="kg-pill" href="${buildSearchHref(t, { type: "text" })}">${esc(t)}</a>`;
           });
           html += `</div></div>`;
         }

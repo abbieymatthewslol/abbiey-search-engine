@@ -7,6 +7,7 @@ import hashlib
 import hmac
 import json
 from collections import Counter
+from email.utils import parsedate_to_datetime
 import logging
 import os
 import queue
@@ -149,34 +150,6 @@ def _resolve_flask_secret_key() -> str:
 
 
 app = Flask(__name__)
-
-# === BEGIN: request logging patch (safe, minimal) ===
-import hashlib
-from datetime import datetime
-from flask import request
-
-def _req_log():
-    try:
-        ip = request.headers.get("x-real-ip") or request.headers.get("x-forwarded-for") or request.remote_addr
-        ua = request.headers.get("user-agent", "")
-        path = request.path
-
-        # stable-ish device fingerprint (non-invasive)
-        device_id = hashlib.sha256(f"{ip}|{ua}".encode()).hexdigest()[:16]
-
-        print({
-            "ts": datetime.now(timezone.utc).isoformat(),
-            "ip": ip,
-            "ua": ua,
-            "path": path,
-            "device_id": device_id
-        })
-    except Exception:
-        pass
-# === END: request logging patch ===
-
-@app.before_request
-def _log_req(): _req_log()
 
 app.config["SECRET_KEY"] = _resolve_flask_secret_key()
 app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 31536000  # 1-year cache for static files
@@ -3216,6 +3189,7 @@ _TEMPLATE_DEFAULTS = dict(
     entities=[], primary_entity=None, entity_results=[], operators={},
     region="", lang="", dictionary=None, calculator=None, color=None,
     unit_convert=None, knowledge=None, weather=None, qr=None, time_filter="",
+    safesearch="off",
     image_search_advanced=False,
     img_ov_license="",
     img_ov_license_type="",
@@ -4508,6 +4482,7 @@ def search(stype=None):
                 "region": region or "",
                 "lang": lang or "",
                 "time_filter": time_filter or "",
+                "safesearch": safesearch,
                 "cleanweb": cleanweb,
                 "open_knowledge": open_knowledge,
                 "img_rev_key": img_rev_key,
@@ -4541,6 +4516,7 @@ def search(stype=None):
             weather=None,
             qr=None,
             time_filter="",
+            safesearch=safesearch,
             image_search_advanced=False,
             img_ov_license="",
             img_ov_license_type="",
@@ -4842,6 +4818,7 @@ def search(stype=None):
         knowledge=knowledge,
         weather=weather,
         time_filter=time_filter,
+        safesearch=safesearch,
         expansion_terms=expansion_terms,
         image_search_advanced=bool(image_opts),
         img_ov_license=(image_opts or {}).get("license", ""),
@@ -7342,13 +7319,26 @@ def _try_ddg(query, max_results, search_type, region=None, time_filter=None, saf
         return [
             {
                 "title": r.get("title", ""),
-                "url": r.get("content", ""),
-                "description": r.get("description", ""),
-                "publisher": r.get("publisher", ""),
-                "thumbnail": r.get("images", {}).get("large", "")
-                if isinstance(r.get("images"), dict)
-                else "",
-                "duration": r.get("duration", ""),
+                "url": (
+                    r.get("url", "")
+                    or r.get("href", "")
+                    or (r.get("content", "") if str(r.get("content", "")).startswith(("http://", "https://")) else "")
+                ),
+                "description": (
+                    r.get("description", "")
+                    or r.get("body", "")
+                    or (
+                        r.get("content", "")
+                        if not str(r.get("content", "")).startswith(("http://", "https://"))
+                        else ""
+                    )
+                ),
+                "publisher": r.get("publisher", "") or r.get("source", "") or r.get("channel", ""),
+                "thumbnail": (
+                    r.get("thumbnail", "")
+                    or (r.get("images", {}).get("large", "") if isinstance(r.get("images"), dict) else "")
+                ),
+                "duration": r.get("duration", "") or r.get("length", ""),
             }
             for r in raw
         ]
@@ -8121,15 +8111,60 @@ def _try_internet_archive_images(query, max_results=30):
 
 # ---- News fallback layer ----
 
-def _try_google_news_rss(query):
+def _search_country_for_region(region):
+    value = (region or "").strip().lower()
+    if not value:
+        return ""
+    prefix = value.split("-", 1)[0].upper()
+    if prefix == "UK":
+        return "GB"
+    if len(prefix) == 2 and prefix.isalpha():
+        return prefix
+    return ""
+
+
+def _normalized_search_lang(lang, region):
+    value = (lang or "").strip().lower()
+    if re.fullmatch(r"[a-z]{2}", value):
+        return value
+    return _search_lang_for_region(region) or "en"
+
+
+def _rss_entry_datetime(entry):
+    raw = entry.get("published") or entry.get("updated") or ""
+    if not raw:
+        return None
+    try:
+        parsed = parsedate_to_datetime(str(raw))
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
+    except Exception:
+        return None
+
+
+def _rss_matches_time_filter(published_at, time_filter):
+    if not published_at or time_filter not in {"d", "w", "m", "y"}:
+        return True
+    now = datetime.now(timezone.utc)
+    windows = {"d": timedelta(days=1), "w": timedelta(weeks=1), "m": timedelta(days=31), "y": timedelta(days=366)}
+    return published_at >= (now - windows[time_filter])
+
+
+def _try_google_news_rss(query, region=None, lang=None, time_filter=None):
     """Parse Google News RSS feed for news results."""
     results = []
     try:
         encoded = quote_plus(query)
+        country = _search_country_for_region(region) or "US"
+        lang_code = _normalized_search_lang(lang, region)
         feed = feedparser.parse(
-            f"https://news.google.com/rss/search?q={encoded}&hl=en-US&gl=US&ceid=US:en"
+            f"https://news.google.com/rss/search?q={encoded}&hl={lang_code}-{country}&gl={country}&ceid={country}:{lang_code}"
         )
         for entry in feed.entries[:20]:
+            published_at = _rss_entry_datetime(entry)
+            if not _rss_matches_time_filter(published_at, time_filter):
+                continue
             source_title = "Google News"
             if hasattr(entry, "source") and hasattr(entry.source, "title"):
                 source_title = entry.source.title
@@ -8147,16 +8182,21 @@ def _try_google_news_rss(query):
     return results
 
 
-def _try_bing_news_rss(query):
+def _try_bing_news_rss(query, region=None, lang=None, time_filter=None):
     """Parse Bing News RSS feed for news results (no key required)."""
     results = []
     try:
         encoded = quote_plus(query)
+        country = _search_country_for_region(region) or "US"
+        lang_code = _normalized_search_lang(lang, region)
         feed = feedparser.parse(
-            f"https://www.bing.com/news/search?q={encoded}&format=rss",
+            f"https://www.bing.com/news/search?q={encoded}&format=rss&cc={country}&setlang={lang_code}",
             request_headers={"User-Agent": "Mozilla/5.0 (compatible; abbiey.search/1.0)"},
         )
         for entry in feed.entries[:20]:
+            published_at = _rss_entry_datetime(entry)
+            if not _rss_matches_time_filter(published_at, time_filter):
+                continue
             source_title = getattr(getattr(entry, "source", None), "title", None) or "Bing News"
             results.append({
                 "title": entry.get("title", ""),
@@ -10352,8 +10392,20 @@ def _fetch_results(
             logger.info("News search empty, trying parallel fallbacks")
             with ThreadPoolExecutor(max_workers=5) as _news_pool:
                 _news_futs = [
-                    _news_pool.submit(_try_google_news_rss, query),
-                    _news_pool.submit(_try_bing_news_rss, query),
+                    _news_pool.submit(
+                        _try_google_news_rss,
+                        query,
+                        region=region,
+                        lang=lang,
+                        time_filter=time_filter,
+                    ),
+                    _news_pool.submit(
+                        _try_bing_news_rss,
+                        query,
+                        region=region,
+                        lang=lang,
+                        time_filter=time_filter,
+                    ),
                     _news_pool.submit(_try_hackernews, query, max_results),
                     _news_pool.submit(_try_reddit_news, query, max_results),
                 ]

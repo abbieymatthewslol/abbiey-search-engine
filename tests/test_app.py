@@ -209,6 +209,26 @@ class TestRoutes:
         assert resp.status_code == 200
         assert b"python" in resp.data.lower()
 
+    def test_search_tabs_preserve_query_context(self, client, mock_ddg):
+        resp = client.get("/search?q=climate&type=news&region=de-de&lang=de&df=w&safesearch=strict")
+        assert resp.status_code == 200
+        body = resp.data.decode("utf-8")
+        assert '/search?q=climate&amp;region=de-de&amp;lang=de&amp;df=w&amp;safesearch=strict' in body
+        assert '/search/videos?q=climate&amp;region=de-de&amp;lang=de&amp;df=w&amp;safesearch=strict' in body
+
+    def test_search_uses_current_safesearch_in_hidden_input(self, client, mock_ddg):
+        resp = client.get("/search?q=python&safesearch=strict")
+        assert resp.status_code == 200
+        assert b'id="safesearch-input" value="strict"' in resp.data
+
+    def test_search_does_not_log_request_metadata(self, client, mock_ddg):
+        with patch("builtins.print") as print_mock:
+            resp = client.get("/search?q=python")
+        assert resp.status_code == 200
+        printed = "\n".join(" ".join(str(arg) for arg in call.args) for call in print_mock.call_args_list)
+        assert "device_id" not in printed
+        assert "'path': '/search'" not in printed
+
     def test_search_ajax_returns_json(self, client, mock_ddg):
         resp = client.get(
             "/search?q=python&page=1&type=text",
@@ -1014,6 +1034,80 @@ class TestKnowledgePanels:
             resp = client.get("/search?q=Flask&type=text")
         assert resp.status_code == 200
         assert b"knowledge-panel" in resp.data
+
+
+def test_google_news_rss_respects_locale_and_time_filter():
+    fresh_entry = {
+        "title": "Fresh result",
+        "link": "https://example.com/fresh",
+        "summary": "<p>Fresh summary</p>",
+        "published": "Wed, 31 Dec 2099 12:00:00 GMT",
+    }
+    stale_entry = {
+        "title": "Stale result",
+        "link": "https://example.com/stale",
+        "summary": "<p>Stale summary</p>",
+        "published": "Sat, 01 Jan 2000 12:00:00 GMT",
+    }
+    fake_feed = MagicMock(entries=[fresh_entry, stale_entry])
+
+    with patch("app.feedparser.parse", return_value=fake_feed) as parse_mock:
+        results = app._try_google_news_rss("climate", region="de-de", lang="de", time_filter="w")
+
+    assert len(results) == 1
+    assert results[0]["title"] == "Fresh result"
+    called_url = parse_mock.call_args.args[0]
+    assert "hl=de-DE" in called_url
+    assert "gl=DE" in called_url
+    assert "ceid=DE:de" in called_url
+
+
+def test_news_fallbacks_receive_search_context():
+    with patch("app._try_ddg", return_value=[]), patch(
+        "app._try_google_news_rss", return_value=[]
+    ) as google_mock, patch("app._try_bing_news_rss", return_value=[]) as bing_mock, patch(
+        "app._try_hackernews", return_value=[]
+    ), patch("app._try_reddit_news", return_value=[]):
+        app._fetch_results(
+            "climate",
+            1,
+            "news",
+            region="de-de",
+            lang="de",
+            time_filter="w",
+            safesearch="strict",
+        )
+
+    assert google_mock.call_args.kwargs == {"region": "de-de", "lang": "de", "time_filter": "w"}
+    assert bing_mock.call_args.kwargs == {"region": "de-de", "lang": "de", "time_filter": "w"}
+
+
+def test_ddg_videos_normalize_common_fields():
+    ddg_instance = MagicMock()
+    ddg_instance.videos.return_value = [
+        {
+            "title": "Video result",
+            "url": "https://videos.example/watch",
+            "body": "Clip summary",
+            "source": "Example Video",
+            "thumbnail": "https://videos.example/thumb.jpg",
+            "length": "10:00",
+        }
+    ]
+
+    with patch("app.DDGS", return_value=ddg_instance):
+        results = app._try_ddg("cats", 5, "videos", region="au-en", safesearch="strict")
+
+    assert results == [
+        {
+            "title": "Video result",
+            "url": "https://videos.example/watch",
+            "description": "Clip summary",
+            "publisher": "Example Video",
+            "thumbnail": "https://videos.example/thumb.jpg",
+            "duration": "10:00",
+        }
+    ]
 
 
 # =====================================================================
