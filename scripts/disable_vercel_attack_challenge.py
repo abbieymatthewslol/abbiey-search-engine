@@ -23,7 +23,7 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-DEFAULT_PROJECT_ID = "prj_XMC9ngigTMtG8V6wL8kNMary3S1Q"
+DEFAULT_PROJECT_ID = "prj_hGdLqDsNtQK2A57hWyZNxdZKMi3b"
 API = "https://api.vercel.com/v1/security/attack-mode"
 
 
