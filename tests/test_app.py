@@ -174,7 +174,8 @@ class TestRoutes:
     def test_search_empty_query_shows_index(self, client):
         resp = client.get("/search?q=")
         assert resp.status_code == 200
-        assert b'abbiey.<span>search</span>' in resp.data
+        assert b"Verify before you trust." in resp.data
+        assert b"OSINT verification search" in resp.data
 
     def test_search_home_preserves_image_mode_from_url(self, client):
         """Deep-link / empty home: ?type=images should set hidden type + show Images mode."""
