@@ -17,10 +17,12 @@
     <meta property="og:site_name" content="abbieysearch">
     <meta property="og:title" content="abbieysearch — Custom Bots">
     <meta property="og:description" content="Build your own search bots on abbieysearch. Sign up to get started.">
+    <meta property="og:image" content="{{ site_base_url }}{{ url_for('static', filename='og-image.png', v=deploy_hash) }}">
     <meta property="og:url" content="{{ site_base_url }}/bots">
-    <meta name="twitter:card" content="summary">
+    <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="abbieysearch — Custom Bots">
     <meta name="twitter:description" content="Build your own search bots on abbieysearch. Sign up to get started.">
+    <meta name="twitter:image" content="{{ site_base_url }}{{ url_for('static', filename='og-image.png', v=deploy_hash) }}">
     <style nonce="{{ csp_nonce }}">
         .bots-gate {
             display: flex;

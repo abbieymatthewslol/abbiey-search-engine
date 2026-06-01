@@ -17,11 +17,12 @@
     <meta property="og:site_name" content="abbieysearch">
     <meta property="og:title" content="abbieysearch — Contact">
     <meta property="og:description" content="Support email, open-source community links, and where to get help with accounts, search unlock, and the public API.">
-    <meta property="og:image" content="{{ site_base_url }}/static/og-image.png">
+    <meta property="og:image" content="{{ site_base_url }}{{ url_for('static', filename='og-image.png', v=deploy_hash) }}">
     <meta property="og:url" content="{{ site_base_url }}/contact">
-    <meta name="twitter:card" content="summary">
+    <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="abbieysearch — Contact">
     <meta name="twitter:description" content="Reach the team, report issues, and find links for API and billing help.">
+    <meta name="twitter:image" content="{{ site_base_url }}{{ url_for('static', filename='og-image.png', v=deploy_hash) }}">
 </head>
 <body>
     <header class="landing-header">

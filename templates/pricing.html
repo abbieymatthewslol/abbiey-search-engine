@@ -17,11 +17,12 @@
     <meta property="og:site_name" content="abbieysearch">
     <meta property="og:title" content="{{ get_seo('pricing').og_title }}">
     <meta property="og:description" content="{{ get_seo('pricing').og_description }}">
-    <meta property="og:image" content="{{ site_base_url }}/static/og-image.png">
+    <meta property="og:image" content="{{ site_base_url }}{{ url_for('static', filename='og-image.png', v=deploy_hash) }}">
     <meta property="og:url" content="{{ site_base_url }}/pricing">
-    <meta name="twitter:card" content="summary">
+    <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="{{ get_seo('pricing').tw_title }}">
     <meta name="twitter:description" content="{{ get_seo('pricing').tw_description }}">
+    <meta name="twitter:image" content="{{ site_base_url }}{{ url_for('static', filename='og-image.png', v=deploy_hash) }}">
 </head>
 <body>
     <header class="landing-header">

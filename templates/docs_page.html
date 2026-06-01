@@ -12,10 +12,11 @@
     <meta property="og:title" content="{{ title }} — abbieysearch docs">
     <meta property="og:description" content="{{ description if description else title + ' — abbieysearch public documentation.' }}">
     <meta property="og:url" content="{{ site_base_url }}/docs/{{ slug }}">
-    <meta property="og:image" content="{{ site_base_url }}/static/og-image.png">
-    <meta name="twitter:card" content="summary">
+    <meta property="og:image" content="{{ site_base_url }}{{ url_for('static', filename='og-image.png', v=deploy_hash) }}">
+    <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="{{ title }} — abbieysearch docs">
     <meta name="twitter:description" content="{{ description if description else title + ' — abbieysearch documentation.' }}">
+    <meta name="twitter:image" content="{{ site_base_url }}{{ url_for('static', filename='og-image.png', v=deploy_hash) }}">
     <link rel="canonical" href="{{ site_base_url }}/docs/{{ slug }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=deploy_hash) }}">
     <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='icon-192.png', v=deploy_hash) }}">

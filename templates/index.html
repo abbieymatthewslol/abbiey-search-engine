@@ -35,7 +35,7 @@
     <meta name="author" content="abbieysearch">
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="abbieysearch">
-    <meta property="og:image" content="{{ site_base_url }}/static/og-image.png">
+    <meta property="og:image" content="{{ site_base_url }}{{ url_for('static', filename='og-image.png', v=deploy_hash) }}">
     <meta name="twitter:card" content="summary_large_image">
     {% if query %}
     <meta name="twitter:title" content="{{ query }} — {{ search_mode_title_suffix(search_type) }} — abbieysearch">
@@ -44,7 +44,7 @@
     <meta name="twitter:title" content="{{ get_seo('search_home').tw_title }}">
     <meta name="twitter:description" content="{{ get_seo('search_home').tw_description }}">
     {% endif %}
-    <meta name="twitter:image" content="{{ site_base_url }}/static/og-image.png">
+    <meta name="twitter:image" content="{{ site_base_url }}{{ url_for('static', filename='og-image.png', v=deploy_hash) }}">
     {% if not query %}<link rel="canonical" href="{{ site_base_url }}/search">{% endif %}
     <!-- PWA -->
     <link rel="manifest" href="/manifest.json">
@@ -53,9 +53,9 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="abbieysearch">
-    <link rel="apple-touch-icon" href="/static/icon-192.png">
-    <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png">
-    <link rel="shortcut icon" href="/favicon.ico">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='icon-192.png', v=deploy_hash) }}">
+    <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='icon-192.png', v=deploy_hash) }}">
+    <link rel="shortcut icon" href="{{ url_for('static', filename='favicon.ico', v=deploy_hash) }}">
     <!-- OpenSearch -->
     <link rel="search" type="application/opensearchdescription+xml" title="abbieysearch" href="/opensearch.xml">
     <!-- JSON-LD -->
