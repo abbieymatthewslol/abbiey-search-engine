@@ -52,8 +52,41 @@ function Join-Status([string[]] $lines) {
     return [string]::Join("`n", $lines)
 }
 
-function Invoke-RepoCommand([string] $command) {
-    cmd.exe /c ('cd /d "{0}" && {1}' -f $RepoRoot, $command)
+function Get-StageablePaths([string[]] $baselineLines, [string[]] $currentLines) {
+    $baselineSet = New-Object 'System.Collections.Generic.HashSet[string]'
+    foreach ($line in $baselineLines) {
+        [void]$baselineSet.Add($line)
+    }
+
+    $paths = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($line in $currentLines) {
+        if ($baselineSet.Contains($line)) {
+            continue
+        }
+        if ($line.Length -lt 4) {
+            continue
+        }
+        $entry = $line.Substring(3)
+        if (-not $entry) {
+            continue
+        }
+        if ($entry -match ' -> ') {
+            $parts = $entry -split ' -> ', 2
+            foreach ($part in $parts) {
+                if ($part) {
+                    $paths.Add($part)
+                }
+            }
+            continue
+        }
+        $paths.Add($entry)
+    }
+
+    return @($paths | Select-Object -Unique)
+}
+
+function Invoke-GitCommit([string] $message, [string] $body) {
+    git commit -m $message -m $body
     return $LASTEXITCODE
 }
 
@@ -68,6 +101,7 @@ if ($initialStatus.Count -gt 0 -and -not $AllowDirtyStart) {
 }
 
 $lastSnapshot = Join-Status $initialStatus
+$baselineLines = @($initialStatus)
 $lastChangeAt = Get-Date
 
 Write-Host ("Watching {0} on branch {1}. Poll={2}s Quiet={3}s" -f $RepoRoot, $Branch, $PollSeconds, $QuietSeconds) -ForegroundColor Cyan
@@ -97,8 +131,15 @@ while ($true) {
     }
 
     Write-Host ("Changes settled after {0:N0}s. Creating auto-live commit..." -f $quietFor) -ForegroundColor Cyan
-    $addExit = Invoke-RepoCommand 'git add -A -- .'
-    if ($addExit -ne 0) {
+    $stageablePaths = Get-StageablePaths $baselineLines $currentLines
+    if (-not $stageablePaths -or $stageablePaths.Count -eq 0) {
+        $lastSnapshot = $currentSnapshot
+        $lastChangeAt = Get-Date
+        continue
+    }
+
+    git add -A -- @stageablePaths
+    if ($LASTEXITCODE -ne 0) {
         throw "git add failed."
     }
 
@@ -111,7 +152,7 @@ while ($true) {
     $stamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     $commitMsg = 'chore(live): auto-sync ' + $stamp
     $commitBody = "Auto-synced settled local edits for live deployment.`n`nCo-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
-    $commitExit = Invoke-RepoCommand ('git commit -m "{0}" -m "{1}"' -f $commitMsg.Replace('"', '\"'), $commitBody.Replace('"', '\"'))
+    $commitExit = Invoke-GitCommit $commitMsg $commitBody
     if ($commitExit -ne 0) {
         Write-Warning "git commit did not succeed; waiting for the next change."
         $lastChangeAt = Get-Date
@@ -136,6 +177,7 @@ while ($true) {
         }
     }
 
-    $lastSnapshot = ""
+    $baselineLines = @(Get-StatusLines)
+    $lastSnapshot = Join-Status $baselineLines
     $lastChangeAt = Get-Date
 }
