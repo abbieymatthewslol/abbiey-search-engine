@@ -56,6 +56,8 @@ each deployment mode (Docker, Render, Fly.io, Vercel, bare-metal).
 | Vercel   | [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fabbieymatthewslol%2Fabbiey-search-engine-2) |
 | Docker   | `docker pull ghcr.io/abbieymatthewslol/abbiey-search-engine-2:latest` (CI-built, see [`.github/workflows/docker-publish.yml`](.github/workflows/docker-publish.yml)) |
 
+**Production deploy note:** for the canonical `abbieysearch.com` Vercel project, pushes to `main` are deployed by [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml). Root [`vercel.json`](./vercel.json) intentionally skips Vercel's own Git build on `main`, so production has one deploy path instead of duplicate builds.
+
 ---
 
 ## Tech stack

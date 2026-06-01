@@ -2,6 +2,8 @@
 
 Production for **abbiey.search** is meant to be a **single Vercel project** serving **[https://abbieysearch.com](https://abbieysearch.com)**, with the **same GitHub repo** as source and **one Supabase project** for PostgreSQL. If you attach `www.abbieysearch.com`, use it only as a redirect to the apex host.
 
+> **Production deploy invariant:** pushes to `main` ship through GitHub Actions, and root [`vercel.json`](../vercel.json) deliberately skips Vercel's Git build for `main`. If that `ignoreCommand` disappears, production can drift into duplicate or conflicting deploys.
+
 ## Vercel project (canonical)
 
 
@@ -121,4 +123,3 @@ Vercel, Resend, and Supabase still must be configured in their own dashboards (o
 3. **Environment drift suspected** — run `python scripts/verify_deployment_config.py` and `python scripts/verify_production_env.py --strict`, then sync Vercel with `python scripts/restore_vercel_env.py --apply`.
 4. **Live health check failing** — confirm `SITE_URL`, `ADMIN_TOKEN`, and Supabase pooler credentials are correct in Vercel, then rerun `python scripts/verify_production_env.py --ping`.
 5. **Branch model changes later** — update `deploy.yml`, `vercel.json`, and `ABBIEY_PRODUCTION_BRANCH` for local scripts together; do not split those invariants.
-

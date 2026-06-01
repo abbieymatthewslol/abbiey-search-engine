@@ -33,6 +33,12 @@ _SCAN_SEED_DIRS = ("retrieval", "osint", "api")
 
 EXEMPT_EXACT = frozenset({"app.py"})
 EXEMPT_PREFIXES = ("retrieval/", "osint/", "api/")
+_NON_FIRST_PARTY_PREFIXES = (
+    ".venv/",
+    "venv/",
+    "env/",
+    "node_modules/",
+)
 
 # Top-level third-party and tooling — not resolved as repo modules.
 _TOP_SKIP = frozenset(
@@ -43,6 +49,12 @@ _TOP_SKIP = frozenset(
     }
 )
 _STDLIB_TOP: set[str] | None = None
+_EXPECTED_IGNORE_SNIPPETS = (
+    "VERCEL_GIT_COMMIT_REF",
+    "main",
+    "exit 0",
+    "exit 1",
+)
 
 
 def _stdlib_top() -> set[str]:
@@ -58,6 +70,9 @@ def _relposix(p: Path) -> str:
 
 
 def _is_exempt_path(rel: str) -> bool:
+    for pref in _NON_FIRST_PARTY_PREFIXES:
+        if rel == pref.rstrip("/") or rel.startswith(pref):
+            return True
     if rel in EXEMPT_EXACT:
         return True
     for pref in EXEMPT_PREFIXES:
@@ -67,10 +82,31 @@ def _is_exempt_path(rel: str) -> bool:
     return False
 
 
-def _load_include_patterns() -> list[str]:
+def _load_vercel_config() -> dict:
     with open(VERCEL_JSON, "r", encoding="utf-8") as f:
-        cfg = json.load(f)
+        return json.load(f)
+
+
+def _load_include_patterns(cfg: dict) -> list[str]:
     return list(cfg["builds"][0]["config"]["includeFiles"])
+
+
+def _validate_ignore_command(cfg: dict, errors: list[str]) -> None:
+    ignore_command = str(cfg.get("ignoreCommand") or "").strip()
+    if not ignore_command:
+        errors.append(
+            "vercel.json must define ignoreCommand so Vercel skips Git builds on main; "
+            "GitHub Actions is the single production deploy path."
+        )
+        return
+    missing = [snippet for snippet in _EXPECTED_IGNORE_SNIPPETS if snippet not in ignore_command]
+    if missing:
+        errors.append(
+            "vercel.json ignoreCommand must skip main-branch Git builds using "
+            "VERCEL_GIT_COMMIT_REF (expected markers: "
+            + ", ".join(json.dumps(x) for x in _EXPECTED_IGNORE_SNIPPETS)
+            + ")."
+        )
 
 
 def _pattern_covers_path(pattern: str, rel: str) -> bool:
@@ -256,9 +292,12 @@ def verify() -> tuple[list[str], list[str]]:
         return [f"Missing {VERCEL_JSON}"], []
 
     try:
-        patterns = _load_include_patterns()
+        cfg = _load_vercel_config()
+        patterns = _load_include_patterns(cfg)
     except (OSError, json.JSONDecodeError, KeyError, IndexError) as e:
         return [f"Could not read vercel.json includeFiles: {e}"], []
+
+    _validate_ignore_command(cfg, errors)
 
     try:
         local_files = _discover_files(warn)
