@@ -1,0 +1,7 @@
+# Current (fails on zero vectors):
+labels = model.fit_predict(mat)
+
+# Should check for zero vectors first:
+if len(mat) == 0 or np.all(mat == 0):
+    # Fall back to no clustering
+    return top  # Return unsorted

@@ -18,3 +18,5 @@ dist/
 
 # Encrypted local secrets (scripts/store-vercel-token.ps1 — DPAPI; never commit)
 .local/
+.vercel
+.env*
