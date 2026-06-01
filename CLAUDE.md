@@ -120,7 +120,7 @@ Production deploys use `**vercel.json`** (Python serverless). SQLite under `**/t
 
 ## Deploy
 
-- **Production (Vercel + abbieysearch.com):** See `[.github/PLATFORM_INTEGRATIONS.md](.github/PLATFORM_INTEGRATIONS.md)` — one Vercel project, GitHub repo, and Supabase Postgres (`SUPABASE_DB_URL` in Vercel env). **Pushes to `main` run** `.github/workflows/deploy.yml` (tests + `vercel deploy --prebuilt --prod`); requires the **`VERCEL_TOKEN`** repository secret.
+- **Production (Vercel + abbieysearch.com):** See `[.github/PLATFORM_INTEGRATIONS.md](.github/PLATFORM_INTEGRATIONS.md)` — one Vercel project, GitHub repo, and Supabase Postgres (`SUPABASE_DB_URL` in Vercel env). **Pushes to `main` run** `.github/workflows/deploy.yml` (tests + `vercel deploy --prod`); requires the **`VERCEL_TOKEN`** repository secret.
 
 ```bash
 # Vercel (see “Vercel + Supabase” above for DATABASE_URL)
