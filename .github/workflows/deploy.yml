@@ -1,6 +1,6 @@
 name: Deploy to Vercel
 
-# Automatic: every push to main runs tests, then performs a direct `vercel deploy --prod`.
+# Automatic: every push to main runs tests, then `vercel build` + `vercel deploy --prebuilt --prod`.
 # Requires secret VERCEL_TOKEN. Optional post-deploy verification uses SITE_URL,
 # ADMIN_TOKEN, and API_TEST_KEY when present as repository or environment secrets.
 # Manual re-run: Actions -> this workflow -> Run workflow.
@@ -69,8 +69,11 @@ jobs:
           VERCEL_ORG_ID: ${{ env.VERCEL_ORG_ID }}
         run: python3 scripts/vercel_sync_domains.py --apply
 
+      - name: Build project
+        run: vercel build --prod --yes --token=${{ secrets.VERCEL_TOKEN }}
+
       - name: Deploy to production
-        run: vercel deploy --prod --yes --token=${{ secrets.VERCEL_TOKEN }}
+        run: vercel deploy --prebuilt --prod --yes --token=${{ secrets.VERCEL_TOKEN }}
 
       # Attack Challenge Mode shows a browser checkpoint (HTTP 429) instead of the app.
       - name: Ensure Attack Challenge Mode is off
