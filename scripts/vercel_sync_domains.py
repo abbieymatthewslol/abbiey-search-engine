@@ -4,7 +4,7 @@ Attach production domains to the Vercel project (apex + www).
 
 www -> apex redirect is enforced in vercel.json (edge redirect before the function).
 
-Requires: VERCEL_TOKEN (or token in %APPDATA%\\com.vercel.cli\\Data\\auth.json on Windows).
+Requires: VERCEL_TOKEN (or token in the Vercel CLI auth.json on Windows).
 
 Usage:
   python scripts/vercel_sync_domains.py           # dry-run: list + plan
@@ -27,16 +27,34 @@ LEGACY_PROJECT_IDS = ("prj_hGdLqDsNtQK2A57hWyZNxdZKMi3b",)
 DOMAINS = ("abbieysearch.com", "www.abbieysearch.com")
 
 
+def _auth_paths() -> tuple[Path, ...]:
+    candidates = [
+        Path(os.environ.get("APPDATA", "")) / "xdg.data" / "com.vercel.cli" / "auth.json",
+        Path(os.environ.get("APPDATA", "")) / "com.vercel.cli" / "auth.json",
+        Path(os.environ.get("APPDATA", "")) / "com.vercel.cli" / "Data" / "auth.json",
+        Path(os.environ.get("LOCALAPPDATA", "")) / "com.vercel.cli" / "Data" / "auth.json",
+        Path.home() / ".vercel" / "auth.json",
+    ]
+    seen: set[str] = set()
+    unique: list[Path] = []
+    for path in candidates:
+        key = str(path)
+        if key and key not in seen:
+            seen.add(key)
+            unique.append(path)
+    return tuple(unique)
+
+
 def _token() -> str:
     t = (os.environ.get("VERCEL_TOKEN") or "").strip()
     if t:
         return t
-    auth_path = Path(os.environ.get("APPDATA", "")) / "com.vercel.cli" / "Data" / "auth.json"
-    if auth_path.is_file():
-        try:
-            return json.loads(auth_path.read_text(encoding="utf-8")).get("token", "") or ""
-        except Exception:
-            return ""
+    for auth_path in _auth_paths():
+        if auth_path.is_file():
+            try:
+                return json.loads(auth_path.read_text(encoding="utf-8")).get("token", "") or ""
+            except Exception:
+                continue
     return ""
 
 
