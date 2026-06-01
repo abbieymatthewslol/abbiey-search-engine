@@ -138,12 +138,12 @@ def _resolve_flask_secret_key() -> str:
         or os.environ.get("K_SERVICE")
     )
     if serverless:
-        for env_name in ("SUPABASE_DB_URL", "DATABASE_URL"):
+        for env_name in ("SUPABASE_DB_URL", "DATABASE_URL", "POSTGRES_URL_NON_POOLING", "POSTGRES_URL"):
             raw = (os.environ.get(env_name) or "").strip()
             if len(raw) >= 24:
                 return hashlib.sha256(b"v1|flask-session|" + raw.encode("utf-8", errors="replace")).hexdigest()
         logging.getLogger(__name__).error(
-            "Serverless without SECRET_KEY and without SUPABASE_DB_URL/DATABASE_URL: "
+            "Serverless without SECRET_KEY and without a persistent DB URL in SUPABASE_DB_URL/DATABASE_URL/POSTGRES_URL*: "
             "Flask sessions will not survive across instances. Set SECRET_KEY in environment."
         )
     return secrets.token_hex(24)
@@ -227,6 +227,14 @@ def _load_google_site_verification() -> str:
 
 _GOOGLE_SITE_VERIFICATION = _load_google_site_verification()
 
+
+def _first_env_value(*names: str) -> str:
+    for name in names:
+        raw = (os.environ.get(name) or "").strip()
+        if raw:
+            return raw
+    return ""
+
 # Google Analytics 4 (gtag.js). If GOOGLE_ANALYTICS_ID is unset, the tag is omitted.
 _GOOGLE_ANALYTICS_ID = os.environ.get("GOOGLE_ANALYTICS_ID", "G-FG3G7DRBW1").strip()
 
@@ -244,17 +252,26 @@ _DB_DIR       = "/tmp" if os.environ.get("VERCEL") else os.path.dirname(__file__
 _WAITLIST_DB  = os.path.join(_DB_DIR, "waitlist.db")
 _ANALYTICS_DB = os.path.join(_DB_DIR, "analytics.db")
 _USERS_DB     = os.path.join(_DB_DIR, "users.db")
+_PERSISTENT_DB_URL = _first_env_value(
+    "SUPABASE_DB_URL",
+    "DATABASE_URL",
+    "POSTGRES_URL_NON_POOLING",
+    "POSTGRES_URL",
+)
+
+if _PERSISTENT_DB_URL and not os.environ.get("SUPABASE_DB_URL"):
+    os.environ["SUPABASE_DB_URL"] = _PERSISTENT_DB_URL
 
 # Vercel /tmp is ephemeral per-invocation — all SQLite data is lost on cold start.
 # Require a persistent DB backend when deploying to Vercel.
 if os.environ.get("VERCEL"):
     _has_persistent_db = bool(
-        os.environ.get("SUPABASE_DB_URL") or os.environ.get("LIBSQL_URL")
+        _PERSISTENT_DB_URL or os.environ.get("LIBSQL_URL")
     )
     if not _has_persistent_db:
         raise RuntimeError(
             "Running on Vercel without a persistent database backend. "
-            "Set SUPABASE_DB_URL or LIBSQL_URL to prevent data loss on cold starts."
+            "Set SUPABASE_DB_URL, DATABASE_URL, POSTGRES_URL, or LIBSQL_URL to prevent data loss on cold starts."
         )
 _ADMIN_TOKEN  = os.environ.get("ADMIN_TOKEN", "") or None  # None when unset → admin routes reject all requests
 
@@ -666,6 +683,7 @@ def _turso_execute(sql: str, args: list = None, db: str = "analytics") -> list:
 #   Settings → Database → Connection string → URI (use "Transaction" pooler for
 #   serverless, port 6543, or direct connection port 5432).
 # Set either SUPABASE_DB_URL or DATABASE_URL to that postgres:// or postgresql:// URI.
+# On Vercel, POSTGRES_URL_NON_POOLING / POSTGRES_URL also work as a fallback source.
 # ---------------------------------------------------------------------------
 
 
@@ -689,7 +707,7 @@ def _normalize_supabase_db_url(db_url: str) -> str:
 
 
 _SUPABASE_DB_URL = _normalize_supabase_db_url(
-    os.environ.get("SUPABASE_DB_URL", "") or os.environ.get("DATABASE_URL", "")
+    _first_env_value("SUPABASE_DB_URL", "DATABASE_URL", "POSTGRES_URL_NON_POOLING", "POSTGRES_URL")
 )
 
 
@@ -7026,7 +7044,7 @@ You are an expert in every aspect of this project. You are direct, insightful, a
 
 == ARCHITECTURE ==
 - Backend: Python Flask (~4200+ lines, app.py) served as a Vercel serverless function via api/index.py
-- Host: Vercel (abbieysearch.com → prj_hGdLqDsNtQK2A57hWyZNxdZKMi3b). Deploy with: vercel deploy --prod --token <token>
+- Host: Vercel (abbieysearch.com → prj_meBOJCYxNefYepBikq5fHJFP4tS7). Deploy with: vercel deploy --prod --token <token>
 - Database (priority order — _analytics_execute() routes automatically):
   1. Supabase/PostgreSQL — set SUPABASE_DB_URL env var (pooler URL port 6543). Auto-creates tables. SQL translated via _adapt_sql_pg().
   2. Turso/libSQL — set LIBSQL_URL + LIBSQL_AUTH_TOKEN env vars. SQLite-compatible HTTP API.

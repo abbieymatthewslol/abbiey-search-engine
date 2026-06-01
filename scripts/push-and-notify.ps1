@@ -53,7 +53,7 @@ function Read-StoredVercelToken {
 }
 
 # Match .vercel/project.json (Vercel CLI) — single source of truth for API polling
-$projectId = "prj_hGdLqDsNtQK2A57hWyZNxdZKMi3b"
+$projectId = "prj_meBOJCYxNefYepBikq5fHJFP4tS7"
 $teamId = "team_YeguIG4NHm4Kp0Jf5AbOwgFN"
 $vercelProjectPath = Join-Path $RepoRoot ".vercel\project.json"
 if (Test-Path -LiteralPath $vercelProjectPath) {

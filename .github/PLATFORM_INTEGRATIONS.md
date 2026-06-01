@@ -11,7 +11,7 @@ Production for **abbiey.search** is meant to be a **single Vercel project** serv
 | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **Production domain**          | `abbieysearch.com` (canonical). Add `www.abbieysearch.com` only if it redirects to the apex host. |
 | **Git integration**            | Connect this repository; production is deployed by **GitHub Actions** (`[deploy.yml](workflows/deploy.yml)`) on pushes to `**main**`. `[vercel.json](../vercel.json)` uses `ignoreCommand` to **skip** Vercel’s *Git* build for `**main**` so GitHub Actions stays the single production path. |
-| **Project ID** (CLI / Actions) | `prj_hGdLqDsNtQK2A57hWyZNxdZKMi3b` — same id in `[.vercel/project.json](../.vercel/project.json)` and `[.github/workflows/deploy.yml](workflows/deploy.yml)` |
+| **Project ID** (CLI / Actions) | `prj_meBOJCYxNefYepBikq5fHJFP4tS7` — same id in the deploy helpers and `[.github/workflows/deploy.yml](workflows/deploy.yml)` |
 
 ## Local `push-and-notify.ps1` and Vercel
 

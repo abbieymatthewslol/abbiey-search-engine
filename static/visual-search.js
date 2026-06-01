@@ -667,8 +667,15 @@
       submitReverseImage({ source: "hero" });
     });
 
-    document.getElementById("vis-hero-upload")?.addEventListener("click", () => {
-      document.getElementById("vis-hero-file")?.click();
+    document.getElementById("vis-hero-upload")?.addEventListener("click", async () => {
+      const input = document.getElementById("vis-hero-file");
+      if (!input) return;
+      input.setAttribute("accept", "image/*");
+      if (typeof window.openPreferredImagePicker === "function") {
+        await window.openPreferredImagePicker(input);
+        return;
+      }
+      input.click();
     });
 
     document.getElementById("vis-hero-file")?.addEventListener("change", (e) => {

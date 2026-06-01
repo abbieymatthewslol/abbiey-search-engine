@@ -316,7 +316,7 @@ else:
 # ─── Check 6: Vercel deployment ────────────────────────────────────────────────
 header("6. Vercel Deployment")
 
-VERCEL_PROJECT_ID = "prj_hGdLqDsNtQK2A57hWyZNxdZKMi3b"
+VERCEL_PROJECT_ID = "prj_meBOJCYxNefYepBikq5fHJFP4tS7"
 VERCEL_TEAM_ID = "team_YeguIG4NHm4Kp0Jf5AbOwgFN"
 
 # Try to get Vercel token from local auth.json

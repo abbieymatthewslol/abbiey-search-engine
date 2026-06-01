@@ -20,7 +20,7 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-DEFAULT_PROJECT_ID = "prj_hGdLqDsNtQK2A57hWyZNxdZKMi3b"
+DEFAULT_PROJECT_ID = "prj_meBOJCYxNefYepBikq5fHJFP4tS7"
 DEFAULT_TEAM_ID = "team_YeguIG4NHm4Kp0Jf5AbOwgFN"
 
 DOMAINS = ("abbieysearch.com", "www.abbieysearch.com")

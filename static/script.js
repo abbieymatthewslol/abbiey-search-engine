@@ -4762,16 +4762,57 @@ document.addEventListener("DOMContentLoaded", () => {
 
     let busy = false;
 
+    function isLikelyMobileImagePicker() {
+      const ua = navigator.userAgent || "";
+      return /Android|iPhone|iPad|iPod|Mobile/i.test(ua);
+    }
+
+    async function openPreferredImagePicker(input) {
+      if (!input) return;
+      input.setAttribute("accept", "image/*");
+      try {
+        if (!isLikelyMobileImagePicker() && typeof window.showOpenFilePicker === "function") {
+          const [handle] = await window.showOpenFilePicker({
+            multiple: false,
+            excludeAcceptAllOption: true,
+            startIn: "pictures",
+            types: [
+              {
+                description: "Images",
+                accept: {
+                  "image/*": [".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".svg", ".avif", ".heic", ".heif", ".ico", ".tif", ".tiff"],
+                },
+              },
+            ],
+          });
+          if (!handle) return;
+          const file = await handle.getFile();
+          const dt = new DataTransfer();
+          dt.items.add(file);
+          input.files = dt.files;
+          input.dispatchEvent(new Event("change", { bubbles: true }));
+          return;
+        }
+      } catch (_err) {
+        // Fall through to browser-native file input when the File System Access API is unavailable or cancelled.
+      }
+      if (typeof input.showPicker === "function") {
+        try {
+          await input.showPicker();
+          return;
+        } catch (_err) {
+          // Fall through to click() when showPicker is unsupported or blocked.
+        }
+      }
+      input.click();
+    }
+
+    window.openPreferredImagePicker = openPreferredImagePicker;
+
     function openImageFilePicker() {
       fileInput.value = "";
       if (fileHint) fileHint.textContent = "";
-      if (typeof fileInput.showPicker === "function") {
-        fileInput.showPicker().catch(() => {
-          fileInput.click();
-        });
-      } else {
-        fileInput.click();
-      }
+      return openPreferredImagePicker(fileInput);
     }
 
     function setOpen(open) {

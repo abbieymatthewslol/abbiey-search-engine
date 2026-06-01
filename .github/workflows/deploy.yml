@@ -18,9 +18,9 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # Must match .vercel/project.json (abbieys-projects / search-engine-2-live)
+  # Must match the canonical live project (abbieys-projects / search-engine-2-recovery)
   VERCEL_ORG_ID: team_YeguIG4NHm4Kp0Jf5AbOwgFN
-  VERCEL_PROJECT_ID: prj_hGdLqDsNtQK2A57hWyZNxdZKMi3b
+  VERCEL_PROJECT_ID: prj_meBOJCYxNefYepBikq5fHJFP4tS7
 
 jobs:
   test:

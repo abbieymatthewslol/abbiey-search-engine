@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 env:
-  VERCEL_PROJECT_ID: prj_hGdLqDsNtQK2A57hWyZNxdZKMi3b
+  VERCEL_PROJECT_ID: prj_meBOJCYxNefYepBikq5fHJFP4tS7
   VERCEL_ORG_ID: team_YeguIG4NHm4Kp0Jf5AbOwgFN
 
 jobs:

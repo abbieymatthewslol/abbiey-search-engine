@@ -38,7 +38,7 @@ if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 from vercel_env_normalize import normalize_vercel_env_vars  # noqa: E402
 
-VERCEL_PROJECT_ID = "prj_hGdLqDsNtQK2A57hWyZNxdZKMi3b"
+VERCEL_PROJECT_ID = "prj_meBOJCYxNefYepBikq5fHJFP4tS7"
 VERCEL_TEAM_ID    = "team_YeguIG4NHm4Kp0Jf5AbOwgFN"
 
 # These vars are safe to push to all environments (non-secret)
