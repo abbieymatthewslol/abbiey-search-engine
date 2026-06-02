@@ -4647,17 +4647,14 @@ document.addEventListener("DOMContentLoaded", () => {
       container.style.display = "";
     }
 
-    const containers = [
-      document.getElementById("trending-searches"),
-      document.getElementById("home-trending-searches"),
-    ].filter(Boolean);
-    if (!containers.length) return;
+    const resultsEl = document.getElementById("trending-searches");
+    if (!resultsEl) return;
 
     fetch("/api/trends")
       .then(r => r.json())
       .then(items => {
         if (!Array.isArray(items) || !items.length) return;
-        containers.forEach((container) => renderTrending(container, items.slice(0, 6), true));
+        renderTrending(resultsEl, items.slice(0, 6), true);
       })
       .catch(() => {});
   })();
@@ -4694,118 +4691,6 @@ document.addEventListener("DOMContentLoaded", () => {
         });
       })
       .catch(() => {});
-  })();
-
-  // ===== Investigation Dashboard / Save to Case =====
-  (function initInvestigationWorkspace() {
-    const dashboardRoot = document.getElementById("investigation-dashboard");
-    const metricsRoot = document.getElementById("investigation-dashboard-metrics");
-    const caseListRoot = document.getElementById("dashboard-case-list");
-    const activityRoot = document.getElementById("dashboard-activity-list");
-    const saveCaseBtn = document.getElementById("save-case-btn");
-
-    function metricCard(label, value) {
-      return `<article class="investigation-metric"><span class="investigation-metric-value">${esc(String(value ?? 0))}</span><span class="investigation-metric-label">${esc(label)}</span></article>`;
-    }
-
-    function emptyCard(message) {
-      return `<article class="investigation-card-empty">${esc(message)}</article>`;
-    }
-
-    function renderDashboard(data) {
-      if (!dashboardRoot || !metricsRoot || !caseListRoot || !activityRoot || !data || data.ok !== true) return;
-      const counts = data.counts || {};
-      metricsRoot.innerHTML = [
-        metricCard("Investigations", counts.cases || 0),
-        metricCard("Bookmarks", counts.bookmarks || 0),
-        metricCard("Searches", counts.history || 0),
-      ].join("");
-
-      const cases = Array.isArray(data.cases) ? data.cases : [];
-      caseListRoot.innerHTML = cases.length
-        ? cases.map((item) => {
-            const href = item.last_query
-              ? `/search?q=${encodeURIComponent(item.last_query)}&type=text`
-              : "/profile#cases-section";
-            return `<article class="investigation-case-card">
-              <div class="investigation-panel-head">
-                <a class="investigation-card-title" href="${href}">${esc(item.title || "Untitled case")}</a>
-                <span class="investigation-card-meta">${esc(String(item.item_count || 0))} item${Number(item.item_count || 0) === 1 ? "" : "s"}</span>
-              </div>
-              ${item.summary ? `<p class="bookmark-snippet">${esc(item.summary)}</p>` : ""}
-              <p class="investigation-card-meta">${esc(item.last_query || "No saved search yet.")}</p>
-            </article>`;
-          }).join("")
-        : emptyCard("No investigations yet. Save an active search or create one from your profile.");
-
-      const recentSearches = Array.isArray(data.recent_searches) ? data.recent_searches : [];
-      const recentBookmarks = Array.isArray(data.recent_bookmarks) ? data.recent_bookmarks : [];
-      const activityCards = [];
-      recentSearches.slice(0, 3).forEach((item) => {
-        activityCards.push(`<article class="investigation-activity-card">
-          <div class="investigation-panel-head">
-            <a class="investigation-card-title" href="/search?q=${encodeURIComponent(item.query || "")}&type=${encodeURIComponent(item.type || "text")}">${esc(item.query || "")}</a>
-            <span class="investigation-card-meta">Search</span>
-          </div>
-          <p class="investigation-card-meta">${esc(item.type || "text")}</p>
-        </article>`);
-      });
-      recentBookmarks.slice(0, 2).forEach((item) => {
-        activityCards.push(`<article class="investigation-activity-card">
-          <div class="investigation-panel-head">
-            <a class="investigation-card-title" href="${esc(item.url || "#")}" target="_blank" rel="noopener">${esc(item.title || item.url || "Saved bookmark")}</a>
-            <span class="investigation-card-meta">Bookmark</span>
-          </div>
-          <p class="investigation-card-meta">${esc(displayNetloc(item.url || ""))}</p>
-        </article>`);
-      });
-      activityRoot.innerHTML = activityCards.length ? activityCards.join("") : emptyCard("Recent searches and saved bookmarks will appear here.");
-      dashboardRoot.hidden = false;
-    }
-
-    if (dashboardRoot) {
-      fetchJson("/api/user/dashboard")
-        .then(({ ok, data }) => {
-          if (ok) renderDashboard(data);
-        })
-        .catch(() => {});
-    }
-
-    if (saveCaseBtn) {
-      saveCaseBtn.addEventListener("click", async () => {
-        const query = String(saveCaseBtn.dataset.query || "").trim();
-        const searchType = String(saveCaseBtn.dataset.searchType || "text").trim() || "text";
-        if (!query) return;
-        const title = window.prompt("Save this search to which investigation?", query);
-        if (title == null) return;
-        const trimmedTitle = title.trim();
-        if (!trimmedTitle) {
-          showToast("Add a case title before saving.", "error");
-          return;
-        }
-        const result = await fetchJson("/api/user/cases", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            title: trimmedTitle,
-            summary: "Saved from live search",
-            last_query: query,
-            item: {
-              item_type: "search",
-              section: "queries",
-              label: query,
-              url: `/search?q=${encodeURIComponent(query)}&type=${encodeURIComponent(searchType)}`,
-              meta: { type: searchType },
-            },
-          }),
-        });
-        if (!result.ok) {
-          showToast(userFacingApiError(result.data && result.data.error, "Couldn't save that search right now."), "error");
-          return;
-        }
-        showToast("Saved to investigations.");
-      });
-    }
   })();
 
   // ===== Feature 1: Voice Search =====
