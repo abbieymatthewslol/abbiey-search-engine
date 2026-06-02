@@ -4647,14 +4647,17 @@ document.addEventListener("DOMContentLoaded", () => {
       container.style.display = "";
     }
 
-    const resultsEl = document.getElementById("trending-searches");
-    if (!resultsEl) return;
+    const containers = [
+      document.getElementById("trending-searches"),
+      document.getElementById("home-trending-searches"),
+    ].filter(Boolean);
+    if (!containers.length) return;
 
     fetch("/api/trends")
       .then(r => r.json())
       .then(items => {
         if (!Array.isArray(items) || !items.length) return;
-        renderTrending(resultsEl, items.slice(0, 6), true);
+        containers.forEach((container) => renderTrending(container, items.slice(0, 6), true));
       })
       .catch(() => {});
   })();
