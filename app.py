@@ -3419,23 +3419,17 @@ def _filter_relevant_results(query: str, results: list[dict]) -> tuple[list[dict
 
 @app.route("/")
 def index():
-    """First visit: onboarding at /welcome (unless skipped). Returning visitors and signed-in users: /search."""
-    if _skip_welcome_for_root():
-        return redirect(url_for("search"), code=301)
-    if _session_user_id_int(session.get("user_id")):
-        return redirect(url_for("search"), code=301)
-    if (request.cookies.get(_WELCOME_COOKIE) or "").strip() == "1":
-        return redirect(url_for("search"), code=301)
-    return redirect(url_for("welcome"), code=302)
+    """Homepage stays on / and renders the search UI; onboarding remains available at /welcome."""
+    return search()
 
 
 @app.route("/welcome")
 def welcome():
-    """First-visit signup walkthrough (Google OAuth + optional phone). Direct URL always works; root / uses env + cookie."""
+    """First-visit signup walkthrough (Google OAuth + optional phone). Root stays on the homepage; /welcome remains opt-in."""
     if _session_user_id_int(session.get("user_id")):
-        return redirect(url_for("search"))
+        return redirect(url_for("index"))
     if (request.cookies.get(_WELCOME_COOKIE) or "").strip() == "1":
-        return redirect(url_for("search"))
+        return redirect(url_for("index"))
     return render_template(
         "welcome.html",
         supabase_url=_SUPABASE_URL,
@@ -3447,7 +3441,7 @@ def welcome():
 @app.route("/welcome/dismiss")
 def welcome_dismiss():
     """Skip onboarding and use search without an account."""
-    resp = redirect(url_for("search"))
+    resp = redirect(url_for("index"))
     _set_welcome_seen_cookie(resp)
     return resp
 

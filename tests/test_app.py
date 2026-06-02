@@ -24,21 +24,22 @@ from app import (
 class TestRoutes:
     """Test basic route behavior."""
 
-    def test_index_redirects_to_search(self, client):
+    def test_index_renders_search_ui_without_redirect(self, client):
         resp = client.get("/", follow_redirects=False)
-        assert resp.status_code == 301
-        assert "/search" in (resp.headers.get("Location") or "")
+        assert resp.status_code == 200
+        assert b'id="search-input"' in resp.data
+        assert b'aria-label="Search query"' in resp.data
 
-    def test_index_followed_shows_search_ui(self, client):
-        resp = client.get("/", follow_redirects=True)
+    def test_index_shows_search_ui(self, client):
+        resp = client.get("/")
         assert resp.status_code == 200
         assert b'id="search-input"' in resp.data
         assert b'aria-label="Search query"' in resp.data
         assert b'abbiey.<span>search</span>' in resp.data
 
     def test_root_is_search_ui_not_marketing_about_page(self, client):
-        """Root redirects to search UI; long-form product copy lives on /about."""
-        resp = client.get("/", follow_redirects=True)
+        """Root is the search UI; long-form product copy lives on /about."""
+        resp = client.get("/")
         assert resp.status_code == 200
         assert b"nobody's watching" not in resp.data
 
