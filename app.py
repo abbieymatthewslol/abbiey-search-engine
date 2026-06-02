@@ -923,6 +923,30 @@ def _init_pg_tables():
         );
         CREATE INDEX IF NOT EXISTS idx_ush_user ON user_search_history(user_id);
 
+        CREATE TABLE IF NOT EXISTS user_cases (
+            id          SERIAL PRIMARY KEY,
+            user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            title       TEXT NOT NULL,
+            summary     TEXT DEFAULT '',
+            notes       TEXT DEFAULT '',
+            last_query  TEXT DEFAULT '',
+            created_at  TIMESTAMPTZ DEFAULT NOW(),
+            updated_at  TIMESTAMPTZ DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_uc_user_updated ON user_cases(user_id, updated_at DESC);
+
+        CREATE TABLE IF NOT EXISTS user_case_items (
+            id          SERIAL PRIMARY KEY,
+            case_id     INTEGER NOT NULL REFERENCES user_cases(id) ON DELETE CASCADE,
+            item_type   TEXT NOT NULL DEFAULT 'search',
+            section     TEXT DEFAULT '',
+            label       TEXT DEFAULT '',
+            url         TEXT DEFAULT '',
+            meta_json   TEXT NOT NULL DEFAULT '{}',
+            created_at  TIMESTAMPTZ DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_uci_case_created ON user_case_items(case_id, created_at DESC);
+
         CREATE TABLE IF NOT EXISTS user_settings (
             user_id       INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
             settings_json TEXT NOT NULL DEFAULT '{}',
@@ -1335,6 +1359,28 @@ def _init_users_db():
                 searched_at TEXT DEFAULT (datetime('now')),
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
             );
+            CREATE TABLE IF NOT EXISTS user_cases (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id     INTEGER NOT NULL,
+                title       TEXT NOT NULL,
+                summary     TEXT DEFAULT '',
+                notes       TEXT DEFAULT '',
+                last_query  TEXT DEFAULT '',
+                created_at  TEXT DEFAULT (datetime('now')),
+                updated_at  TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+            CREATE TABLE IF NOT EXISTS user_case_items (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                case_id     INTEGER NOT NULL,
+                item_type   TEXT NOT NULL DEFAULT 'search',
+                section     TEXT DEFAULT '',
+                label       TEXT DEFAULT '',
+                url         TEXT DEFAULT '',
+                meta_json   TEXT NOT NULL DEFAULT '{}',
+                created_at  TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (case_id) REFERENCES user_cases(id) ON DELETE CASCADE
+            );
             CREATE TABLE IF NOT EXISTS user_settings (
                 user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
                 settings_json TEXT NOT NULL DEFAULT '{}',
@@ -1342,6 +1388,8 @@ def _init_users_db():
             );
             CREATE INDEX IF NOT EXISTS idx_ub_user  ON user_bookmarks(user_id);
             CREATE INDEX IF NOT EXISTS idx_ush_user ON user_search_history(user_id);
+            CREATE INDEX IF NOT EXISTS idx_uc_user_updated ON user_cases(user_id, updated_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_uci_case_created ON user_case_items(case_id, created_at DESC);
             CREATE TABLE IF NOT EXISTS api_keys (
                 id            INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id       INTEGER NOT NULL,
@@ -1542,6 +1590,74 @@ def _row_returning_id(rows: list | None) -> int | None:
             except (TypeError, ValueError):
                 return None
     return None
+
+
+def _user_case_owned(case_id: int, user_id: int) -> bool:
+    rows = _users_execute(
+        "SELECT 1 FROM user_cases WHERE id=? AND user_id=? LIMIT 1",
+        [int(case_id), int(user_id)],
+    )
+    return bool(rows)
+
+
+def _case_items_for_case(case_id: int, limit: int = 8) -> list[dict]:
+    rows = _users_execute(
+        "SELECT id, item_type, section, label, url, meta_json, created_at "
+        "FROM user_case_items WHERE case_id=? ORDER BY created_at DESC LIMIT ?",
+        [int(case_id), int(limit)],
+    )
+    out: list[dict] = []
+    for row in rows or []:
+        meta = {}
+        raw_meta = row.get("meta_json")
+        if raw_meta:
+            try:
+                parsed = json.loads(raw_meta)
+                if isinstance(parsed, dict):
+                    meta = parsed
+            except Exception:
+                meta = {}
+        out.append(
+            {
+                "id": row.get("id"),
+                "item_type": row.get("item_type") or "search",
+                "section": row.get("section") or "",
+                "label": row.get("label") or "",
+                "url": row.get("url") or "",
+                "meta": meta,
+                "created_at": row.get("created_at"),
+            }
+        )
+    return out
+
+
+def _case_rows_with_counts(user_id: int, limit: int = 12) -> list[dict]:
+    sql = (
+        "SELECT c.id, c.title, c.summary, c.notes, c.last_query, c.created_at, c.updated_at, "
+        "COUNT(i.id) AS item_count "
+        "FROM user_cases c "
+        "LEFT JOIN user_case_items i ON i.case_id = c.id "
+        "WHERE c.user_id=? "
+        "GROUP BY c.id, c.title, c.summary, c.notes, c.last_query, c.created_at, c.updated_at "
+        "ORDER BY c.updated_at DESC LIMIT ?"
+    )
+    return _users_execute(sql, [int(user_id), int(limit)])
+
+
+def _serialize_case_row(row: dict, include_items: bool = False) -> dict:
+    payload = {
+        "id": row.get("id"),
+        "title": (row.get("title") or "").strip(),
+        "summary": row.get("summary") or "",
+        "notes": row.get("notes") or "",
+        "last_query": row.get("last_query") or "",
+        "created_at": row.get("created_at"),
+        "updated_at": row.get("updated_at"),
+        "item_count": int(row.get("item_count") or 0),
+    }
+    if include_items:
+        payload["items"] = _case_items_for_case(int(row.get("id") or 0))
+    return payload
 
 
 def _set_welcome_seen_cookie(resp: Response) -> None:
@@ -12049,6 +12165,200 @@ def api_user_recent_searches():
             seen.add(r["query"])
             unique.append({"query": r["query"], "type": r["search_type"] or "text"})
     return jsonify(unique)
+
+
+@app.route("/api/user/dashboard", methods=["GET"])
+def api_user_dashboard():
+    uid, bearer_err = _api_auth_user()
+    if bearer_err:
+        return bearer_err
+    if not uid:
+        return jsonify({"error": "Not authenticated"}), 401
+    try:
+        recent_search_rows = _users_execute(
+            "SELECT query, search_type, searched_at FROM user_search_history "
+            "WHERE user_id=? ORDER BY searched_at DESC LIMIT 20",
+            [uid],
+        )
+        recent_searches = []
+        seen_queries: set[str] = set()
+        for row in recent_search_rows or []:
+            q = row.get("query") or ""
+            if not q or q in seen_queries:
+                continue
+            seen_queries.add(q)
+            recent_searches.append(
+                {
+                    "query": q,
+                    "type": row.get("search_type") or "text",
+                    "searched_at": row.get("searched_at"),
+                }
+            )
+            if len(recent_searches) >= 6:
+                break
+
+        bookmark_rows = _users_execute(
+            "SELECT id, url, title, snippet, saved_at FROM user_bookmarks "
+            "WHERE user_id=? ORDER BY saved_at DESC LIMIT 4",
+            [uid],
+        )
+        case_rows = _case_rows_with_counts(uid, limit=4)
+        bookmark_count_rows = _users_execute("SELECT COUNT(*) AS cnt FROM user_bookmarks WHERE user_id=?", [uid])
+        history_count_rows = _users_execute("SELECT COUNT(*) AS cnt FROM user_search_history WHERE user_id=?", [uid])
+        case_count_rows = _users_execute("SELECT COUNT(*) AS cnt FROM user_cases WHERE user_id=?", [uid])
+    except Exception:
+        logger.exception("api_user_dashboard_failed")
+        return jsonify({"error": "Could not load dashboard."}), 503
+
+    return jsonify(
+        {
+            "ok": True,
+            "cases": [_serialize_case_row(row, include_items=False) for row in case_rows or []],
+            "recent_searches": recent_searches,
+            "recent_bookmarks": bookmark_rows or [],
+            "counts": {
+                "cases": int((case_count_rows or [{}])[0].get("cnt") or 0),
+                "bookmarks": int((bookmark_count_rows or [{}])[0].get("cnt") or 0),
+                "history": int((history_count_rows or [{}])[0].get("cnt") or 0),
+            },
+        }
+    )
+
+
+@app.route("/api/user/cases", methods=["GET"])
+def api_user_cases_get():
+    uid, bearer_err = _api_auth_user()
+    if bearer_err:
+        return bearer_err
+    if not uid:
+        return jsonify({"cases": []}), 401
+    include_items = request.args.get("details") in ("1", "true", "yes")
+    try:
+        rows = _case_rows_with_counts(uid, limit=24)
+        cases = [_serialize_case_row(row, include_items=include_items) for row in rows or []]
+    except Exception:
+        logger.exception("api_user_cases_get_failed")
+        return jsonify({"cases": [], "error": "Could not load cases."}), 503
+    return jsonify({"cases": cases})
+
+
+@app.route("/api/user/cases", methods=["POST"])
+@limiter.limit("120/hour")
+def api_user_cases_create():
+    uid, bearer_err = _api_auth_user()
+    if bearer_err:
+        return bearer_err
+    if not uid:
+        return jsonify({"error": "Not authenticated"}), 401
+    data = request.get_json(silent=True) or {}
+    title = (data.get("title") or "").strip()[:120]
+    summary = (data.get("summary") or "").strip()[:300]
+    notes = (data.get("notes") or "").strip()[:5000]
+    last_query = (data.get("last_query") or "").strip()[:500]
+    item = data.get("item") if isinstance(data.get("item"), dict) else None
+    if not title:
+        return jsonify({"error": "Case title is required."}), 400
+    try:
+        ins = _users_execute(
+            "INSERT INTO user_cases (user_id, title, summary, notes, last_query, updated_at) VALUES (?,?,?,?,?,CURRENT_TIMESTAMP)",
+            [uid, title, summary, notes, last_query],
+            return_id=True,
+        )
+        case_id = _row_returning_id(ins)
+        if item and case_id:
+            _users_execute(
+                "INSERT INTO user_case_items (case_id, item_type, section, label, url, meta_json) VALUES (?,?,?,?,?,?)",
+                [
+                    case_id,
+                    (item.get("item_type") or "search")[:32],
+                    (item.get("section") or "")[:48],
+                    (item.get("label") or title)[:240],
+                    (item.get("url") or "")[:2000],
+                    json.dumps(item.get("meta") if isinstance(item.get("meta"), dict) else {}, separators=(",", ":")),
+                ],
+            )
+            _users_execute("UPDATE user_cases SET updated_at=CURRENT_TIMESTAMP WHERE id=? AND user_id=?", [case_id, uid])
+    except Exception:
+        logger.exception("api_user_cases_create_failed")
+        return jsonify({"error": "Could not create case."}), 503
+    return jsonify({"ok": True, "id": case_id}), 201
+
+
+@app.route("/api/user/cases/<int:case_id>", methods=["POST"])
+@limiter.limit("240/hour")
+def api_user_cases_update(case_id: int):
+    uid, bearer_err = _api_auth_user()
+    if bearer_err:
+        return bearer_err
+    if not uid:
+        return jsonify({"error": "Not authenticated"}), 401
+    if not _user_case_owned(case_id, uid):
+        return jsonify({"error": "Not found"}), 404
+    data = request.get_json(silent=True) or {}
+    title = (data.get("title") or "").strip()[:120]
+    summary = (data.get("summary") or "").strip()[:300]
+    notes = (data.get("notes") or "").strip()[:5000]
+    last_query = (data.get("last_query") or "").strip()[:500]
+    if not title:
+        return jsonify({"error": "Case title is required."}), 400
+    try:
+        _users_execute(
+            "UPDATE user_cases SET title=?, summary=?, notes=?, last_query=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND user_id=?",
+            [title, summary, notes, last_query, case_id, uid],
+        )
+    except Exception:
+        logger.exception("api_user_cases_update_failed")
+        return jsonify({"error": "Could not update case."}), 503
+    return jsonify({"ok": True})
+
+
+@app.route("/api/user/cases/<int:case_id>/items", methods=["POST"])
+@limiter.limit("240/hour")
+def api_user_case_items_create(case_id: int):
+    uid, bearer_err = _api_auth_user()
+    if bearer_err:
+        return bearer_err
+    if not uid:
+        return jsonify({"error": "Not authenticated"}), 401
+    if not _user_case_owned(case_id, uid):
+        return jsonify({"error": "Not found"}), 404
+    data = request.get_json(silent=True) or {}
+    item_type = (data.get("item_type") or "search").strip()[:32]
+    section = (data.get("section") or "").strip()[:48]
+    label = (data.get("label") or "").strip()[:240]
+    url = (data.get("url") or "").strip()[:2000]
+    meta = data.get("meta") if isinstance(data.get("meta"), dict) else {}
+    if not label and not url:
+        return jsonify({"error": "Item label or URL is required."}), 400
+    try:
+        ins = _users_execute(
+            "INSERT INTO user_case_items (case_id, item_type, section, label, url, meta_json) VALUES (?,?,?,?,?,?)",
+            [case_id, item_type, section, label, url, json.dumps(meta, separators=(",", ":"))],
+            return_id=True,
+        )
+        item_id = _row_returning_id(ins)
+        _users_execute("UPDATE user_cases SET updated_at=CURRENT_TIMESTAMP WHERE id=? AND user_id=?", [case_id, uid])
+    except Exception:
+        logger.exception("api_user_case_items_create_failed")
+        return jsonify({"error": "Could not save case item."}), 503
+    return jsonify({"ok": True, "id": item_id}), 201
+
+
+@app.route("/api/user/cases/<int:case_id>", methods=["DELETE"])
+def api_user_cases_delete(case_id: int):
+    uid, bearer_err = _api_auth_user()
+    if bearer_err:
+        return bearer_err
+    if not uid:
+        return jsonify({"error": "Not authenticated"}), 401
+    if not _user_case_owned(case_id, uid):
+        return jsonify({"error": "Not found"}), 404
+    try:
+        _users_execute("DELETE FROM user_cases WHERE id=? AND user_id=?", [case_id, uid])
+    except Exception:
+        logger.exception("api_user_cases_delete_failed")
+        return jsonify({"error": "Could not delete case."}), 503
+    return jsonify({"ok": True})
 
 
 @app.route("/api/user/bookmarks", methods=["POST"])

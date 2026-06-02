@@ -50,6 +50,7 @@
             <span class="profile-nav-label">Jump to</span>
             <a href="#edit-section">Edit profile</a>
             <a href="#search-bots">Custom bots</a>
+            <a href="#cases-section">Investigations</a>
             <a href="#bookmarks-section">Bookmarks</a>
             <a href="#history-section">Recent searches</a>
             <a href="#account-section">Account</a>
@@ -133,6 +134,35 @@
                 <button type="submit" class="auth-submit-btn" id="sbot-create">Create bot</button>
             </form>
             <ul class="bookmark-list" id="sbots-list" style="list-style:none;padding:0;margin:0"></ul>
+        </section>
+
+        <section class="profile-section" id="cases-section">
+            <h2 class="profile-section-title">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                Investigations
+                <span class="badge-count" id="cases-count-badge">0</span>
+            </h2>
+            <p class="form-hint" style="margin:-0.25rem 0 1rem">Save active searches, links, and notes into reusable cases so you can continue an investigation later.</p>
+            <div class="profile-cases-shell">
+                <form id="case-create-form" class="profile-edit-form profile-sbots-form">
+                    <div class="auth-field">
+                        <label for="case-title">Case title</label>
+                        <div class="auth-input-pill"><input id="case-title" type="text" maxlength="120" required placeholder="e.g. John Smith, ACME Pty Ltd, suspicious domain"></div>
+                    </div>
+                    <div class="auth-field">
+                        <label for="case-summary">Summary</label>
+                        <div class="auth-input-pill"><input id="case-summary" type="text" maxlength="300" placeholder="What are you trying to verify?"></div>
+                    </div>
+                    <div class="auth-field">
+                        <label for="case-notes">Notes</label>
+                        <div class="auth-input-pill"><textarea id="case-notes" rows="3" maxlength="5000" placeholder="Key leads, aliases, domains, timelines, or next steps"></textarea></div>
+                    </div>
+                    <button type="submit" class="auth-submit-btn">Create investigation</button>
+                </form>
+                <div class="investigation-case-list investigation-case-list--profile" id="profile-case-list">
+                    <p class="profile-empty">Loading investigations…</p>
+                </div>
+            </div>
         </section>
 
         {# ── Saved bookmarks ── #}
@@ -474,6 +504,90 @@
             });
         }
         loadBots();
+    })();
+
+    // Investigation cases
+    (function () {
+        const listEl = document.getElementById('profile-case-list');
+        const form = document.getElementById('case-create-form');
+        const badge = document.getElementById('cases-count-badge');
+        if (!listEl || !form) return;
+
+        function escapeHtml(value) {
+            return String(value == null ? '' : value).replace(/[&<>"']/g, function (ch) {
+                return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch];
+            });
+        }
+
+        function renderCases(cases) {
+            const items = Array.isArray(cases) ? cases : [];
+            if (badge) badge.textContent = String(items.length);
+            if (!items.length) {
+                listEl.innerHTML = '<p class="profile-empty">No investigations yet. Save a search or create your first case here.</p>';
+                return;
+            }
+            listEl.innerHTML = items.map(function (item) {
+                const summary = item.summary ? '<p class="bookmark-snippet">' + escapeHtml(item.summary) + '</p>' : '';
+                const notes = item.notes ? '<p class="form-hint" style="margin:.35rem 0 0">' + escapeHtml(item.notes) + '</p>' : '';
+                const query = item.last_query
+                    ? '<a class="profile-case-link" href="/search?q=' + encodeURIComponent(item.last_query) + '&type=text">Resume: ' + escapeHtml(item.last_query) + '</a>'
+                    : '<span class="form-hint">No linked search yet.</span>';
+                return (
+                    '<article class="bookmark-item profile-case-card">' +
+                        '<div class="bookmark-main">' +
+                            '<div class="profile-case-head"><span class="bookmark-title">' + escapeHtml(item.title || 'Untitled case') + '</span>' +
+                            '<span class="profile-case-count">' + escapeHtml(String(item.item_count || 0)) + ' item' + ((item.item_count || 0) === 1 ? '' : 's') + '</span></div>' +
+                            summary +
+                            query +
+                            notes +
+                        '</div>' +
+                        '<button type="button" class="bookmark-delete-btn profile-case-delete" data-case-id="' + escapeHtml(String(item.id || '')) + '" title="Delete investigation" aria-label="Delete investigation">' +
+                            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
+                        '</button>' +
+                    '</article>'
+                );
+            }).join('');
+
+            listEl.querySelectorAll('.profile-case-delete').forEach(function (btn) {
+                btn.addEventListener('click', async function () {
+                    const id = btn.getAttribute('data-case-id');
+                    if (!id) return;
+                    const res = await fetch('/api/user/cases/' + encodeURIComponent(id), { method: 'DELETE', credentials: 'same-origin' });
+                    if (!res.ok) return;
+                    loadCases();
+                });
+            });
+        }
+
+        async function loadCases() {
+            listEl.innerHTML = '<p class="profile-empty">Loading investigations…</p>';
+            try {
+                const res = await fetch('/api/user/cases', { credentials: 'same-origin' });
+                const data = await res.json().catch(function () { return null; });
+                renderCases(data && Array.isArray(data.cases) ? data.cases : []);
+            } catch (_) {
+                listEl.innerHTML = '<p class="profile-empty">Could not load investigations right now.</p>';
+            }
+        }
+
+        form.addEventListener('submit', async function (event) {
+            event.preventDefault();
+            const title = document.getElementById('case-title').value.trim();
+            const summary = document.getElementById('case-summary').value.trim();
+            const notes = document.getElementById('case-notes').value.trim();
+            if (!title) return;
+            const res = await fetch('/api/user/cases', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title, summary, notes }),
+            });
+            if (!res.ok) return;
+            form.reset();
+            loadCases();
+        });
+
+        loadCases();
     })();
 </script>
 {% endblock %}

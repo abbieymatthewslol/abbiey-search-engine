@@ -2957,6 +2957,120 @@ body.has-site-bottom-nav .chat-fab {
 }
 .recent-search-chip:hover { background: var(--bg-hover); color: var(--text); border-color: var(--border-strong); }
 
+.investigation-dashboard {
+  margin-top: 1.5rem;
+  padding: 1.25rem;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 24px;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.07), rgba(255,255,255,.03)),
+    color-mix(in srgb, var(--bg-surface) 82%, transparent);
+  box-shadow: 0 16px 40px rgba(0,0,0,.18);
+  backdrop-filter: blur(20px);
+}
+.investigation-dashboard-head,
+.investigation-panel-head,
+.profile-case-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+}
+.investigation-dashboard-kicker {
+  margin: 0 0 .25rem;
+  font-size: .72rem;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.investigation-dashboard-title {
+  margin: 0;
+  font-size: 1.15rem;
+  letter-spacing: -.02em;
+}
+.investigation-dashboard-link,
+.profile-case-link {
+  color: var(--accent);
+  text-decoration: none;
+}
+.investigation-dashboard-link:hover,
+.profile-case-link:hover { text-decoration: underline; }
+.investigation-dashboard-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: .75rem;
+  margin-top: 1rem;
+}
+.investigation-dashboard-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 1rem;
+  margin-top: 1rem;
+}
+.investigation-dashboard-panel {
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 20px;
+  background: rgba(255,255,255,.03);
+}
+.investigation-panel-head h3 {
+  margin: 0;
+  font-size: .95rem;
+}
+.investigation-panel-meta,
+.profile-case-count {
+  color: var(--text-muted);
+  font-size: .78rem;
+}
+.investigation-metric {
+  padding: .9rem 1rem;
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,.08);
+  background: rgba(255,255,255,.04);
+}
+.investigation-metric-value {
+  display: block;
+  font-size: 1.4rem;
+  font-weight: 700;
+  letter-spacing: -.03em;
+}
+.investigation-metric-label {
+  display: block;
+  margin-top: .2rem;
+  color: var(--text-muted);
+  font-size: .78rem;
+}
+.investigation-case-list,
+.investigation-activity-list {
+  display: flex;
+  flex-direction: column;
+  gap: .75rem;
+  margin-top: .85rem;
+}
+.investigation-case-card,
+.investigation-activity-card,
+.profile-case-card {
+  padding: 1rem;
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,.08);
+  background: rgba(255,255,255,.02);
+}
+.investigation-card-title {
+  font-weight: 600;
+  color: var(--text);
+  text-decoration: none;
+}
+.investigation-card-title:hover { text-decoration: underline; }
+.investigation-card-meta,
+.investigation-card-empty {
+  color: var(--text-muted);
+  font-size: .82rem;
+}
+.save-case-btn {
+  margin-left: .5rem;
+}
+
 /* Profile avatar upload */
 .profile-avatar-wrap {
   position: relative;
@@ -5500,6 +5614,15 @@ a.welcome-guest-btn:hover {
   text-transform: uppercase;
   margin-bottom: 1.25rem;
 }
+.profile-cases-shell {
+  display: grid;
+  grid-template-columns: minmax(0, .95fr) minmax(0, 1.05fr);
+  gap: 1rem;
+  align-items: start;
+}
+.investigation-case-list--profile {
+  min-height: 100%;
+}
 .profile-edit-form { display: flex; flex-direction: column; gap: 1rem; }
 .badge-count {
   margin-left: auto;
@@ -5528,6 +5651,14 @@ a.welcome-guest-btn:hover {
   transition: opacity var(--dur-fast) var(--ease-out);
 }
 .signout-link:hover { opacity: .75; }
+
+@media (max-width: 900px) {
+  .investigation-dashboard-metrics,
+  .investigation-dashboard-grid,
+  .profile-cases-shell {
+    grid-template-columns: 1fr;
+  }
+}
 
 /* Bot search context (search results) */
 .mybot-context-hint {
