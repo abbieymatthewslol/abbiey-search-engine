@@ -151,6 +151,17 @@
         </div>
     </header>
     {% include 'includes/google_analytics.html' %}
+    <div class="tor-agreement-overlay" id="tor-agreement-overlay" hidden>
+        <div class="tor-agreement-banner" role="dialog" aria-modal="true" aria-labelledby="tor-agreement-title" aria-describedby="tor-agreement-copy">
+            <span class="tor-agreement-kicker">Tor / Onion notice</span>
+            <h2 class="tor-agreement-title" id="tor-agreement-title">Please be aware before using the Tor filter</h2>
+            <p class="tor-agreement-copy" id="tor-agreement-copy">Tor is a privacy network that routes traffic through volunteer relays, and onion links are hidden-service addresses that can surface sensitive, lawful, or illegal material. Continue only if you understand you are entering Tor-focused search results and will use them responsibly.</p>
+            <label class="tor-agreement-check">
+                <input type="checkbox" id="tor-agreement-check">
+                <span>I understand what Tor / onion results are and want to continue.</span>
+            </label>
+        </div>
+    </div>
     <div class="settings-overlay" id="settings-overlay" hidden>
         <div class="settings-modal" id="settings-modal" role="dialog" aria-label="Settings">
             <div class="settings-modal-header">

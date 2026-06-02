@@ -230,6 +230,97 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  function isTorSearchMode(mode) {
+    return String(mode || "").trim().toLowerCase() === "onion";
+  }
+
+  function searchTypeFromHref(href) {
+    try {
+      const url = new URL(href, window.location.origin);
+      if (!url.pathname.startsWith("/search")) return "";
+      return String(url.searchParams.get("type") || "text").trim().toLowerCase();
+    } catch (_) {
+      return "";
+    }
+  }
+
+  function initTorAgreementGate() {
+    const overlay = document.getElementById("tor-agreement-overlay");
+    const checkbox = document.getElementById("tor-agreement-check");
+    const typeInput = document.getElementById("search-type-input");
+    const form = document.getElementById("search-form");
+    let approved = false;
+    let pendingAction = null;
+
+    function hideBanner() {
+      if (!overlay) return;
+      overlay.hidden = true;
+      document.body.classList.remove("tor-agreement-active");
+    }
+
+    function showBanner(action) {
+      if (!overlay || !checkbox) {
+        approved = true;
+        if (typeof action === "function") action();
+        return;
+      }
+      pendingAction = typeof action === "function" ? action : null;
+      overlay.hidden = false;
+      document.body.classList.add("tor-agreement-active");
+      checkbox.checked = false;
+      window.setTimeout(() => checkbox.focus(), 0);
+    }
+
+    function ensureAgreement(action) {
+      if (approved) {
+        if (typeof action === "function") action();
+        return true;
+      }
+      showBanner(action);
+      return false;
+    }
+
+    if (checkbox) {
+      checkbox.addEventListener("change", () => {
+        if (!checkbox.checked) return;
+        approved = true;
+        hideBanner();
+        const action = pendingAction;
+        pendingAction = null;
+        if (typeof action === "function") action();
+      });
+    }
+
+    if (form && typeInput) {
+      form.addEventListener(
+        "submit",
+        (e) => {
+          if (!isTorSearchMode(typeInput.value) || approved) return;
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          showBanner(() => {
+            if (typeof form.requestSubmit === "function") form.requestSubmit();
+            else form.submit();
+          });
+        },
+        true
+      );
+    }
+
+    window.setTimeout(() => {
+      if (typeInput && isTorSearchMode(typeInput.value) && !approved) {
+        showBanner();
+      }
+    }, 0);
+
+    return {
+      ensureAgreement,
+      isApproved: () => approved,
+    };
+  }
+
+  const torAgreementGate = initTorAgreementGate();
+
   function readClientPref(key) {
     try {
       const localValue = localStorage.getItem(key);
@@ -2370,13 +2461,15 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!btn || !onionScopeBar.contains(btn)) return;
         const mode = (btn.dataset.onionMode || "").trim();
         if (!mode || mode === onionModeInput.value) return;
-        onionModeInput.value = mode;
-        modeBtns.forEach((b) => {
-          const active = b === btn;
-          b.classList.toggle("active", active);
-          b.setAttribute("aria-pressed", active ? "true" : "false");
+        torAgreementGate.ensureAgreement(() => {
+          onionModeInput.value = mode;
+          modeBtns.forEach((b) => {
+            const active = b === btn;
+            b.classList.toggle("active", active);
+            b.setAttribute("aria-pressed", active ? "true" : "false");
+          });
+          applyFilter();
         });
-        applyFilter();
       });
     }
 
@@ -4958,8 +5051,15 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!btn || !row.contains(btn)) return;
       const mode = (btn.dataset.searchMode || "").trim();
       if (!mode) return;
-      typeInput.value = mode;
-      syncPressed(btn);
+      const activateMode = () => {
+        typeInput.value = mode;
+        syncPressed(btn);
+      };
+      if (isTorSearchMode(mode) && !torAgreementGate.isApproved()) {
+        torAgreementGate.ensureAgreement(activateMode);
+        return;
+      }
+      activateMode();
     });
   })();
 
@@ -5059,7 +5159,15 @@ document.addEventListener("DOMContentLoaded", () => {
     tabsRoot.addEventListener(
       "click",
       (e) => {
-        if (!tabNavAnchorFromEventTarget(e.target)) return;
+        const anchor = tabNavAnchorFromEventTarget(e.target);
+        if (!anchor) return;
+        if (isTorSearchMode(searchTypeFromHref(anchor.href)) && !torAgreementGate.isApproved()) {
+          e.preventDefault();
+          torAgreementGate.ensureAgreement(() => {
+            window.location.assign(anchor.href);
+          });
+          return;
+        }
         if (!searchInput.value.trim()) {
           e.preventDefault();
           searchInput.focus();
