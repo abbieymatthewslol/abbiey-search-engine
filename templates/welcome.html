@@ -12,6 +12,7 @@
 
 {% block auth_content %}
         <div class="auth-heading" id="welcome-title">
+            {% with variant='mark-only' %}{% include 'includes/site_logo.html' %}{% endwith %}
             <h1 class="auth-title">Welcome to abbiey.search</h1>
             <p class="auth-subtitle">OSINT-friendly search with no query logging. Create an account in two steps, or skip and investigate right away.</p>
         </div>

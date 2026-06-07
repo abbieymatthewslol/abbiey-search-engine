@@ -10,6 +10,7 @@
 {% block auth_content %}
 
         <div class="auth-heading" id="auth-form-title">
+            {% with variant='mark-only' %}{% include 'includes/site_logo.html' %}{% endwith %}
             <h1 class="auth-title">Create your account</h1>
             <p class="auth-subtitle">Free, private, yours forever.</p>
         </div>

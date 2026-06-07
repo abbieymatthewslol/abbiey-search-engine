@@ -1,0 +1,19 @@
+{# Reusable brand mark: swan/dragonfly logo + wordmark.
+   variant: header (default) | hero | mark-only
+   href: link target (default /) #}
+{% set _variant = variant|default('header') %}
+{% set _href = href|default('/') %}
+{% set _logo_src = url_for('static', filename='images/logo.png', v=deploy_hash) %}
+{% if _variant == 'hero' %}
+<div class="home-logo-stack">
+    <img src="{{ _logo_src }}" alt="" class="home-logo-mark" width="80" height="80" decoding="async">
+    <h1 class="home-logo">abbiey.<span>search</span></h1>
+</div>
+{% elif _variant == 'mark-only' %}
+<img src="{{ _logo_src }}" alt="abbiey.search" class="logo-mark logo-mark--solo" width="48" height="48" decoding="async">
+{% else %}
+<a href="{{ _href }}" class="logo">
+    <img src="{{ _logo_src }}" alt="" class="logo-mark" width="22" height="22" decoding="async">
+    <span class="logo-text">abbiey.<span>search</span></span>
+</a>
+{% endif %}

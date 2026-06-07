@@ -76,7 +76,7 @@
     <header>
             <div class="header-brand">
             <div class="header-brand-top">
-                <a href="/" class="logo">abbiey.<span>search</span></a>
+                {% include 'includes/site_logo.html' %}
                 <span class="incognito-badge" id="incognito-badge" hidden>Incognito</span>
             </div>
         </div>
@@ -509,9 +509,8 @@
             {% if not query %}
             {# ===== HOME: logo → headline → search → one supporting line ===== #}
             <div class="home-hero">
-                <p class="home-hero-eyebrow">OSINT verification search</p>
-                <h1 class="home-hero-title">Verify before you trust.</h1>
-                <p class="home-hero-headline">Search public data, OSINT signals, breaches, domains, people, and infrastructure from one place.</p>
+                {% with variant='hero' %}{% include 'includes/site_logo.html' %}{% endwith %}
+                <p class="home-hero-headline">Built for people who verify.</p>
             </div>
             {% if search_type == 'people' and not query %}
             <aside class="people-find-banner landing-pf-banner" role="note">
@@ -536,7 +535,7 @@
                 <div class="search-box-wrapper">
                     <div class="search-box">
                         <svg class="search-icon icon-search-glass" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><g transform="rotate(38 12 11.5)" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="11" r="5.5" stroke-width="1.65"/><path d="M9.05 9.4A3.15 3.15 0 0 1 10.95 7.72" stroke-width="1.35"/><line x1="16.2" y1="15.05" x2="20.95" y2="20.4" stroke-width="2.2"/></g></svg>
-                        <input type="text" name="q" id="search-input" value="{{ query or '' }}" placeholder="Search domains, emails, people, businesses…" data-placeholder-rotate="true" autocomplete="off" autofocus aria-label="Search query">
+                        <input type="text" name="q" id="search-input" value="{{ query or '' }}" placeholder="Search anything…" data-placeholder-rotate="true" autocomplete="off" autofocus aria-label="Search query">
                         <button type="button" class="reverse-image-btn" id="reverse-image-btn" aria-label="Choose image from your device to find similar images" title="Choose a photo from your device. Use Paste image URL below for an HTTPS link instead.">
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
                         </button>
@@ -597,43 +596,19 @@
             {% if not query %}
             {# Landing capability grid; after a search the full tabs below take over for result navigation. #}
             <nav class="home-search-modes" aria-label="What to search">
-                <span class="home-search-modes-label" id="home-search-modes-label">Capabilities</span>
+                <span class="home-search-modes-label" id="home-search-modes-label">Search</span>
                 <div class="home-search-modes-row" role="group" aria-labelledby="home-search-modes-label">
-                    <button type="button" class="home-mode-btn{% if search_type == 'text' %} active{% endif %}" data-search-mode="text" aria-pressed="{% if search_type == 'text' %}true{% else %}false{% endif %}">
-                        <span class="home-mode-title">Search</span>
-                        <span class="home-mode-meta">Public web</span>
-                    </button>
-                    <button type="button" class="home-mode-btn{% if search_type == 'images' %} active{% endif %}" data-search-mode="images" aria-pressed="{% if search_type == 'images' %}true{% else %}false{% endif %}">
-                        <span class="home-mode-title">Images</span>
-                        <span class="home-mode-meta">Reverse + visual</span>
-                    </button>
-                    <button type="button" class="home-mode-btn{% if search_type == 'news' %} active{% endif %}" data-search-mode="news" aria-pressed="{% if search_type == 'news' %}true{% else %}false{% endif %}">
-                        <span class="home-mode-title">News</span>
-                        <span class="home-mode-meta">Reporting</span>
-                    </button>
-                    <button type="button" class="home-mode-btn{% if search_type == 'videos' %} active{% endif %}" data-search-mode="videos" aria-pressed="{% if search_type == 'videos' %}true{% else %}false{% endif %}">
-                        <span class="home-mode-title">Videos</span>
-                        <span class="home-mode-meta">Monitoring</span>
-                    </button>
-                    <button type="button" class="home-mode-btn{% if search_type == 'people' %} active{% endif %}" data-search-mode="people" aria-pressed="{% if search_type == 'people' %}true{% else %}false{% endif %}">
-                        <span class="home-mode-title">People</span>
-                        <span class="home-mode-meta">Identity trails</span>
-                    </button>
-                    <button type="button" class="home-mode-btn{% if search_type == 'email' %} active{% endif %}" data-search-mode="email" aria-pressed="{% if search_type == 'email' %}true{% else %}false{% endif %}">
-                        <span class="home-mode-title">Email</span>
-                        <span class="home-mode-meta">Addresses</span>
-                    </button>
-                    <button type="button" class="home-mode-btn{% if search_type == 'business' %} active{% endif %}" data-search-mode="business" aria-pressed="{% if search_type == 'business' %}true{% else %}false{% endif %}">
-                        <span class="home-mode-title">Business</span>
-                        <span class="home-mode-meta">Local intel</span>
-                    </button>
-                    <button type="button" class="home-mode-btn{% if search_type == 'onion' %} active{% endif %}" data-search-mode="onion" aria-pressed="{% if search_type == 'onion' %}true{% else %}false{% endif %}" title="Clearnet-indexed .onion sites via Ahmia + DDG">
-                        <span class="home-mode-title">Onion</span>
-                        <span class="home-mode-meta">Hidden services</span>
-                    </button>
+                    <button type="button" class="home-mode-btn{% if search_type == 'text' %} active{% endif %}" data-search-mode="text" aria-pressed="{% if search_type == 'text' %}true{% else %}false{% endif %}">All</button>
+                    <button type="button" class="home-mode-btn{% if search_type == 'images' %} active{% endif %}" data-search-mode="images" aria-pressed="{% if search_type == 'images' %}true{% else %}false{% endif %}">Images</button>
+                    <button type="button" class="home-mode-btn{% if search_type == 'news' %} active{% endif %}" data-search-mode="news" aria-pressed="{% if search_type == 'news' %}true{% else %}false{% endif %}">News</button>
+                    <button type="button" class="home-mode-btn{% if search_type == 'videos' %} active{% endif %}" data-search-mode="videos" aria-pressed="{% if search_type == 'videos' %}true{% else %}false{% endif %}">Videos</button>
+                    <button type="button" class="home-mode-btn{% if search_type == 'people' %} active{% endif %}" data-search-mode="people" aria-pressed="{% if search_type == 'people' %}true{% else %}false{% endif %}">People</button>
+                    <button type="button" class="home-mode-btn{% if search_type == 'email' %} active{% endif %}" data-search-mode="email" aria-pressed="{% if search_type == 'email' %}true{% else %}false{% endif %}">Email</button>
+                    <button type="button" class="home-mode-btn{% if search_type == 'business' %} active{% endif %}" data-search-mode="business" aria-pressed="{% if search_type == 'business' %}true{% else %}false{% endif %}">Business</button>
+                    <button type="button" class="home-mode-btn{% if search_type == 'onion' %} active{% endif %}" data-search-mode="onion" aria-pressed="{% if search_type == 'onion' %}true{% else %}false{% endif %}" title="Clearnet-indexed .onion sites via Ahmia + DDG">Onion / Tor</button>
                 </div>
             </nav>
-            <p class="home-message-sub" aria-label="Search positioning">Receipts on the page, stronger defaults, and region-aware results for people doing real verification work.</p>
+            <p class="home-message-sub" aria-label="Search positioning">Entities, OSINT signals, .onion index, breach check — same search, deeper runs, receipts on the page.</p>
             <div class="home-recent-wrap">
                 <div id="recent-searches-home" class="recent-searches-home"></div>
             </div>

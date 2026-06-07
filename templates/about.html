@@ -26,7 +26,7 @@
 </head>
 <body class="has-site-bottom-nav">
     <header class="landing-header">
-        <a href="/search" class="logo">abbiey<span>search</span></a>
+        {% with href='/search' %}{% include 'includes/site_logo.html' %}{% endwith %}
         <a href="/search" class="header-btn landing-cta">Open search</a>
     </header>
     {% include 'includes/google_analytics.html' %}

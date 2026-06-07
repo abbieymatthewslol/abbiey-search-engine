@@ -2163,7 +2163,10 @@ document.addEventListener("DOMContentLoaded", () => {
   // ===== Stable placeholder copy =====
   const rotatingInput = document.querySelector("[data-placeholder-rotate]");
   if (rotatingInput && !rotatingInput.value) {
-    rotatingInput.setAttribute("placeholder", "search beyond limitations ..");
+    rotatingInput.setAttribute(
+      "placeholder",
+      "Try: site:example.com \u00b7 8.8.8.8 \u00b7 user@domain \u00b7 BTC address \u00b7 .onion index\u2026"
+    );
   }
 
   // ===== Operator chip removal =====

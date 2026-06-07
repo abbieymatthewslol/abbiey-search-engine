@@ -233,6 +233,7 @@ def json_ld_webapp(site_base_url: str) -> dict[str, Any]:
         "@type": "WebApplication",
         "name": SITE_NAME,
         "url": f"{base}/search",
+        "image": f"{base}/static/images/logo.png",
         "applicationCategory": "SearchApplication",
         "operatingSystem": "Any",
         "description": get_seo("search_home")["description"],
