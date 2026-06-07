@@ -172,6 +172,7 @@ _RAW_SUPABASE_URL = (os.environ.get("SUPABASE_URL") or "").strip()
 _SUPABASE_URL = _RAW_SUPABASE_URL.rstrip("/")
 _SUPABASE_ANON_KEY = (os.environ.get("SUPABASE_ANON_KEY") or "").strip()
 _SUPABASE_AUTH_ENABLED = bool(_SUPABASE_URL and _SUPABASE_ANON_KEY)
+_GOOGLE_OAUTH_ENABLED = _google_oauth_configured()
 _SUPABASE_URL_ENFORCE = os.environ.get("RUNNING_PYTEST") != "1"
 
 
@@ -627,6 +628,8 @@ _AUTH_BINDING_SKIP_PATHS = frozenset(
     {
         "/auth/callback",
         "/auth/confirm",
+        "/auth/google",
+        "/auth/google/callback",
         "/login",
         "/signup",
         "/logout",
@@ -1989,6 +1992,7 @@ def _inject_current_user():
         ).strip() or None,
         "data_region_label": _data_region_label(),
         "supabase_auth": _SUPABASE_AUTH_ENABLED,
+        "google_oauth": _GOOGLE_OAUTH_ENABLED,
         "supabase_url": _SUPABASE_URL if _SUPABASE_AUTH_ENABLED else "",
         "supabase_anon_key": _SUPABASE_ANON_KEY if _SUPABASE_AUTH_ENABLED else "",
         "csp_nonce": getattr(g, "csp_nonce", ""),
@@ -3441,6 +3445,7 @@ def welcome():
         supabase_url=_SUPABASE_URL,
         supabase_anon_key=_SUPABASE_ANON_KEY,
         supabase_auth=_SUPABASE_AUTH_ENABLED,
+        google_oauth=_GOOGLE_OAUTH_ENABLED,
     )
 
 
@@ -10725,8 +10730,14 @@ def _validated_relative_next(next_url: str | None) -> str:
     return n if _safe_redirect_url(n) == n else ""
 
 
-def _sync_supabase_auth_user(email: str, display_name: str = "", phone: str | None = None) -> int | None:
-    """Ensure a Supabase-authenticated user exists in our local users table. Returns user id."""
+def _sync_supabase_auth_user(
+    email: str,
+    display_name: str = "",
+    phone: str | None = None,
+    *,
+    auth_marker: str = "supabase_auth",
+) -> int | None:
+    """Ensure an OAuth-authenticated user exists in our local users table. Returns user id."""
     email = (email or "").strip().lower()
     if not email:
         return None
@@ -10759,7 +10770,7 @@ def _sync_supabase_auth_user(email: str, display_name: str = "", phone: str | No
         rows = _users_execute(
             "INSERT INTO users (username, email, password_hash, display_name, email_verified) "
             "VALUES (?,?,?,?,?)",
-            [username, email, "supabase_auth", display_name or username, True],
+            [username, email, auth_marker, display_name or username, True],
             return_id=True,
         )
         uid = _row_returning_id(rows)
@@ -10795,6 +10806,7 @@ def _signup_process_post():
         "supabase_url": _SUPABASE_URL,
         "supabase_anon_key": _SUPABASE_ANON_KEY,
         "supabase_auth": _SUPABASE_AUTH_ENABLED,
+        "google_oauth": _GOOGLE_OAUTH_ENABLED,
         "signup_next": _validated_relative_next(request.form.get("next")),
     }
 
@@ -10935,6 +10947,7 @@ def signup():
         "supabase_url": _SUPABASE_URL,
         "supabase_anon_key": _SUPABASE_ANON_KEY,
         "supabase_auth": _SUPABASE_AUTH_ENABLED,
+        "google_oauth": _GOOGLE_OAUTH_ENABLED,
         "signup_next": _validated_relative_next(request.args.get("next")),
     }
 
@@ -11124,7 +11137,12 @@ def login():
             return redirect(dest)
         session.pop("user_id", None)
 
-    sb_ctx = {"supabase_url": _SUPABASE_URL, "supabase_anon_key": _SUPABASE_ANON_KEY, "supabase_auth": _SUPABASE_AUTH_ENABLED}
+    sb_ctx = {
+        "supabase_url": _SUPABASE_URL,
+        "supabase_anon_key": _SUPABASE_ANON_KEY,
+        "supabase_auth": _SUPABASE_AUTH_ENABLED,
+        "google_oauth": _GOOGLE_OAUTH_ENABLED,
+    }
 
     if request.method == "GET":
         oauth_device_msg = None
@@ -11185,6 +11203,150 @@ def login():
 def logout():
     session.pop("user_id", None)
     return redirect(url_for("index"))
+
+
+def _google_oauth_redirect_uri() -> str:
+    return _site_base_url().rstrip("/") + "/auth/google/callback"
+
+
+def _google_oauth_external_id(google_sub: str) -> str:
+    return f"google_direct:{(google_sub or '').strip()}"
+
+
+def _google_oauth_flash_and_redirect_login(message: str) -> Response:
+    flash(message, "oauth_device")
+    return redirect(url_for("login"))
+
+
+def _complete_google_oauth_login(
+    uid: int,
+    google_sub: str,
+    *,
+    external_auth_id: str,
+    next_url: str,
+) -> Response:
+    """Bind Google identity + device cookie, set session, redirect."""
+    new_device_secret: str | None = None
+    existing = _oauth_binding_row_for_user(uid)
+    google_sub = (google_sub or "").strip()
+    external_auth_id = (external_auth_id or "").strip()
+
+    if existing:
+        if not google_sub:
+            return _google_oauth_flash_and_redirect_login(
+                "This account requires Google sign-in. Use Continue with Google."
+            )
+        if (existing.get("google_sub") or "").strip() != google_sub:
+            return _google_oauth_flash_and_redirect_login(
+                "Use the same Google account you used when you first signed up for this site."
+            )
+        if not _oauth_device_cookie_matches_binding(uid, existing):
+            return _google_oauth_flash_and_redirect_login(
+                "This profile is bound to another device or browser profile "
+                "(the first place you completed Google sign-in)."
+            )
+    elif google_sub:
+        new_device_secret = secrets.token_urlsafe(32)
+        try:
+            _users_execute(
+                "INSERT INTO oauth_user_binding (user_id, supabase_auth_uid, google_sub, device_secret_hash) "
+                "VALUES (?,?,?,?)",
+                [uid, external_auth_id, google_sub, _hash_auth_device_secret(new_device_secret)],
+            )
+        except Exception:
+            logger.exception("oauth_user_binding_insert_failed")
+            return _google_oauth_flash_and_redirect_login(
+                "Could not finalize Google sign-in. Please try again."
+            )
+
+    session.permanent = True
+    session["user_id"] = uid
+    resp = redirect(_safe_redirect_url(next_url or "/search"))
+    _set_welcome_seen_cookie(resp)
+    if new_device_secret:
+        _set_auth_device_cookie(resp, new_device_secret)
+    return resp
+
+
+@app.route("/auth/google")
+@limiter.limit("60/minute")
+def google_oauth_start():
+    """Start direct Google OAuth (no Supabase Auth)."""
+    if not _GOOGLE_OAUTH_ENABLED:
+        flash("Google sign-in is not configured.", "oauth_device")
+        return redirect(url_for("login"))
+    next_url = _validated_relative_next(request.args.get("next")) or "/search"
+    state = secrets.token_urlsafe(32)
+    session["google_oauth_state"] = state
+    session["google_oauth_next"] = next_url
+    return redirect(
+        _google_build_authorize_url(
+            redirect_uri=_google_oauth_redirect_uri(),
+            state=state,
+        )
+    )
+
+
+@app.route("/auth/google/callback")
+@limiter.limit("60/minute")
+def google_oauth_callback():
+    """Finish direct Google OAuth and sync the local users row."""
+    if not _GOOGLE_OAUTH_ENABLED:
+        return _google_oauth_flash_and_redirect_login("Google sign-in is not configured.")
+
+    err = (request.args.get("error") or "").strip()
+    if err:
+        logger.info("google_oauth_callback_error=%s", err)
+        return _google_oauth_flash_and_redirect_login("Google sign-in was cancelled or failed.")
+
+    state = (request.args.get("state") or "").strip()
+    expected = (session.pop("google_oauth_state", None) or "").strip()
+    if not state or not expected or not hmac.compare_digest(state, expected):
+        return _google_oauth_flash_and_redirect_login("Google sign-in session expired. Please try again.")
+
+    code = (request.args.get("code") or "").strip()
+    if not code:
+        return _google_oauth_flash_and_redirect_login("Google sign-in did not return an authorization code.")
+
+    redirect_uri = _google_oauth_redirect_uri()
+    token_data = _google_exchange_code(code=code, redirect_uri=redirect_uri)
+    if not token_data:
+        return _google_oauth_flash_and_redirect_login("Could not complete Google sign-in. Please try again.")
+
+    access_token = (token_data.get("access_token") or "").strip()
+    profile = _google_fetch_userinfo(access_token)
+    if not profile:
+        return _google_oauth_flash_and_redirect_login("Could not read your Google profile. Please try again.")
+
+    email = (profile.get("email") or "").strip().lower()
+    google_sub = (profile.get("sub") or "").strip()
+    if not email or "@" not in email or not google_sub:
+        return _google_oauth_flash_and_redirect_login("Google did not provide a verified email address.")
+
+    display_name = (profile.get("name") or profile.get("given_name") or "").strip()
+    try:
+        uid = _sync_supabase_auth_user(
+            email,
+            display_name,
+            auth_marker="google_oauth",
+        )
+    except Exception:
+        logger.exception("google_oauth_sync_failed")
+        return _google_oauth_flash_and_redirect_login("Could not sync your account. Please try again.")
+    if not uid:
+        return _google_oauth_flash_and_redirect_login("Could not create your account. Please try again.")
+    try:
+        uid = int(uid)
+    except (TypeError, ValueError):
+        return _google_oauth_flash_and_redirect_login("Could not create your account. Please try again.")
+
+    next_url = (session.pop("google_oauth_next", None) or "").strip() or "/search"
+    return _complete_google_oauth_login(
+        uid,
+        google_sub,
+        external_auth_id=_google_oauth_external_id(google_sub),
+        next_url=next_url,
+    )
 
 
 @app.route("/auth/callback", methods=["POST"])
