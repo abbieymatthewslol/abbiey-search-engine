@@ -1,10 +1,10 @@
-"""Central SEO copy for abbieysearch — titles, descriptions, and shared tags."""
+"""Central SEO copy for a bee kay — titles, descriptions, and shared tags."""
 
 from __future__ import annotations
 
 from typing import Any
 
-SITE_NAME = "abbieysearch"
+SITE_NAME = "a bee kay"
 SITE_TAGLINE = "Verify everything. Receipts included."
 
 KEYWORDS_DEFAULT = (
@@ -67,7 +67,7 @@ _PAGES: dict[str, dict[str, str]] = {
     "about": {
         "title": f"{SITE_NAME} — built for investigators & truth-seekers",
         "description": (
-            "Why abbieysearch exists: cross-check answers, run OSINT on entities, "
+            "Why a bee kay exists: cross-check answers, run OSINT on entities, "
             "dig indexed .onion references, and repeat investigations without server-side query logs."
         ),
         "og_title": f"{SITE_NAME} — search for people who verify",
@@ -127,7 +127,7 @@ _PAGES: dict[str, dict[str, str]] = {
     "status": {
         "title": f"Service status · {SITE_NAME}",
         "description": (
-            "Live abbieysearch service status — uptime for search, AI summaries, OSINT, "
+            "Live a bee kay service status — uptime for search, AI summaries, OSINT, "
             "and indexed .onion features."
         ),
         "og_title": f"Service status · {SITE_NAME}",
@@ -144,7 +144,7 @@ _PAGES: dict[str, dict[str, str]] = {
         "og_title": f"Community · {SITE_NAME}",
         "og_description": "Discord, GitHub, and Matrix for OSINT-minded search users.",
         "tw_title": f"Community · {SITE_NAME}",
-        "tw_description": "Connect with truth-seekers and security researchers using abbieysearch.",
+        "tw_description": "Connect with truth-seekers and security researchers using a bee kay.",
     },
     "welcome": {
         "title": f"Welcome to {SITE_NAME}",
@@ -160,7 +160,7 @@ _PAGES: dict[str, dict[str, str]] = {
     "blog": {
         "title": f"{SITE_NAME} — Blog",
         "description": (
-            "abbieysearch blog: investigation tips, OSINT workflows, product updates, "
+            "a bee kay blog: investigation tips, OSINT workflows, product updates, "
             "and links to deep web docs and the API."
         ),
         "og_title": f"Blog · {SITE_NAME}",
@@ -182,7 +182,7 @@ _PAGES: dict[str, dict[str, str]] = {
     "privacy": {
         "title": f"Privacy Policy — {SITE_NAME}",
         "description": (
-            "How abbieysearch handles data — no server-side query logs, optional OSINT lookups, "
+            "How a bee kay handles data — no server-side query logs, optional OSINT lookups, "
             "and what we never collect."
         ),
         "og_title": f"Privacy Policy · {SITE_NAME}",
@@ -193,7 +193,7 @@ _PAGES: dict[str, dict[str, str]] = {
     "terms": {
         "title": f"Terms of Service — {SITE_NAME}",
         "description": (
-            "Terms for abbieysearch — lawful OSINT use, investigation tools, and your responsibilities."
+            "Terms for a bee kay — lawful OSINT use, investigation tools, and your responsibilities."
         ),
         "og_title": f"Terms · {SITE_NAME}",
         "og_description": "Your rights and responsibilities when using investigator-friendly search.",

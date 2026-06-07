@@ -35,7 +35,7 @@ class TestRoutes:
         assert resp.status_code == 200
         assert b'id="search-input"' in resp.data
         assert b'aria-label="Search query"' in resp.data
-        assert b'abbiey.<span>search</span>' in resp.data
+        assert b'a bee <span>kay</span>' in resp.data
 
     def test_root_is_search_ui_not_marketing_about_page(self, client):
         """Root is the search UI; long-form product copy lives on /about."""

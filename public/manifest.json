@@ -1,6 +1,6 @@
 {
-  "name": "abbiey.search",
-  "short_name": "abbiey",
+  "name": "a bee kay",
+  "short_name": "abk",
   "description": "Private, fast, no-tracking search engine",
   "start_url": "/search",
   "display": "standalone",
