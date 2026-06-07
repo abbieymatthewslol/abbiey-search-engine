@@ -1,6 +1,6 @@
 #Requires -Version 5.1
 <#
-  Background loop: while Cursor activity is recent, commit and push at most every 5 minutes.
+  Background loop: while Cursor activity is recent, commit and push at most every 15 minutes.
   Started once per workspace session via sessionStart hook.
 #>
 $ErrorActionPreference = "SilentlyContinue"
@@ -14,8 +14,8 @@ $LastPushFile = Join-Path $LocalDir "auto-push-last.timestamp"
 $PidFile = Join-Path $LocalDir "auto-push-watcher.pid"
 $LogFile = Join-Path $LocalDir "auto-push-watcher.log"
 
-$ActivityWindowSec = 300   # consider "active" if activity within last 5 minutes
-$PushIntervalSec = 300     # push at most every 5 minutes while active
+$ActivityWindowSec = 900   # consider "active" if activity within last 15 minutes
+$PushIntervalSec = 900     # push at most every 15 minutes while active
 $PollSec = 60
 
 if (-not (Test-Path -LiteralPath $LocalDir)) {

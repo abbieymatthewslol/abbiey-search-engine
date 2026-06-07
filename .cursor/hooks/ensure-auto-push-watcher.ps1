@@ -1,5 +1,5 @@
 #Requires -Version 5.1
-# sessionStart: mark activity and start the 5-minute auto-push watcher if not already running.
+# sessionStart: mark activity and start the 15-minute auto-push watcher if not already running.
 $ErrorActionPreference = "SilentlyContinue"
 
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
