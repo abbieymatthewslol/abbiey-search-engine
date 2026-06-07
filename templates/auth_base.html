@@ -12,14 +12,38 @@
 
 {% block content %}
 <main class="auth-main" id="abbiey-auth-main">
-    <div class="auth-layout">
-        <a href="{% block auth_back_href %}{{ url_for('search') }}{% endblock %}" class="auth-back-search">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-            {% block auth_back_text %}Back to search{% endblock %}
-        </a>
-        <div class="auth-panel">
-            <div class="auth-container">
-                {% block auth_content %}{% endblock %}
+    <div class="auth-topbar">
+        <nav class="auth-topbar-nav" aria-label="Legal and info">
+            <a href="/about">About</a>
+            <a href="/privacy">Privacy</a>
+            <a href="/terms">Terms</a>
+            <a href="/community">Contact</a>
+        </nav>
+        <div class="auth-topbar-meta">
+            <span class="auth-topbar-copy">&copy; 2026 abbiey.search</span>
+            <span class="auth-privacy-badge">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><path d="M12 3l8 4v6c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V7l8-4z"/></svg>
+                Privacy first by design
+            </span>
+        </div>
+    </div>
+
+    <div class="auth-split">
+        <aside class="auth-brand" aria-label="About abbiey.search">
+            <h1 class="auth-brand-title">abbiey.<span>search</span></h1>
+            <p class="auth-brand-tagline">{% block auth_brand_tagline %}Sign in to save searches, receipts, and monitored entities.{% endblock %}</p>
+            <div class="auth-brand-art">{% include 'includes/auth_desk_illustration.html' %}</div>
+        </aside>
+
+        <div class="auth-layout">
+            <a href="{% block auth_back_href %}{{ url_for('search') }}{% endblock %}" class="auth-back-search">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+                {% block auth_back_text %}Back to search{% endblock %}
+            </a>
+            <div class="auth-panel">
+                <div class="auth-container">
+                    {% block auth_content %}{% endblock %}
+                </div>
             </div>
         </div>
     </div>

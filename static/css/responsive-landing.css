@@ -1,0 +1,380 @@
+/* Fluid landing + auth layout — no horizontal clip, wrap instead of scroll-chop */
+
+html {
+  overflow-x: clip;
+}
+
+body {
+  overflow-x: clip;
+  max-width: 100%;
+}
+
+/* ── Homepage shell ── */
+body:not(.has-results) .app-layout,
+body:not(.has-results) .app-layout main,
+body:not(.has-results) .search-container {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+body:not(.has-results) .search-box-wrapper,
+body:not(.has-results) .home-search-modes,
+body:not(.has-results) .home-recent-wrap,
+body:not(.has-results) .home-features {
+  width: 100%;
+  max-width: min(680px, 100%);
+  margin-left: auto;
+  margin-right: auto;
+  box-sizing: border-box;
+}
+
+body:not(.has-results) .home-features {
+  max-width: min(920px, 100%);
+}
+
+body:not(.has-results) .search-box {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+body:not(.has-results) #search-input {
+  min-width: 0;
+  width: 100%;
+}
+
+body:not(.has-results) .home-hero {
+  width: 100%;
+  padding: 0 clamp(0.25rem, 2vw, 1rem);
+  box-sizing: border-box;
+}
+
+body:not(.has-results) .home-hero-tagline {
+  max-width: 28rem;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Feature cards: fluid columns — always full cards, never cropped */
+.home-features {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+}
+
+.home-feature-card {
+  min-width: 0;
+  height: 100%;
+}
+
+.home-feature-title,
+.home-feature-desc {
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+/* Search modes: wrap like desktop — all chips visible */
+body:not(.has-results) .home-search-modes-row {
+  flex-wrap: wrap;
+  justify-content: center;
+  overflow: visible;
+  width: 100%;
+  gap: 0.35rem 0.4rem;
+}
+
+body:not(.has-results) .home-mode-btn {
+  flex-shrink: 1;
+  white-space: nowrap;
+}
+
+/* Homepage header — flex; wraps cleanly on narrow screens */
+body:not(.has-results) header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem 0.75rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+body:not(.has-results) .header-brand {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: none;
+}
+
+body:not(.has-results) .header-brand-top {
+  min-width: 0;
+}
+
+body:not(.has-results) .logo-with-icon {
+  min-width: 0;
+  max-width: 100%;
+}
+
+body:not(.has-results) .header-nav {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 0.45rem 1.1rem;
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+}
+
+body:not(.has-results) .header-controls {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+body:not(.has-results) .header-nav-link {
+  flex-shrink: 0;
+}
+
+@media (min-width: 769px) {
+  body:not(.has-results) header {
+    flex-wrap: nowrap;
+  }
+
+  body:not(.has-results) .header-brand {
+    flex: 0 1 auto;
+  }
+
+  body:not(.has-results) .header-nav {
+    flex: 1 1 auto;
+    justify-content: center;
+    order: 0;
+  }
+
+  body:not(.has-results) .header-controls {
+    flex: 0 0 auto;
+    margin-left: 0;
+  }
+}
+
+@media (max-width: 768px) {
+  body:not(.has-results) .header-nav {
+    flex: 1 1 100%;
+    order: 3;
+    padding: 0.15rem 0 0.05rem;
+  }
+
+  body:not(.has-results) .header-controls {
+    margin-left: auto;
+  }
+}
+
+/* ── Auth shell ── */
+body.page-auth .auth-main,
+body.page-auth .auth-split,
+body.page-auth .auth-layout,
+body.page-auth .auth-panel {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.auth-topbar {
+  flex-wrap: wrap;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.auth-topbar-nav {
+  flex-wrap: wrap;
+  overflow: visible;
+}
+
+.auth-topbar-meta {
+  flex-wrap: wrap;
+}
+
+.auth-brand-tagline {
+  max-width: min(22rem, 100%);
+}
+
+.auth-desk-illustration {
+  width: min(280px, 100%);
+  height: auto;
+}
+
+.auth-label-row {
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
+}
+
+.auth-legal {
+  overflow-wrap: anywhere;
+}
+
+/* ── Breakpoints: scale chrome, keep full content ── */
+
+@media (max-width: 1024px) {
+  body:not(.has-results) .search-container {
+    padding: 0 clamp(0.5rem, 2vw, 1rem);
+  }
+
+  .home-features {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  body:not(.has-results) main {
+    padding-top: clamp(1.25rem, 4vh, 2.5rem);
+    padding-left: calc(0.75rem + env(safe-area-inset-left, 0px));
+    padding-right: calc(0.75rem + env(safe-area-inset-right, 0px));
+  }
+
+  body:not(.has-results) .home-logo {
+    font-size: clamp(1.85rem, 7vw, 2.75rem);
+  }
+
+  body:not(.has-results) .home-hero-tagline {
+    font-size: clamp(0.8125rem, 2.5vw, 0.9375rem);
+  }
+
+  .auth-split {
+    grid-template-columns: 1fr;
+    gap: clamp(1rem, 3vh, 1.75rem);
+    padding: clamp(1.25rem, 4vh, 2rem) clamp(0.85rem, 4vw, 1.5rem);
+    padding-bottom: calc(clamp(1.25rem, 4vh, 2rem) + env(safe-area-inset-bottom, 0px));
+  }
+
+  .auth-brand {
+    align-items: center;
+    text-align: center;
+    padding-right: 0;
+  }
+
+  .auth-brand-art {
+    display: flex;
+    justify-content: center;
+    margin-top: 0.75rem;
+    opacity: 0.65;
+  }
+
+  .auth-desk-illustration {
+    width: min(240px, 72vw);
+  }
+}
+
+@media (max-width: 520px) {
+  body:not(.has-results) header {
+    padding-left: calc(0.65rem + env(safe-area-inset-left, 0px));
+    padding-right: calc(0.65rem + env(safe-area-inset-right, 0px));
+  }
+
+  body:not(.has-results) .logo {
+    font-size: clamp(0.875rem, 3.8vw, 1rem);
+  }
+
+  body:not(.has-results) .logo-with-icon .swan-icon {
+    width: clamp(1rem, 3.5vw, 1.25rem);
+  }
+
+  body:not(.has-results) .header-auth-btn {
+    padding: 0.38rem clamp(0.55rem, 2.5vw, 0.85rem);
+    font-size: clamp(0.6875rem, 2.8vw, 0.8125rem);
+  }
+
+  body:not(.has-results) .header-home-theme {
+    width: clamp(34px, 9vw, 38px);
+    height: clamp(34px, 9vw, 38px);
+  }
+
+  body:not(.has-results) .search-box {
+    padding: 0.4rem 0.4rem 0.4rem 0.85rem;
+    gap: clamp(0.12rem, 1vw, 0.25rem);
+  }
+
+  body:not(.has-results) .search-icon.icon-search-glass {
+    width: clamp(1rem, 4vw, 1.2rem);
+    height: clamp(1rem, 4vw, 1.2rem);
+  }
+
+  body:not(.has-results) .search-box .reverse-image-btn,
+  body:not(.has-results) .search-box .voice-btn {
+    width: clamp(34px, 9vw, 38px);
+    height: clamp(34px, 9vw, 38px);
+  }
+
+  body:not(.has-results) .search-btn.search-btn-icon {
+    width: clamp(34px, 9vw, 40px);
+    height: clamp(34px, 9vw, 40px);
+  }
+
+  body:not(.has-results) #search-input,
+  #search-input {
+    font-size: 16px;
+  }
+
+  body:not(.has-results) .home-search-modes-label {
+    letter-spacing: 0.1em;
+  }
+
+  body:not(.has-results) .home-mode-btn {
+    font-size: clamp(0.75rem, 2.8vw, 0.8125rem);
+    padding: 0.36rem clamp(0.55rem, 2.5vw, 0.75rem);
+  }
+
+  .home-features {
+    grid-template-columns: 1fr;
+    gap: 0.55rem;
+    margin-top: clamp(1.25rem, 4vh, 1.75rem);
+  }
+
+  .auth-topbar {
+    gap: 0.5rem;
+    padding-left: calc(0.65rem + env(safe-area-inset-left, 0px));
+    padding-right: calc(0.65rem + env(safe-area-inset-right, 0px));
+  }
+
+  .auth-topbar-nav a {
+    font-size: clamp(0.6875rem, 2.8vw, 0.8125rem);
+  }
+
+  .auth-topbar-meta {
+    font-size: clamp(0.625rem, 2.5vw, 0.75rem);
+    gap: 0.4rem 0.75rem;
+  }
+
+  .auth-brand-title {
+    font-size: clamp(1.55rem, 6.5vw, 2rem);
+  }
+
+  .auth-panel .auth-container {
+    padding: clamp(1.1rem, 4vw, 1.35rem) clamp(0.9rem, 3.5vw, 1.15rem);
+  }
+
+  body.page-auth .auth-input-pill input {
+    font-size: 16px;
+  }
+}
+
+@media (max-width: 360px) {
+  body:not(.has-results) .header-nav {
+    gap: 0.35rem 0.75rem;
+  }
+
+  body:not(.has-results) .header-nav-link {
+    font-size: 0.6875rem;
+  }
+
+  body:not(.has-results) .home-mode-btn[data-search-mode="onion"]::before {
+    margin-right: 0.3rem;
+  }
+}
+
+@media (min-width: 769px) and (max-width: 1100px) {
+  .auth-split {
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 400px);
+    gap: clamp(1.5rem, 4vw, 3rem);
+    padding-left: clamp(1rem, 3vw, 2rem);
+    padding-right: clamp(1rem, 3vw, 2rem);
+  }
+}

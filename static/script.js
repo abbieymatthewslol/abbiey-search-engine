@@ -566,17 +566,17 @@ document.addEventListener("DOMContentLoaded", () => {
   })();
 
   // ===== Theme toggle =====
-  const toggle = document.getElementById("theme-toggle");
+  document.querySelectorAll(".theme-toggle-btn").forEach((toggle) => {
+    toggle.addEventListener("click", () => {
+      const next = html.getAttribute("data-theme") === "dark" ? "light" : "dark";
+      html.setAttribute("data-theme", next);
+      localStorage.setItem("theme", next);
+      const om = document.getElementById("header-overflow-menu");
+      if (om) om.setAttribute("hidden", "");
+    });
+  });
   const saved = localStorage.getItem("theme");
   if (saved) html.setAttribute("data-theme", saved);
-
-  if (toggle) toggle.addEventListener("click", () => {
-    const next = html.getAttribute("data-theme") === "dark" ? "light" : "dark";
-    html.setAttribute("data-theme", next);
-    localStorage.setItem("theme", next);
-    const om = document.getElementById("header-overflow-menu");
-    if (om) om.setAttribute("hidden", "");
-  });
 
   // ===== Custom accent color =====
   const savedAccent = localStorage.getItem("accent-color");
@@ -1761,22 +1761,41 @@ document.addEventListener("DOMContentLoaded", () => {
   // ===== Rotating placeholder =====
   const rotatingInput = document.querySelector("[data-placeholder-rotate]");
   if (rotatingInput && !rotatingInput.value) {
-    const placeholders = [
+    const mobilePlaceholders = [
       "Search anything…",
+      "Try an IP or email…",
+      "site:example.com",
+      "Name, domain, or handle…",
+    ];
+    const desktopPlaceholders = [
+      "Try: site:example.com • 8.8.8.8 • user@domain • BTC address",
       "Try a name, email, or username…",
       "Search a domain or IP address…",
-      "Ask anything — weather, math, conversions…",
       "Search phone numbers, crypto addresses…",
-      "Find people, places, or things…",
       "Try a hashtag or social handle…",
     ];
+    const narrowMq = window.matchMedia("(max-width: 520px)");
+    function placeholdersForViewport() {
+      return narrowMq.matches ? mobilePlaceholders : desktopPlaceholders;
+    }
+    let placeholders = placeholdersForViewport();
     let phIdx = 0;
+    function applyPlaceholder(idx) {
+      const list = placeholdersForViewport();
+      placeholders = list;
+      phIdx = idx % list.length;
+      rotatingInput.setAttribute("placeholder", list[phIdx]);
+    }
     function rotatePlaceholder() {
-      phIdx = (phIdx + 1) % placeholders.length;
-      rotatingInput.setAttribute("placeholder", placeholders[phIdx]);
+      applyPlaceholder(phIdx + 1);
     }
     const phInterval = window.setInterval(rotatePlaceholder, 3500);
     rotatingInput.addEventListener("focus", () => clearInterval(phInterval));
+    if (typeof narrowMq.addEventListener === "function") {
+      narrowMq.addEventListener("change", () => applyPlaceholder(0));
+    } else if (typeof narrowMq.addListener === "function") {
+      narrowMq.addListener(() => applyPlaceholder(0));
+    }
   }
 
   // ===== Operator chip removal =====
