@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     {% include 'includes/theme_bootstrap.html' %}
-    <title>{% if query %}{{ query }} — {{ search_mode_title_suffix(search_type) }} — abbieysearch{% else %}{{ get_seo('search_home').title }}{% endif %}</title>
+    <title>{% if query %}{{ query }} — {{ search_mode_title_suffix(search_type) }} — a bee kay{% else %}{{ get_seo('search_home').title }}{% endif %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=deploy_hash) }}">
     {% if search_type == 'images' or not query %}
     <link rel="stylesheet" href="{{ url_for('static', filename='visual-search.css', v=deploy_hash) }}">
@@ -19,9 +19,9 @@
     <script defer src="/_vercel/speed-insights/script.js"></script>
     <!-- SEO meta tags -->
     {% if query %}
-    <meta name="description" content="Search results for &quot;{{ query }}&quot; on abbieysearch — sourced snippets, optional AI summary, and privacy-first search with no server-side query logging.">
-    <meta property="og:title" content="{{ query }} — {{ search_mode_title_suffix(search_type) }} — abbieysearch">
-    <meta property="og:description" content="Sourced search results for &quot;{{ query }}&quot; on abbieysearch — read snippets and evidence without ad-tech tracking.">
+    <meta name="description" content="Search results for &quot;{{ query }}&quot; on a bee kay — sourced snippets, optional AI summary, and privacy-first search with no server-side query logging.">
+    <meta property="og:title" content="{{ query }} — {{ search_mode_title_suffix(search_type) }} — a bee kay">
+    <meta property="og:description" content="Sourced search results for &quot;{{ query }}&quot; on a bee kay — read snippets and evidence without ad-tech tracking.">
     <meta property="og:url" content="{{ site_base_url }}{{ search_mode_href(search_type, query, region=region, lang=lang, time_filter=time_filter or '', safesearch=safesearch or 'off', cleanweb=cleanweb, open_knowledge=open_knowledge, onion_mode=(onion_mode if search_type == 'onion' else ''), img_scroll_extras=(img_scroll_extras if search_type == 'images' else ''), people_pf_extra=(people_pf_url_extra if search_type == 'people' else ''), mybot_id=(mybot_id if search_type == 'mybot' else none), search_type_saved=(search_type == 'saved')) }}">
     <link rel="canonical" href="{{ site_base_url }}{{ search_mode_href(search_type, query, region=region, lang=lang, time_filter=time_filter or '', safesearch=safesearch or 'off', cleanweb=cleanweb, open_knowledge=open_knowledge, onion_mode=(onion_mode if search_type == 'onion' else ''), img_scroll_extras=(img_scroll_extras if search_type == 'images' else ''), people_pf_extra=(people_pf_url_extra if search_type == 'people' else ''), mybot_id=(mybot_id if search_type == 'mybot' else none), search_type_saved=(search_type == 'saved')) }}">
     {% else %}
@@ -32,14 +32,14 @@
     <meta property="og:url" content="{{ site_base_url }}/search">
     {% endif %}
     <meta name="keywords" content="{{ get_seo('search_home').keywords }}">
-    <meta name="author" content="abbieysearch">
+    <meta name="author" content="a bee kay">
     <meta property="og:type" content="website">
-    <meta property="og:site_name" content="abbieysearch">
+    <meta property="og:site_name" content="a bee kay">
     <meta property="og:image" content="{{ site_base_url }}{{ url_for('static', filename='og-image.png', v=deploy_hash) }}">
     <meta name="twitter:card" content="summary_large_image">
     {% if query %}
-    <meta name="twitter:title" content="{{ query }} — {{ search_mode_title_suffix(search_type) }} — abbieysearch">
-    <meta name="twitter:description" content="Sourced results for “{{ query }}” on abbieysearch — private search, no server-side query logging.">
+    <meta name="twitter:title" content="{{ query }} — {{ search_mode_title_suffix(search_type) }} — a bee kay">
+    <meta name="twitter:description" content="Sourced results for “{{ query }}” on a bee kay — private search, no server-side query logging.">
     {% else %}
     <meta name="twitter:title" content="{{ get_seo('search_home').tw_title }}">
     <meta name="twitter:description" content="{{ get_seo('search_home').tw_description }}">
@@ -52,12 +52,12 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="abbieysearch">
+    <meta name="apple-mobile-web-app-title" content="a bee kay">
     <link rel="apple-touch-icon" href="{{ url_for('static', filename='icon-192.png', v=deploy_hash) }}">
     <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='icon-192.png', v=deploy_hash) }}">
     <link rel="shortcut icon" href="{{ url_for('static', filename='favicon.ico', v=deploy_hash) }}">
     <!-- OpenSearch -->
-    <link rel="search" type="application/opensearchdescription+xml" title="abbieysearch" href="/opensearch.xml">
+    <link rel="search" type="application/opensearchdescription+xml" title="a bee kay" href="/opensearch.xml">
     <!-- JSON-LD -->
     {% if not query %}
     <script type="application/ld+json">
@@ -68,7 +68,7 @@
 <body class="{% if query %}has-results page-search--{{ search_type }}{% endif %}{% if search_type == 'images' %} visual-search-mode{% endif %}{% if img_rev_key and img_rev_source %} vis-active-session{% endif %} has-site-bottom-nav">
     <noscript>
         <div class="noscript-banner" role="note">
-            <strong>abbieysearch</strong> &mdash; OSINT-friendly search with receipts.
+            <strong>a bee kay</strong> &mdash; OSINT-friendly search with receipts.
             <a href="/privacy">Privacy Policy</a> &middot; <a href="/terms">Terms</a> &middot; <a href="/search">Search</a>
         </div>
     </noscript>
@@ -89,7 +89,7 @@
                 <div class="header-overflow-menu" id="header-overflow-menu" hidden>
                     <div class="overflow-menu-row">
                         <span class="overflow-menu-label">Answer mode</span>
-                        <button type="button" class="privacy-badge" id="privacy-badge" aria-label="How abbieysearch answers" aria-haspopup="dialog" aria-expanded="false" title="How abbieysearch answers">
+                        <button type="button" class="privacy-badge" id="privacy-badge" aria-label="How a bee kay answers" aria-haspopup="dialog" aria-expanded="false" title="How a bee kay answers">
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
                             <span>Depth + receipts</span>
                         </button>
@@ -420,7 +420,7 @@
                 {# ===== PRIVACY ===== #}
                 <section class="settings-section">
                     <h3 class="settings-section-title">Privacy</h3>
-                    <p class="settings-hint settings-privacy-lead">abbieysearch does not write your queries to server-side search logs. Optional history lives only where you turn it on (this device and, if you are signed in, your account row).</p>
+                    <p class="settings-hint settings-privacy-lead">a bee kay does not write your queries to server-side search logs. Optional history lives only where you turn it on (this device and, if you are signed in, your account row).</p>
                     <div class="settings-row">
                         <span class="settings-row-label">Incognito session</span>
                         <label class="settings-toggle">
@@ -1826,7 +1826,7 @@
         </div>
     </div>
     <footer>
-        <p class="footer-tagline"><a href="/about" class="footer-about-link"><strong>abbiey<span>.</span>search</strong></a> <span class="footer-tagline-em">&mdash; Real answers. Full context. No fluff.</span> <span class="footer-credit">by abbiey matthews</span></p>
+        <p class="footer-tagline"><a href="/about" class="footer-about-link"><strong>a bee <span>kay</span></strong></a> <span class="footer-tagline-em">&mdash; Real answers. Full context. No fluff.</span> <span class="footer-credit">by a bee kay</span></p>
         <p class="footer-links">
             <a href="/privacy">Privacy Policy</a>
             &nbsp;&middot;&nbsp;
@@ -1839,8 +1839,8 @@
             {% endif %}
         </p>
         {% if not query %}
-        <p class="home-about-blurb" id="what-is-abbieysearch">
-            <strong>abbieysearch</strong> is built for people who want the why: direct answers, evidence you can inspect,
+        <p class="home-about-blurb" id="what-is-abk">
+            <strong>a bee kay</strong> is built for people who want the why: direct answers, evidence you can inspect,
             tradeoffs that are spelled out, and room to go deeper than a link list. Searching works immediately
             &mdash; <strong>no account or sign-in is required</strong>. An account is optional for bookmarks, synced history, or developer tools.
         </p>
@@ -1887,7 +1887,7 @@
         document.addEventListener("DOMContentLoaded", () => {
             const toast = document.createElement("div");
             toast.style.cssText = "position:fixed;top:1.5rem;left:50%;transform:translateX(-50%);background:var(--bg-elevated);color:var(--text);border:1px solid var(--border);padding:.75rem 1.5rem;border-radius:8px;font-weight:600;z-index:10000;box-shadow:var(--shadow-lg)";
-            toast.textContent = "Welcome to abbiey.search, @{{ current_user.username if current_user else '' }}.";
+            toast.textContent = "Welcome to a bee kay, @{{ current_user.username if current_user else '' }}.";
             document.body.appendChild(toast);
             setTimeout(() => toast.remove(), 6000);
         });

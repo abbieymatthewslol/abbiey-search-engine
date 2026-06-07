@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     {% include 'includes/theme_bootstrap.html' %}
-    <title>{% block title %}abbieysearch{% endblock %}</title>
+    <title>{% block title %}a bee kay{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=deploy_hash) }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/input-inner-reset.css', v=deploy_hash) }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/auth-search-align.css', v=deploy_hash) }}">
@@ -27,7 +27,7 @@
     <meta name="description" content="{% block meta_description %}{{ get_seo('default').description }}{% endblock %}">
     <meta name="keywords" content="{% block meta_keywords %}{{ get_seo('default').keywords }}{% endblock %}">
     <meta property="og:type" content="website">
-    <meta property="og:site_name" content="abbieysearch">
+    <meta property="og:site_name" content="a bee kay">
     <meta property="og:title" content="{% block og_title %}{{ get_seo('default').og_title }}{% endblock %}">
     <meta property="og:description" content="{% block og_description %}{{ get_seo('default').og_description }}{% endblock %}">
     <meta property="og:url" content="{% block og_url %}{{ site_base_url }}{{ request.path }}{% endblock %}">
@@ -40,10 +40,10 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="abbieysearch">
+    <meta name="apple-mobile-web-app-title" content="a bee kay">
     <meta name="twitter:image" content="{{ site_base_url }}{{ url_for('static', filename='og-image.png', v=deploy_hash) }}">
     <link rel="apple-touch-icon" href="{{ url_for('static', filename='icon-192.png', v=deploy_hash) }}">
-    <link rel="search" type="application/opensearchdescription+xml" title="abbieysearch" href="/opensearch.xml">
+    <link rel="search" type="application/opensearchdescription+xml" title="a bee kay" href="/opensearch.xml">
 </head>
 <body class="{% block body_class %}{% endblock %}">
 
@@ -61,7 +61,7 @@
                 <div class="header-overflow-menu" id="header-overflow-menu" hidden>
                     <div class="overflow-menu-row">
                         <span class="overflow-menu-label">Answer mode</span>
-                        <button type="button" class="privacy-badge" id="privacy-badge" aria-label="How abbieysearch answers" aria-haspopup="dialog" aria-expanded="false" title="How abbieysearch answers">
+                        <button type="button" class="privacy-badge" id="privacy-badge" aria-label="How a bee kay answers" aria-haspopup="dialog" aria-expanded="false" title="How a bee kay answers">
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
                             <span>Depth + receipts</span>
                         </button>
@@ -275,7 +275,7 @@
                 </section>
                 <section class="settings-section">
                     <h3 class="settings-section-title">Privacy</h3>
-                    <p class="settings-hint settings-privacy-lead">abbieysearch does not retain raw search query text in application analytics. Optional history is off by default.</p>
+                    <p class="settings-hint settings-privacy-lead">a bee kay does not retain raw search query text in application analytics. Optional history is off by default.</p>
                     <div class="settings-row">
                         <span class="settings-row-label">Incognito session</span>
                         <label class="settings-toggle">
@@ -360,7 +360,7 @@
     {% block content %}{% endblock %}
 
     <footer>
-        <p><strong>abbiey.<span>search</span></strong> &mdash; Real answers. Full context. No fluff.</p>
+        <p><strong>a bee <span>kay</span></strong> &mdash; Real answers. Full context. No fluff.</p>
         <p class="footer-sub">Direct takes, source-backed evidence, and space to go deeper when the question deserves it.</p>
         <p class="footer-links">
             <a href="/about">About</a>

@@ -5,17 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="deploy-hash" content="{{ deploy_hash }}">
     {% include 'includes/theme_bootstrap.html' %}
-    <title>{{ title }} — abbieysearch docs</title>
-    <meta name="description" content="{{ description if description else title + ' — abbieysearch public documentation.' }}">
+    <title>{{ title }} — a bee kay docs</title>
+    <meta name="description" content="{{ description if description else title + ' — a bee kay public documentation.' }}">
     <meta property="og:type" content="article">
-    <meta property="og:site_name" content="abbieysearch">
-    <meta property="og:title" content="{{ title }} — abbieysearch docs">
-    <meta property="og:description" content="{{ description if description else title + ' — abbieysearch public documentation.' }}">
+    <meta property="og:site_name" content="a bee kay">
+    <meta property="og:title" content="{{ title }} — a bee kay docs">
+    <meta property="og:description" content="{{ description if description else title + ' — a bee kay public documentation.' }}">
     <meta property="og:url" content="{{ site_base_url }}/docs/{{ slug }}">
     <meta property="og:image" content="{{ site_base_url }}{{ url_for('static', filename='og-image.png', v=deploy_hash) }}">
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="{{ title }} — abbieysearch docs">
-    <meta name="twitter:description" content="{{ description if description else title + ' — abbieysearch documentation.' }}">
+    <meta name="twitter:title" content="{{ title }} — a bee kay docs">
+    <meta name="twitter:description" content="{{ description if description else title + ' — a bee kay documentation.' }}">
     <meta name="twitter:image" content="{{ site_base_url }}{{ url_for('static', filename='og-image.png', v=deploy_hash) }}">
     <link rel="canonical" href="{{ site_base_url }}/docs/{{ slug }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=deploy_hash) }}">
