@@ -101,6 +101,12 @@ from seo_copy import (
     manifest_description as _seo_manifest_description,
     opensearch_tags as _seo_opensearch_tags,
 )
+from google_oauth import (
+    google_oauth_configured as _google_oauth_configured,
+    build_authorize_url as _google_build_authorize_url,
+    exchange_code as _google_exchange_code,
+    fetch_userinfo as _google_fetch_userinfo,
+)
 from search_protocol import (
     ProtocolDepth,
     build_protocol_markdown,
