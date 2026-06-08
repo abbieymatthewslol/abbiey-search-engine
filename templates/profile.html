@@ -34,6 +34,8 @@
             <p class="profile-username">@{{ user.username }}</p>
             {% if user.bio %}<p class="profile-bio">{{ user.bio }}</p>{% endif %}
             <p class="profile-meta">
+                <a href="/dashboard">Dashboard</a>
+                &nbsp;·&nbsp;
                 Member since {% if user.created_at is string %}{{ user.created_at[:10] }}{% else %}{{ user.created_at.strftime("%Y-%m-%d") }}{% endif %}
                 &nbsp;·&nbsp;
                 {{ bookmarks|length }} bookmark{% if bookmarks|length != 1 %}s{% endif %}

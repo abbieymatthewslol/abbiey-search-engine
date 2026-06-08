@@ -177,6 +177,9 @@ class TestRoutes:
         assert resp.status_code == 200
         assert b"Built for people who verify." in resp.data
         assert b"images/logo.png" in resp.data
+        assert b"home-feature-grid" in resp.data
+        assert b"OSINT Signals" in resp.data
+        assert b"Evidence Receipts" in resp.data
 
     def test_search_home_preserves_image_mode_from_url(self, client):
         """Deep-link / empty home: ?type=images should set hidden type + show Images mode."""

@@ -106,6 +106,7 @@
             </button>
 
             {% if current_user %}
+            <a href="/dashboard" class="header-auth-btn" aria-label="Dashboard">Dashboard</a>
             <a href="/profile" class="user-avatar-chip" title="Your profile" aria-label="Profile">
                 <span class="user-avatar-initials">{{ (current_user.display_name or current_user.username)[0] | upper }}</span>
                 <span class="user-avatar-name">{{ current_user.display_name or current_user.username }}</span>
@@ -152,7 +153,7 @@
                                 <button type="button" class="color-swatch" data-color="#2563eb" style="background:#2563eb" title="Blue"></button>
                                 <button type="button" class="color-swatch" data-color="#7c3aed" style="background:#7c3aed" title="Violet"></button>
                             </div>
-                            <input type="color" id="custom-color" value="#e7e5e4" title="Custom color" class="settings-color-picker">
+                            <input type="color" id="custom-color" value="#8b5cf6" title="Custom color" class="settings-color-picker">
                         </div>
                     </div>
                     <div class="settings-row">

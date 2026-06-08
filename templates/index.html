@@ -135,12 +135,16 @@
                     {% if not current_user %}
                     <a href="/signup" class="overflow-menu-link" aria-label="Create account">Create account</a>
                     {% endif %}
+                    {% if current_user %}
+                    <a href="/dashboard" class="overflow-menu-link" aria-label="Dashboard">Dashboard</a>
+                    {% endif %}
                     <a href="/developer" class="overflow-menu-link" title="API keys &amp; developer tools" aria-label="Developer: API keys">Developer</a>
                 </div>
             </div>
 
             {# User account nav #}
             {% if current_user %}
+            <a href="/dashboard" class="header-auth-btn" aria-label="Dashboard">Dashboard</a>
             <a href="/profile" class="user-avatar-chip" title="Your profile" aria-label="Profile">
                 <span class="user-avatar-initials">{{ (current_user.display_name or current_user.username)[0] | upper }}</span>
                 <span class="user-avatar-name">{{ current_user.display_name or current_user.username }}</span>
@@ -200,7 +204,7 @@
                                 <button type="button" class="color-swatch" data-color="#d97706" style="background:#d97706" title="Amber"></button>
                                 <button type="button" class="color-swatch" data-color="#0891b2" style="background:#0891b2" title="Cyan"></button>
                             </div>
-                            <input type="color" id="custom-color" value="#e7e5e4" title="Custom color" class="settings-color-picker">
+                            <input type="color" id="custom-color" value="#8b5cf6" title="Custom color" class="settings-color-picker">
                         </div>
                     </div>
                     <div class="settings-row">
@@ -609,6 +613,36 @@
                 </div>
             </nav>
             <p class="home-message-sub" aria-label="Search positioning">Entities, OSINT signals, .onion index, breach check — same search, deeper runs, receipts on the page.</p>
+            <div class="home-feature-grid" aria-label="Search capabilities">
+                <a href="/search?q=8.8.8.8" class="home-feature-card">
+                    <span class="home-feature-icon" aria-hidden="true">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
+                    </span>
+                    <h3 class="home-feature-title">OSINT Signals</h3>
+                    <p class="home-feature-desc">Public signals, DNS, RDAP, and infrastructure lookups.</p>
+                </a>
+                <a href="/search?q=user@example.com&amp;type=email" class="home-feature-card">
+                    <span class="home-feature-icon" aria-hidden="true">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                    </span>
+                    <h3 class="home-feature-title">Breach Intelligence</h3>
+                    <p class="home-feature-desc">Email and domain exposure checks with receipts.</p>
+                </a>
+                <a href="/search?type=onion" class="home-feature-card">
+                    <span class="home-feature-icon" aria-hidden="true">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3c-2 4-2 8 0 12M12 3c2 4 2 8 0 12M3 12h18"/></svg>
+                    </span>
+                    <h3 class="home-feature-title">Deep Web Search</h3>
+                    <p class="home-feature-desc">Indexed .onion references via Ahmia and DDG.</p>
+                </a>
+                <a href="/search?q=verify+sources" class="home-feature-card">
+                    <span class="home-feature-icon" aria-hidden="true">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M9 15l2 2 4-4"/></svg>
+                    </span>
+                    <h3 class="home-feature-title">Evidence Receipts</h3>
+                    <p class="home-feature-desc">Source-linked results with traceability on the page.</p>
+                </a>
+            </div>
             <div class="home-recent-wrap">
                 <div id="recent-searches-home" class="recent-searches-home"></div>
             </div>

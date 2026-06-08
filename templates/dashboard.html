@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}{{ get_seo('dashboard').title }}{% endblock %}
+{% block meta_description %}{{ get_seo('dashboard').description }}{% endblock %}
+{% block og_title %}{{ get_seo('dashboard').og_title }}{% endblock %}
+{% block og_description %}{{ get_seo('dashboard').og_description }}{% endblock %}
+{% block tw_title %}{{ get_seo('dashboard').tw_title }}{% endblock %}
+{% block tw_description %}{{ get_seo('dashboard').tw_description }}{% endblock %}
+{% block body_class %}page-dashboard{% endblock %}
+
+{% block content %}
+<main class="dashboard-page" id="dashboard-root" data-logged-in="{{ 'true' if user else 'false' }}">
+    {% if not user %}
+    <div class="dashboard-guest-cta">
+        <h2>Your search dashboard</h2>
+        <p>Sign in to see your recent searches, bookmarks, investigations, and a personalized view of how you use a bee kay.</p>
+        <div class="dashboard-guest-actions">
+            <a href="/login?next=/dashboard" class="dashboard-quick-btn dashboard-quick-btn--primary">Sign in</a>
+            <a href="/signup?next=/dashboard" class="dashboard-quick-btn">Create account</a>
+            <a href="/search" class="dashboard-quick-btn">Back to search</a>
+        </div>
+    </div>
+    <div id="dashboard-guest-local" class="dashboard-widget" hidden>
+        <h3 class="dashboard-widget-title">On this device</h3>
+        <ul class="dashboard-list" id="dashboard-local-history"></ul>
+    </div>
+    {% else %}
+    <div class="dashboard-header">
+        <div class="dashboard-greeting">
+            <div class="dashboard-avatar" id="dashboard-avatar" aria-hidden="true">{{ (user.display_name or user.username)[0] | upper }}</div>
+            <div class="dashboard-greeting-text">
+                <h1 id="dashboard-greeting-title">Welcome back</h1>
+                <p id="dashboard-greeting-sub">Loading your activity…</p>
+            </div>
+        </div>
+        <div class="dashboard-activity-bar">
+            <div class="dashboard-activity-label">
+                <span>Activity</span>
+                <span id="dashboard-activity-pct">—</span>
+            </div>
+            <div class="dashboard-activity-track">
+                <div class="dashboard-activity-fill" id="dashboard-activity-fill" style="width:0%"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="dashboard-quick-actions">
+        <a href="/search" class="dashboard-quick-btn dashboard-quick-btn--primary">New search</a>
+        <a href="/profile#cases-section" class="dashboard-quick-btn">Investigations</a>
+        <a href="/profile" class="dashboard-quick-btn">Profile</a>
+    </div>
+
+    <div class="dashboard-stats" id="dashboard-stats" aria-label="Your stats"></div>
+
+    <div class="dashboard-focus" id="dashboard-focus" aria-label="Your search focus" hidden></div>
+
+    <div class="dashboard-grid" id="dashboard-grid">
+        <section class="dashboard-widget dashboard-widget--emphasis" id="widget-searches">
+            <h3 class="dashboard-widget-title">Recent searches</h3>
+            <div class="dashboard-empty">Loading…</div>
+        </section>
+        <section class="dashboard-widget" id="widget-bookmarks">
+            <h3 class="dashboard-widget-title">Bookmarks</h3>
+            <div class="dashboard-empty">Loading…</div>
+        </section>
+        <section class="dashboard-widget" id="widget-cases">
+            <h3 class="dashboard-widget-title">Investigations</h3>
+            <div class="dashboard-empty">Loading…</div>
+        </section>
+        <section class="dashboard-widget" id="widget-entities">
+            <h3 class="dashboard-widget-title">Entity hints</h3>
+            <div class="dashboard-empty">Loading…</div>
+        </section>
+    </div>
+    {% endif %}
+</main>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='dashboard.js', v=deploy_hash) }}" defer></script>
+{% endblock %}

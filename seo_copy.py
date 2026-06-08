@@ -146,6 +146,17 @@ _PAGES: dict[str, dict[str, str]] = {
         "tw_title": f"Community · {SITE_NAME}",
         "tw_description": "Connect with truth-seekers and security researchers using a bee kay.",
     },
+    "dashboard": {
+        "title": f"Dashboard · {SITE_NAME}",
+        "description": (
+            "Your personalized search dashboard — recent queries, bookmarks, investigations, "
+            "and activity tailored to how you use a bee kay."
+        ),
+        "og_title": f"Dashboard · {SITE_NAME}",
+        "og_description": "Recent searches, bookmarks, and investigations at a glance.",
+        "tw_title": f"Dashboard · {SITE_NAME}",
+        "tw_description": "Personalized search activity and investigation overview.",
+    },
     "welcome": {
         "title": f"Welcome to {SITE_NAME}",
         "description": (

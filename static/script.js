@@ -893,7 +893,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // ===== Settings Modal =====
   const _S = {
     theme:         { key: "theme",                 def: "dark"    },
-    accent:        { key: "accent-color",          def: "#e7e5e4" },
+    accent:        { key: "accent-color",          def: "#8b5cf6" },
     searchAccent:  { key: "abbiey_search_accent",  def: ""        },
     searchInputColor:   { key: "abbiey_search_input_color",   def: "" },
     searchSurfaceColor: { key: "abbiey_search_surface_color", def: "" },

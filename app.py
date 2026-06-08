@@ -96,6 +96,7 @@ from search_routing import (
     search_mode_title_suffix as _search_mode_title_suffix,
 )
 from seo_copy import (
+    SITE_NAME as _SITE_NAME,
     get_seo as _get_seo,
     json_ld_webapp as _seo_json_ld_webapp,
     manifest_description as _seo_manifest_description,
@@ -12329,6 +12330,60 @@ def api_user_recent_searches():
     return jsonify(unique)
 
 
+def _dashboard_focus_modes(history_rows: list) -> list:
+    """Top search modes from recent history for personalized dashboard emphasis."""
+    counts: dict[str, int] = {}
+    for row in history_rows or []:
+        mode = (row.get("search_type") or "text").strip() or "text"
+        counts[mode] = counts.get(mode, 0) + 1
+    ranked = sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+    return [{"type": mode, "count": cnt} for mode, cnt in ranked[:3]]
+
+
+def _dashboard_entity_hints(queries: list[str], limit: int = 5) -> list:
+    """Surface entity types from recent queries via entity_parser."""
+    hints: list[dict] = []
+    seen: set[tuple[str, str]] = set()
+    for q in queries:
+        q = (q or "").strip()
+        if not q:
+            continue
+        try:
+            entities = detect_entities(q)
+        except Exception:
+            continue
+        for ent in entities or []:
+            key = (ent.type, ent.normalized)
+            if key in seen:
+                continue
+            seen.add(key)
+            hints.append({"type": ent.type, "value": ent.normalized})
+            if len(hints) >= limit:
+                return hints
+    return hints
+
+
+def _dashboard_activity_score(searches_7d: int, total_history: int) -> int:
+    """Simple 0–100 activity score from recent search volume."""
+    if searches_7d <= 0:
+        return min(12, total_history * 2) if total_history else 0
+    raw = min(100, 20 + searches_7d * 8)
+    return int(raw)
+
+
+@app.route("/dashboard")
+def dashboard_page():
+    """Personalized search activity dashboard."""
+    uid = session.get("user_id")
+    user = None
+    if uid:
+        try:
+            user = _get_user_by_id(uid)
+        except Exception:
+            logger.exception("dashboard_user_load_failed")
+    return render_template("dashboard.html", user=user)
+
+
 @app.route("/api/user/dashboard", methods=["GET"])
 def api_user_dashboard():
     uid, bearer_err = _api_auth_user()
@@ -12337,18 +12392,21 @@ def api_user_dashboard():
     if not uid:
         return jsonify({"error": "Not authenticated"}), 401
     try:
+        user = _get_user_by_id(uid)
         recent_search_rows = _users_execute(
             "SELECT query, search_type, searched_at FROM user_search_history "
-            "WHERE user_id=? ORDER BY searched_at DESC LIMIT 20",
+            "WHERE user_id=? ORDER BY searched_at DESC LIMIT 50",
             [uid],
         )
         recent_searches = []
         seen_queries: set[str] = set()
+        unique_queries: list[str] = []
         for row in recent_search_rows or []:
             q = row.get("query") or ""
             if not q or q in seen_queries:
                 continue
             seen_queries.add(q)
+            unique_queries.append(q)
             recent_searches.append(
                 {
                     "query": q,
@@ -12359,6 +12417,9 @@ def api_user_dashboard():
             if len(recent_searches) >= 6:
                 break
 
+        focus_modes = _dashboard_focus_modes(recent_search_rows)
+        entity_hints = _dashboard_entity_hints(unique_queries[:5])
+
         bookmark_rows = _users_execute(
             "SELECT id, url, title, snippet, saved_at FROM user_bookmarks "
             "WHERE user_id=? ORDER BY saved_at DESC LIMIT 4",
@@ -12368,20 +12429,47 @@ def api_user_dashboard():
         bookmark_count_rows = _users_execute("SELECT COUNT(*) AS cnt FROM user_bookmarks WHERE user_id=?", [uid])
         history_count_rows = _users_execute("SELECT COUNT(*) AS cnt FROM user_search_history WHERE user_id=?", [uid])
         case_count_rows = _users_execute("SELECT COUNT(*) AS cnt FROM user_cases WHERE user_id=?", [uid])
+        searches_7d_rows = _users_execute(
+            "SELECT COUNT(*) AS cnt FROM user_search_history "
+            "WHERE user_id=? AND searched_at >= datetime('now', '-7 days')",
+            [uid],
+        )
+        searches_7d = int((searches_7d_rows or [{}])[0].get("cnt") or 0)
+        total_history = int((history_count_rows or [{}])[0].get("cnt") or 0)
     except Exception:
         logger.exception("api_user_dashboard_failed")
         return jsonify({"error": "Could not load dashboard."}), 503
 
+    created_at = user.get("created_at") if user else None
+    if created_at is not None and hasattr(created_at, "isoformat"):
+        created_at = created_at.isoformat()
+    elif created_at is not None:
+        created_at = str(created_at)
+
     return jsonify(
         {
             "ok": True,
+            "user": {
+                "display_name": (user or {}).get("display_name") or (user or {}).get("username") or "",
+                "username": (user or {}).get("username") or "",
+                "created_at": created_at,
+            },
+            "focus_modes": focus_modes,
+            "entity_hints": entity_hints,
+            "activity_score": _dashboard_activity_score(searches_7d, total_history),
             "cases": [_serialize_case_row(row, include_items=False) for row in case_rows or []],
             "recent_searches": recent_searches,
             "recent_bookmarks": bookmark_rows or [],
             "counts": {
                 "cases": int((case_count_rows or [{}])[0].get("cnt") or 0),
                 "bookmarks": int((bookmark_count_rows or [{}])[0].get("cnt") or 0),
-                "history": int((history_count_rows or [{}])[0].get("cnt") or 0),
+                "history": total_history,
+            },
+            "stats": {
+                "searches_7d": searches_7d,
+                "bookmarks": int((bookmark_count_rows or [{}])[0].get("cnt") or 0),
+                "cases": int((case_count_rows or [{}])[0].get("cnt") or 0),
+                "history": total_history,
             },
         }
     )
@@ -12727,7 +12815,7 @@ def opensearch():
     base = _site_base_url()
     xml = f'''<?xml version="1.0" encoding="UTF-8"?>
 <OpenSearchDescription xmlns="http://a9.com/-/spec/opensearch/1.1/">
-  <ShortName>abbieysearch</ShortName>
+  <ShortName>{_SITE_NAME}</ShortName>
   <Description>{_seo_manifest_description()}</Description>
   <Tags>{_seo_opensearch_tags()}</Tags>
   <Contact>hello@abbieysearch.com</Contact>
@@ -12744,8 +12832,8 @@ def opensearch():
 @app.route("/manifest.json")
 def manifest():
     return jsonify({
-        "name": "abbieysearch",
-        "short_name": "abbieysearch",
+        "name": _SITE_NAME,
+        "short_name": "abk",
         "description": _seo_manifest_description(),
         "start_url": "/search",
         "display": "standalone",

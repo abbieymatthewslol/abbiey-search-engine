@@ -3,7 +3,7 @@
 (function() {
     var t  = localStorage.getItem('theme') || 'dark';
     var d  = localStorage.getItem('density') || 'default';
-    var a  = localStorage.getItem('accent-color') || localStorage.getItem('accentColor');
+    var a  = localStorage.getItem('accent-color') || localStorage.getItem('accentColor') || '#8b5cf6';
     var fs = localStorage.getItem('abbiey_font_size');
     var ff = localStorage.getItem('abbiey_font_family');
     var r  = localStorage.getItem('abbiey_radius');
@@ -15,7 +15,7 @@
     var el = document.documentElement;
     el.setAttribute('data-theme', t);
     el.setAttribute('data-density', d);
-    if (a)  el.style.setProperty('--accent', a);
+    el.style.setProperty('--accent', a);
     if (fs) el.setAttribute('data-font-size', fs);
     if (ff) el.setAttribute('data-font', ff);
     if (r && r !== 'default')  el.setAttribute('data-radius', r);

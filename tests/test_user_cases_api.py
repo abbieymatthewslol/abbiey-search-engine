@@ -140,6 +140,11 @@ class TestUserCasesApi:
         assert any(case["id"] == case_id for case in data["cases"])
         assert any(item["query"] == "acme pty ltd" for item in data["recent_searches"])
         assert any(item["url"] == "https://example.com/acme" for item in data["recent_bookmarks"])
+        assert "focus_modes" in data
+        assert "entity_hints" in data
+        assert "stats" in data
+        assert "activity_score" in data
+        assert data["user"]["username"]
 
     def test_cannot_modify_other_users_case(self, client):
         owner_id = _login_test_user(client, "owner")
