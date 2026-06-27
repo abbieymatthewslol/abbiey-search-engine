@@ -316,45 +316,33 @@ else:
 # ─── Check 6: Vercel deployment ────────────────────────────────────────────────
 header("6. Vercel Deployment")
 
-VERCEL_PROJECT_ID = "prj_meBOJCYxNefYepBikq5fHJFP4tS7"
+VERCEL_PROJECT_ID = "prj_hGdLqDsNtQK2A57hWyZNxdZKMi3b"
 VERCEL_TEAM_ID = "team_YeguIG4NHm4Kp0Jf5AbOwgFN"
 
 # Try to get Vercel token from local auth.json
 vercel_token = env.get("VERCEL_TOKEN", "")
 if not vercel_token:
-    auth_paths = [
-        Path(os.environ.get("APPDATA", "")) / "xdg.data" / "com.vercel.cli" / "auth.json",
-        Path(os.environ.get("APPDATA", "")) / "com.vercel.cli" / "auth.json",
-        Path(os.environ.get("APPDATA", "")) / "com.vercel.cli" / "Data" / "auth.json",
-        Path(os.environ.get("LOCALAPPDATA", "")) / "com.vercel.cli" / "Data" / "auth.json",
-        Path.home() / ".vercel" / "auth.json",
-    ]
-    for auth_path in auth_paths:
-        auth_path_exists = False
-        try:
-            auth_path_exists = auth_path.exists()
-        except PermissionError:
-            warn(f"Cannot access Vercel auth file ({auth_path}) — set VERCEL_TOKEN for deployment checks")
-            continue
-        except OSError as exc:
-            warn(f"Could not inspect Vercel auth file ({auth_path}): {exc}")
-            continue
+    auth_path = Path(os.environ.get("APPDATA", "")) / "com.vercel.cli" / "Data" / "auth.json"
+    auth_path_exists = False
+    try:
+        auth_path_exists = auth_path.exists()
+    except PermissionError:
+        warn(f"Cannot access Vercel auth file ({auth_path}) — set VERCEL_TOKEN for deployment checks")
+    except OSError as exc:
+        warn(f"Could not inspect Vercel auth file ({auth_path}): {exc}")
 
-        if not auth_path_exists:
-            continue
+    if auth_path_exists:
         try:
             auth_data = json.loads(auth_path.read_text())
             vercel_token = auth_data.get("token", "")
-            if vercel_token:
-                break
         except PermissionError:
             warn(f"Cannot read Vercel auth file ({auth_path}) — set VERCEL_TOKEN for deployment checks")
         except Exception:
-            continue
+            pass
 
 if not vercel_token:
     warn("No Vercel token found — skipping Vercel check")
-    info("Token at: Vercel CLI auth.json or set VERCEL_TOKEN")
+    info("Token at: %APPDATA%\\com.vercel.cli\\Data\\auth.json")
 else:
     status, body = http_get(
         f"https://api.vercel.com/v6/deployments?projectId={VERCEL_PROJECT_ID}&teamId={VERCEL_TEAM_ID}&limit=1",

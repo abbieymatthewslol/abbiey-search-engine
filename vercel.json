@@ -30,6 +30,7 @@
           "search_protocol.py",
           "startup_checks.py",
           "unfiltered_engagement.py",
+          "user_cases.py",
           "app.py"
         ]
       }

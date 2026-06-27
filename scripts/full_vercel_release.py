@@ -23,9 +23,9 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PROJECT_JSON = REPO_ROOT / ".vercel" / "project.json"
 EXPECTED_PROJECT = {
-    "projectId": "prj_meBOJCYxNefYepBikq5fHJFP4tS7",
+    "projectId": "prj_hGdLqDsNtQK2A57hWyZNxdZKMi3b",
     "orgId": "team_YeguIG4NHm4Kp0Jf5AbOwgFN",
-    "projectName": "search-engine-2-recovery",
+    "projectName": "search-engine-2-live",
 }
 
 
@@ -96,7 +96,7 @@ def main() -> int:
             print("ERROR: VERCEL_TOKEN required for deploy step (or use --skip-deploy).")
             return 1
         deploy = subprocess.run(
-            ["npx", "--yes", "vercel@54.6.1", "deploy", "--prod", "--yes", "--token", token],
+            ["npx", "--yes", "vercel@latest", "deploy", "--prod", "--yes", "--token", token],
             cwd=str(REPO_ROOT),
         )
         if deploy.returncode != 0:

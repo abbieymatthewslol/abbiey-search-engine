@@ -20,7 +20,7 @@ What it does:
 
 Requirements:
     - .env file must exist in repo root (gitignored, never committed)
-    - Vercel token in the Vercel CLI auth.json OR in VERCEL_TOKEN env var
+    - Vercel token at %APPDATA%/com.vercel.cli/Data/auth.json OR in VERCEL_TOKEN env var
 """
 
 import json
@@ -38,7 +38,7 @@ if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 from vercel_env_normalize import normalize_vercel_env_vars  # noqa: E402
 
-VERCEL_PROJECT_ID = "prj_meBOJCYxNefYepBikq5fHJFP4tS7"
+VERCEL_PROJECT_ID = "prj_hGdLqDsNtQK2A57hWyZNxdZKMi3b"
 VERCEL_TEAM_ID    = "team_YeguIG4NHm4Kp0Jf5AbOwgFN"
 
 # These vars are safe to push to all environments (non-secret)
@@ -208,52 +208,29 @@ if fatal:
     sys.exit(1)
 
 # ─── Get Vercel token ──────────────────────────────────────────────────────────
-def auth_paths():
-    candidates = [
-        Path(os.environ.get("APPDATA", "")) / "xdg.data" / "com.vercel.cli" / "auth.json",
-        Path(os.environ.get("APPDATA", "")) / "com.vercel.cli" / "auth.json",
-        Path(os.environ.get("APPDATA", "")) / "com.vercel.cli" / "Data" / "auth.json",
-        Path(os.environ.get("LOCALAPPDATA", "")) / "com.vercel.cli" / "Data" / "auth.json",
-        Path.home() / ".vercel" / "auth.json",
-    ]
-    seen = set()
-    unique = []
-    for path in candidates:
-        key = str(path)
-        if key and key not in seen:
-            seen.add(key)
-            unique.append(path)
-    return unique
-
-
 vercel_token = os.environ.get("VERCEL_TOKEN", "")
 if not vercel_token:
-    for auth_path in auth_paths():
-        auth_path_exists = False
-        try:
-            auth_path_exists = auth_path.exists()
-        except PermissionError:
-            print(f"  {YELLOW}Warning: access denied reading {auth_path}; set VERCEL_TOKEN instead{RESET}")
-            continue
-        except OSError as exc:
-            print(f"  {YELLOW}Warning: could not inspect {auth_path}: {exc}{RESET}")
-            continue
+    auth_path = Path(os.environ.get("APPDATA", "")) / "com.vercel.cli" / "Data" / "auth.json"
+    auth_path_exists = False
+    try:
+        auth_path_exists = auth_path.exists()
+    except PermissionError:
+        print(f"  {YELLOW}Warning: access denied reading {auth_path}; set VERCEL_TOKEN instead{RESET}")
+    except OSError as exc:
+        print(f"  {YELLOW}Warning: could not inspect {auth_path}: {exc}{RESET}")
 
-        if not auth_path_exists:
-            continue
+    if auth_path_exists:
         try:
             vercel_token = json.loads(auth_path.read_text()).get("token", "")
-            if vercel_token:
-                break
         except PermissionError:
             print(f"  {YELLOW}Warning: access denied loading {auth_path}; set VERCEL_TOKEN instead{RESET}")
         except Exception:
-            continue
+            pass
 
 if not vercel_token:
     print(f"\n{RED}ERROR: No Vercel token found.{RESET}")
     print("Either:")
-    print("  1. Run: npx vercel login   (saves a local Vercel CLI auth.json)")
+    print("  1. Run: npx vercel login   (saves to %APPDATA%\\com.vercel.cli\\Data\\auth.json)")
     print("  2. Set VERCEL_TOKEN environment variable")
     sys.exit(1)
 

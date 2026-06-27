@@ -1,108 +1,56 @@
 name: Deploy to Vercel
 
-# Automatic: every push to main runs tests, then `vercel deploy --prod`.
-# Requires secret VERCEL_TOKEN. Optional post-deploy verification uses SITE_URL,
-# ADMIN_TOKEN, and API_TEST_KEY when present as repository or environment secrets.
-# Manual re-run: Actions -> this workflow -> Run workflow.
-# Vercel Git builds on `main` are skipped (vercel.json ignoreCommand) so GitHub Actions remains the single production path.
-# See .github/PLATFORM_INTEGRATIONS.md
 on:
   push:
-    branches:
-      - main
-  # GitHub -> Actions -> "Deploy to Vercel" -> Run workflow (manual CLI deploy / rollback)
+    branches: [main]
   workflow_dispatch:
 
-concurrency:
-  group: vercel-prod-${{ github.repository }}
-  cancel-in-progress: true
-
-env:
-  # Must match the canonical live project (abbieys-projects / search-engine-2-recovery)
-  VERCEL_ORG_ID: team_YeguIG4NHm4Kp0Jf5AbOwgFN
-  VERCEL_PROJECT_ID: prj_meBOJCYxNefYepBikq5fHJFP4tS7
-
 jobs:
-  test:
+  deploy:
+    name: Test and deploy production
     runs-on: ubuntu-latest
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      RUNNING_PYTEST: "1"
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.11"
+          cache: pip
 
-      - name: Install dependencies
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pytest
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          python -m pip install -r requirements.txt pytest
 
-      - name: Run tests (changed files only)
-        env:
-          DIFF_BASE: ${{ github.event.before }}
-          DIFF_HEAD: ${{ github.sha }}
+      - name: Verify deployment config
+        run: python scripts/verify_deployment_config.py
+
+      - name: Run changed tests
         run: python scripts/run_tests_for_changes.py
 
-  deploy:
-    needs: test
-    runs-on: ubuntu-latest
-    environment: production
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Vercel CLI
-        run: npm install -g vercel@54.6.1
-
-      - name: Install uv (Python package manager)
-        run: curl -LsSf https://astral.sh/uv/install.sh | sh && echo "$HOME/.local/bin" >> $GITHUB_PATH
-
-      - name: Pull Vercel environment
-        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
-
-      - name: Ensure production domains are attached
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_PROJECT_ID: ${{ env.VERCEL_PROJECT_ID }}
-          VERCEL_ORG_ID: ${{ env.VERCEL_ORG_ID }}
-        run: python3 scripts/vercel_sync_domains.py --apply
-
-      - name: Deploy to production
-        run: vercel deploy --prod --yes --token=${{ secrets.VERCEL_TOKEN }}
-
-      # Attack Challenge Mode shows a browser checkpoint (HTTP 429) instead of the app.
-      - name: Ensure Attack Challenge Mode is off
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_PROJECT_ID: ${{ env.VERCEL_PROJECT_ID }}
-          VERCEL_ORG_ID: ${{ env.VERCEL_ORG_ID }}
-        run: python3 scripts/disable_vercel_attack_challenge.py
-
-  verify-live:
-    needs: deploy
-    runs-on: ubuntu-latest
-    environment: production
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - run: pip install python-dotenv
-      - name: Live health check (optional)
-        env:
-          SITE_URL: ${{ secrets.SITE_URL }}
-          ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
-          API_TEST_KEY: ${{ secrets.API_TEST_KEY }}
+      - name: Verify Vercel secrets
         run: |
-          if [ -z "$SITE_URL" ] || [ -z "$ADMIN_TOKEN" ]; then
-            echo "Skipping post-deploy health: SITE_URL and ADMIN_TOKEN secrets not configured."
-            exit 0
-          fi
-          python scripts/verify_production_env.py --ping
+          test -n "$VERCEL_TOKEN" || (echo "Missing GitHub secret: VERCEL_TOKEN" && exit 1)
+          test -n "$VERCEL_ORG_ID" || (echo "Missing GitHub secret: VERCEL_ORG_ID" && exit 1)
+          test -n "$VERCEL_PROJECT_ID" || (echo "Missing GitHub secret: VERCEL_PROJECT_ID" && exit 1)
 
-  smoke-live:
-    needs: verify-live
-    uses: ./.github/workflows/_production-readiness-smoke.yml
-    secrets: inherit
+      - name: Pull Vercel production config
+        run: npx --yes vercel@latest pull --yes --environment=production --token="$VERCEL_TOKEN"
+
+      - name: Build Vercel output
+        run: npx --yes vercel@latest build --prod --token="$VERCEL_TOKEN"
+
+      - name: Deploy prebuilt output
+        run: npx --yes vercel@latest deploy --prebuilt --prod --token="$VERCEL_TOKEN"

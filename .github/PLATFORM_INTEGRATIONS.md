@@ -2,8 +2,6 @@
 
 Production for **abbiey.search** is meant to be a **single Vercel project** serving **[https://abbieysearch.com](https://abbieysearch.com)**, with the **same GitHub repo** as source and **one Supabase project** for PostgreSQL. If you attach `www.abbieysearch.com`, use it only as a redirect to the apex host.
 
-> **Production deploy invariant:** pushes to `main` ship through GitHub Actions, and root [`vercel.json`](../vercel.json) deliberately skips Vercel's Git build for `main`. If that `ignoreCommand` disappears, production can drift into duplicate or conflicting deploys.
-
 ## Vercel project (canonical)
 
 
@@ -11,7 +9,7 @@ Production for **abbiey.search** is meant to be a **single Vercel project** serv
 | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **Production domain**          | `abbieysearch.com` (canonical). Add `www.abbieysearch.com` only if it redirects to the apex host. |
 | **Git integration**            | Connect this repository; production is deployed by **GitHub Actions** (`[deploy.yml](workflows/deploy.yml)`) on pushes to `**main**`. `[vercel.json](../vercel.json)` uses `ignoreCommand` to **skip** Vercel’s *Git* build for `**main**` so GitHub Actions stays the single production path. |
-| **Project ID** (CLI / Actions) | `prj_meBOJCYxNefYepBikq5fHJFP4tS7` — same id in the deploy helpers and `[.github/workflows/deploy.yml](workflows/deploy.yml)` |
+| **Project ID** (CLI / Actions) | `prj_hGdLqDsNtQK2A57hWyZNxdZKMi3b` — same id in `[.vercel/project.json](../.vercel/project.json)` and `[.github/workflows/deploy.yml](workflows/deploy.yml)` |
 
 ## Local `push-and-notify.ps1` and Vercel
 
@@ -19,7 +17,7 @@ Production for **abbiey.search** is meant to be a **single Vercel project** serv
 
 ## GitHub → Vercel (automatic production)
 
-- **On every push to `**main`**: `[.github/workflows/deploy.yml](workflows/deploy.yml)` runs `python scripts/run_tests_for_changes.py` (tests scoped to the pushed commit; set `RUN_FULL_TESTS=1` in the job to force a full `pytest tests/`), then `vercel deploy --prod` from GitHub Actions (requires the repository secret **`VERCEL_TOKEN`**; same token as the Vercel CLI). No manual “Run workflow” is required to ship to production.
+- **On every push to `**main`**: `[.github/workflows/deploy.yml](workflows/deploy.yml)` runs `python scripts/run_tests_for_changes.py` (tests scoped to the pushed commit; set `RUN_FULL_TESTS=1` in the job to force a full `pytest tests/`), then `vercel build` and `vercel deploy --prebuilt --prod` (requires the repository secret **`VERCEL_TOKEN`**; same token as the Vercel CLI). No manual “Run workflow” is required to ship to production.
 - **Fully automatic deploys (no “waiting for approval”)** — The `deploy` and `verify-live` jobs use `environment: production`. In GitHub: **Settings → Environments → production** → clear **Required reviewers** (and any wait timer) so pushes to `main` go straight to Vercel after the `test` job passes. Leave reviewers on if you want a human gate before production.
 - **PR auto-merge** — GitHub can merge PRs as soon as checks pass: enable **Allow auto-merge** on the repo (**Settings → General → Pull Requests**) and use **Squash and merge** (or your preferred default). That is separate from production deploy: only commits on `main` trigger `deploy.yml`.
 - **Duplicate build guard** — Root `[vercel.json](../vercel.json)` `ignoreCommand` **skips** Vercel’s Git build when `VERCEL_GIT_COMMIT_REF=main`, so there is a single production path (GitHub Actions + CLI). Preview deployments from other branches are unaffected.
@@ -123,3 +121,4 @@ Vercel, Resend, and Supabase still must be configured in their own dashboards (o
 3. **Environment drift suspected** — run `python scripts/verify_deployment_config.py` and `python scripts/verify_production_env.py --strict`, then sync Vercel with `python scripts/restore_vercel_env.py --apply`.
 4. **Live health check failing** — confirm `SITE_URL`, `ADMIN_TOKEN`, and Supabase pooler credentials are correct in Vercel, then rerun `python scripts/verify_production_env.py --ping`.
 5. **Branch model changes later** — update `deploy.yml`, `vercel.json`, and `ABBIEY_PRODUCTION_BRANCH` for local scripts together; do not split those invariants.
+
